@@ -1,0 +1,128 @@
+async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const res = await fetch(path, {
+    method,
+    headers: body ? { 'Content-Type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const j = await res.json().catch(() => ({}));
+  if (res.status === 401 && !path.startsWith('/api/auth/')) window.dispatchEvent(new Event('crmagents:unauthorized'));
+  if (!res.ok) throw new Error(j.error ?? `Request failed (${res.status})`);
+  return j as T;
+}
+
+import type { Workflow } from '@crmagents/shared';
+export type { Workflow };
+export interface Tenant {
+  id: string; sf_org_id: string; sf_instance_url: string; sf_username: string | null;
+  setup_status?: string; setup_message?: string | null; use_package?: boolean;
+}
+export interface Agent { id: string; name: string; systemPrompt: string; tools: string[] }
+export interface ToolInfo { name: string; description: string; write: boolean }
+export interface Run {
+  id: string; status: string; output: string | null; agent_name: string | null;
+  trace: { tool: string; ok: boolean; error?: string; input: unknown }[];
+  input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_write_tokens: number;
+  cost_usd: number; created_at: string;
+  steps: Step[]; workflow_id: string | null;
+}
+export interface Step {
+  nodeId: string; type: string; label: string; status: 'ok' | 'error' | 'waiting';
+  output?: unknown; error?: string; ms: number; iteration?: number; reused?: boolean; trace?: { tool: string; ok: boolean; error?: string }[];
+}
+export interface RunUsage { input: number; cacheWrite: number; cacheRead: number; output: number; costUsd: number }
+export interface RunResult { runId: string; status: string; output: string; error?: string; steps: Step[]; usage?: RunUsage }
+export interface Draft {
+  name: string; plan: unknown; workflow: Workflow; summary: string[]; estimateUsd: number;
+  warnings: string[]; errors: string[]; questions: string[];
+  sample?: { recordId: string; objectApiName: string }; builderCostUsd: number;
+}
+export interface PreviewRow {
+  recordId: string; label: string; status: 'done' | 'error'; result: string; error?: string;
+  wouldDo: { action: string; detail: unknown }[];
+  decisions: { step: string; nodeId: string; value: string; input: string; categories: string[]; examplesUsed: number }[]; costUsd: number;
+}
+export interface Preview { object: string; rows: PreviewRow[]; totalCostUsd: number; avgCostUsd: number }
+export type VizFormat = 'currency' | 'number' | 'percent' | 'days';
+export interface Kpi { id: string; label: string; value: number; previous?: number; format: VizFormat; goodWhen: 'up' | 'down'; hint?: string }
+export interface ChartData { id: string; title: string; kind: 'bar' | 'line'; format: VizFormat; data: { label: string; value: number }[] }
+export interface ListData { id: string; title: string; columns: string[]; rows: (string | number)[][]; fix?: string; note?: string }
+export interface Insights { periodDays: number; currency: string; generatedAt: string; sections: { id: string; title: string; kpis: Kpi[]; charts: ChartData[]; lists: ListData[] }[] }
+export interface Briefing { headline: string; highlights: { title: string; detail: string; tone: 'good' | 'watch' | 'bad' }[]; actions: { title: string; detail: string }[]; costUsd: number; reused: boolean }
+export interface Answer {
+  title: string; question: string; soql: string; chart: 'bar' | 'line' | 'table' | 'number'; labelKey: string; valueKey: string;
+  explanation: string; columns: string[]; rows: Record<string, unknown>[]; costUsd?: number;
+}
+export interface Tile extends Answer { id: string; label_key: string; value_key: string; error?: string }
+export type ChartKind = 'kpi' | 'bar' | 'column' | 'line' | 'area' | 'stacked' | 'multiline' | 'table';
+export type DashRange = 'all' | 'THIS_MONTH' | 'LAST_MONTH' | 'THIS_QUARTER' | 'LAST_QUARTER' | 'THIS_YEAR' | 'LAST_YEAR' | 'LAST_N_DAYS:30' | 'LAST_N_DAYS:90' | 'LAST_N_DAYS:365';
+export interface TileSpec {
+  id?: string; title: string; question: string; soql: string; chart: ChartKind; label_key: string; series_key: string; value_key: string;
+  format: 'currency' | 'number' | 'percent'; date_field: string; drill_soql: string; size: 'third' | 'half' | 'full';
+}
+export interface TileData extends TileSpec { columns: string[]; rows: Record<string, unknown>[]; error?: string }
+export interface DashDraft { name: string; description: string; questions: string[]; warnings: string[]; costUsd: number; tiles: TileData[] }
+export interface DashSummary { id: string; name: string; description: string; updated_at: string; tiles: number }
+export interface Dashboard { id: string; name: string; description: string; prompt: string; range: DashRange; tiles: TileData[] }
+export interface WorkflowRow { id: string; name: string; graph: Workflow; updated_at: string; sf_flow_name?: string | null; sf_deployed_at?: string | null; live?: boolean; live_since?: string | null; watch_error?: string | null }
+export interface Settings {
+  callbackUrl: string; sfClientId: string; sfLoginUrl: string;
+  sfClientSecret: { set: boolean }; anthropicKey: { set: boolean }; dailyBudgetUsd: string; anthropicWorkspaceId: string; aiCacheHours: string;
+}
+
+export interface Me { id: string; email: string; accountName: string; role: string }
+
+export interface UsageSummary {
+  runs: number; costUsd: number; budgetUsd: number | null; cacheHitRate: number | null;
+  tokens: { input: number; cacheRead: number; cacheWrite: number; output: number };
+}
+
+export const api = {
+  usage: () => req<UsageSummary>('GET', '/api/usage'),
+  startOAuth: (b: { sandbox?: boolean; domain?: string; clientId?: string; clientSecret?: string }) => req<{ url: string }>('POST', '/api/oauth/start', b),
+  me: () => req<Me>('GET', '/api/auth/me'),
+  login: (email: string, password: string) => req('POST', '/api/auth/login', { email, password }),
+  signup: (b: { accountName: string; email: string; password: string }) => req('POST', '/api/auth/signup', b),
+  logout: () => req('POST', '/api/auth/logout', {}),
+  settings: () => req<Settings>('GET', '/api/settings'),
+  saveSettings: (b: Record<string, string>) => req('PUT', '/api/settings', b),
+  tenants: () => req<Tenant[]>('GET', '/api/tenants'),
+  setup: (id: string) => req<{ ok: boolean }>('POST', `/api/tenants/${id}/setup`, {}),
+  provision: (id: string) => req<{ ok: boolean }>('POST', `/api/tenants/${id}/provision`, {}),
+  removeTenant: (id: string) => req('DELETE', `/api/tenants/${id}`),
+  tools: () => req<ToolInfo[]>('GET', '/api/tools'),
+  agents: (t: string) => req<Agent[]>('GET', `/api/tenants/${t}/agents`),
+  createAgent: (t: string, a: Omit<Agent, 'id'>) => req<{ id: string }>('POST', `/api/tenants/${t}/agents`, a),
+  updateAgent: (t: string, a: Agent) => req('PUT', `/api/tenants/${t}/agents/${a.id}`, a),
+  deleteAgent: (t: string, id: string) => req('DELETE', `/api/tenants/${t}/agents/${id}`),
+  run: (t: string, id: string, input: string) =>
+    req<{ runId: string; output: string }>('POST', `/api/tenants/${t}/agents/${id}/run`, { input }),
+  draftWorkflow: (t: string, request: string, plan?: unknown) => req<Draft>('POST', `/api/tenants/${t}/workflows/draft`, { request, plan }),
+  previewWorkflow: (t: string, id: string, limit = 10) => req<Preview>('POST', `/api/tenants/${t}/workflows/${id}/preview`, { limit }),
+  feedback: (t: string, id: string, b: { nodeId: string; input: string; label: string; source: 'correction' | 'confirmed' }) =>
+    req<{ ok: boolean; examples: number }>('POST', `/api/tenants/${t}/workflows/${id}/feedback`, b),
+  deployWorkflow: (t: string, id: string) => req<{ flowName: string; object: string }>('POST', `/api/tenants/${t}/workflows/${id}/deploy`, {}),
+  undeployWorkflow: (t: string, id: string) => req<{ ok: boolean }>('DELETE', `/api/tenants/${t}/workflows/${id}/deploy`),
+  insights: (t: string, period: number, refresh = false) => req<Insights>('GET', `/api/tenants/${t}/insights?period=${period}${refresh ? '&refresh=1' : ''}`),
+  briefing: (t: string, period: number) => req<Briefing>('POST', `/api/tenants/${t}/insights/summary`, { period }),
+  ask: (t: string, question: string) => req<Answer>('POST', `/api/tenants/${t}/insights/ask`, { question }),
+  tiles: (t: string) => req<Tile[]>('GET', `/api/tenants/${t}/insights/tiles`),
+  pinTile: (t: string, a: Answer) => req<{ id: string }>('POST', `/api/tenants/${t}/insights/tiles`, { title: a.title, question: a.question, soql: a.soql, chart: a.chart, labelKey: a.labelKey, valueKey: a.valueKey }),
+  unpinTile: (t: string, id: string) => req('DELETE', `/api/tenants/${t}/insights/tiles/${id}`),
+  dashboards: (t: string) => req<DashSummary[]>('GET', `/api/tenants/${t}/dashboards`),
+  draftDashboard: (t: string, prompt: string, range: DashRange, single = false) => req<DashDraft>('POST', `/api/tenants/${t}/dashboards/draft`, { prompt, range, single }),
+  dashboard: (t: string, id: string, range: DashRange) => req<Dashboard>('GET', `/api/tenants/${t}/dashboards/${id}?range=${encodeURIComponent(range)}`),
+  createDashboard: (t: string, b: { name: string; description: string; prompt: string; tiles: TileSpec[] }) => req<{ id: string }>('POST', `/api/tenants/${t}/dashboards`, b),
+  saveDashboard: (t: string, id: string, b: { name: string; description: string; tiles: TileSpec[] }) => req('PUT', `/api/tenants/${t}/dashboards/${id}`, b),
+  deleteDashboard: (t: string, id: string) => req('DELETE', `/api/tenants/${t}/dashboards/${id}`),
+  runTiles: (t: string, tiles: TileSpec[], range: DashRange) => req<TileData[]>('POST', `/api/tenants/${t}/dashboards/run`, { tiles, range }),
+  drillTile: (t: string, tile: TileSpec, label: string, range: DashRange) => req<{ columns: string[]; rows: Record<string, unknown>[] }>('POST', `/api/tenants/${t}/dashboards/drill`, { tile, label, range }),
+  setLive: (t: string, id: string, on: boolean) => req<{ live: boolean; object?: string; event?: string }>('POST', `/api/tenants/${t}/workflows/${id}/live`, { on }),
+  setPackage: (t: string, on: boolean) => req('POST', `/api/tenants/${t}/package`, { on }),
+  workflows: (t: string) => req<WorkflowRow[]>('GET', `/api/tenants/${t}/workflows`),
+  createWorkflow: (t: string, b: { name: string; graph: Workflow }) => req<{ id: string }>('POST', `/api/tenants/${t}/workflows`, b),
+  saveWorkflow: (t: string, id: string, b: { name: string; graph: Workflow }) => req('PUT', `/api/tenants/${t}/workflows/${id}`, b),
+  deleteWorkflow: (t: string, id: string) => req('DELETE', `/api/tenants/${t}/workflows/${id}`),
+  runWorkflow: (t: string, id: string, trigger: Record<string, unknown>) => req<RunResult>('POST', `/api/tenants/${t}/workflows/${id}/run`, trigger),
+  decide: (t: string, runId: string, approve: boolean) => req<RunResult>('POST', `/api/tenants/${t}/runs/${runId}/decision`, { approve }),
+  runs: (t: string, status?: string) => req<Run[]>('GET', `/api/tenants/${t}/runs${status ? `?status=${status}` : ''}`),
+};

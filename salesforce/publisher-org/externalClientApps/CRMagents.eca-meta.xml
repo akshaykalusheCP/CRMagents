@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ExternalClientApplication xmlns="http://soap.sforce.com/2006/04/metadata">
+    <contactEmail>akshay.kalushe@cloudprism.in</contactEmail>
+    <description>CRMagents local development app</description>
+    <distributionState>Packaged</distributionState>
+    <isProtected>false</isProtected>
+    <label>CRMagents</label>
+    <orgScopedExternalApp>00DQy00000Li8r5:CRMagents</orgScopedExternalApp>
+</ExternalClientApplication>

@@ -1,0 +1,177 @@
+import { topoOrder, type WFNode, type Workflow } from '@crmagents/shared';
+import { addUsage, emptyUsage, totalTokens, type Usage } from '../agent/pricing.js';
+import { EXECUTORS, type Env, type NodeResult } from './nodes.js';
+import { resolveRaw } from './template.js';
+
+export interface Step {
+  nodeId: string;
+  type: string;
+  label: string;
+  status: 'ok' | 'error' | 'waiting';
+  output?: unknown;
+  error?: string;
+  ms: number;
+  iteration?: number;
+  trace?: unknown;
+  reused?: boolean;
+}
+
+export interface RunState {
+  scope: Record<string, any>;
+  active: string[]; // ids of edges that carried a signal
+  steps: Step[];
+  cursor: number;
+  tokens: number; // total of all usage meters, kept for quick display
+  usage?: Usage;
+  last?: unknown;
+  final?: unknown;
+  pending?: string; // approval node waiting for a decision
+  decision?: { nodeId: string; approve: boolean };
+}
+
+export interface Outcome {
+  status: 'done' | 'waiting' | 'error';
+  error?: string;
+}
+
+const MAX_STEPS = 500;
+
+export function newState(trigger: Record<string, unknown>): RunState {
+  return { scope: { trigger }, active: [], steps: [], cursor: 0, tokens: 0, usage: emptyUsage() };
+}
+
+function reach(wf: Workflow, starts: string[]): Set<string> {
+  const seen = new Set<string>();
+  const stack = [...starts];
+  while (stack.length) {
+    const id = stack.pop()!;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    for (const e of wf.edges) if (e.source === id) stack.push(e.target);
+  }
+  return seen;
+}
+
+/** Nodes run inside a loop: reachable from "each" but not from "done". */
+function loopBody(wf: Workflow, loopId: string): Set<string> {
+  const handle = (h: string) => wf.edges.filter((e) => e.source === loopId && (e.sourceHandle ?? 'out') === h).map((e) => e.target);
+  const each = reach(wf, handle('each'));
+  const done = reach(wf, handle('done'));
+  for (const id of done) each.delete(id);
+  return each;
+}
+
+const clip = (v: unknown): unknown => {
+  const s = JSON.stringify(v);
+  return s && s.length > 20_000 ? { truncated: s.slice(0, 20_000) } : v;
+};
+
+const summarize = (out: Record<string, any>): unknown => out.value ?? out.text ?? out;
+
+export async function execute(
+  wf: Workflow,
+  env: Env,
+  st: RunState,
+  subset?: Set<string>,
+  nested = false,
+): Promise<Outcome> {
+  const order = topoOrder(wf).filter((id) => !subset || subset.has(id));
+  const inOrder = new Set(order);
+  const nodes = new Map(wf.nodes.map((n) => [n.id, n]));
+
+  // Loop bodies are run by their loop node, not by the outer pass.
+  const owned = new Set<string>();
+  for (const id of order) {
+    if (nodes.get(id)!.type === 'logic.loop') for (const b of loopBody(wf, id)) if (inOrder.has(b)) owned.add(b);
+  }
+
+  for (; st.cursor < order.length; st.cursor++) {
+    const id = order[st.cursor];
+    if (owned.has(id)) continue;
+    const node = nodes.get(id)!;
+    const isTrigger = node.type.startsWith('trigger.');
+    const incoming = wf.edges.filter((e) => e.target === id);
+    const active = (isTrigger && !nested) || incoming.some((e) => st.active.includes(e.id));
+    if (!active) continue;
+    if (st.steps.length > MAX_STEPS) return { status: 'error', error: 'Too many steps' };
+
+    const label = node.label || node.type;
+    const t0 = Date.now();
+    let result: NodeResult;
+    try {
+      if (node.type === 'logic.approval') {
+        if (nested) throw new Error('Approval is not supported inside a loop');
+        if (env.dryRun) {
+          // Preview: show what would be asked and continue as if approved.
+          const { render } = await import('./template.js');
+          result = { output: { approved: true, wouldDo: 'Ask for approval', message: render(node.config.message, st.scope) }, handles: ['approved'] };
+        } else {
+          if (st.decision?.nodeId !== id) {
+            st.pending = id;
+            const { render } = await import('./template.js');
+            st.steps.push({ nodeId: id, type: node.type, label, status: 'waiting', output: { message: render(node.config.message, st.scope) }, ms: 0 });
+            return { status: 'waiting' };
+          }
+          const approved = st.decision.approve;
+          st.decision = undefined;
+          st.pending = undefined;
+          st.steps = st.steps.filter((s) => !(s.nodeId === id && s.status === 'waiting'));
+          result = { output: { approved }, handles: [approved ? 'approved' : 'rejected'] };
+        }
+      } else if (node.type === 'logic.loop') {
+        result = await runLoop(wf, node, env, st);
+      } else {
+        const exec = EXECUTORS[node.type];
+        if (!exec) throw new Error(`No executor for ${node.type}`);
+        result = await exec(node, st.scope, env);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      st.steps.push({ nodeId: id, type: node.type, label, status: 'error', error: msg, ms: Date.now() - t0 });
+      if (node.config.continueOnError) {
+        st.scope[id] = { error: msg };
+        for (const e of wf.edges) if (e.source === id) st.active.push(e.id);
+        continue;
+      }
+      return { status: 'error', error: `${label}: ${msg}` };
+    }
+
+    st.scope[id] = result.output;
+    if (result.usage) {
+      st.usage = addUsage(st.usage ?? emptyUsage(), result.usage);
+      st.tokens += totalTokens(result.usage);
+    }
+    st.steps.push({ nodeId: id, type: node.type, label, status: 'ok', output: clip(result.output), ms: Date.now() - t0, trace: result.trace, ...(result.reused ? { reused: true } : {}) });
+    if (node.type !== 'logic.loop' && !isTrigger) st.last = summarize(result.output);
+    if (node.type === 'util.output') st.final = result.output.value;
+
+    for (const e of wf.edges) {
+      if (e.source !== id) continue;
+      if (!result.handles || result.handles.includes(e.sourceHandle ?? 'out')) st.active.push(e.id);
+    }
+  }
+  return { status: 'done' };
+}
+
+async function runLoop(wf: Workflow, node: WFNode, env: Env, st: RunState): Promise<NodeResult> {
+  let items = resolveRaw(node.config.items, st.scope);
+  if (typeof items === 'string') {
+    try { items = JSON.parse(items); } catch { /* handled below */ }
+  }
+  if (!Array.isArray(items)) throw new Error('List must be an array, e.g. {{sf_query_1.records}}');
+  const max = Math.min(Math.max(Number(node.config.max) || 20, 1), 100);
+  const body = loopBody(wf, node.id);
+  const eachEdges = wf.edges.filter((e) => e.source === node.id && (e.sourceHandle ?? 'out') === 'each').map((e) => e.id);
+
+  const results: unknown[] = [];
+  for (const [i, item] of items.slice(0, max).entries()) {
+    const sub: RunState = { scope: { ...st.scope, item, index: i }, active: [...eachEdges], steps: [], cursor: 0, tokens: 0, usage: emptyUsage() };
+    const out = await execute(wf, env, sub, body, true);
+    for (const s of sub.steps) st.steps.push({ ...s, iteration: i });
+    st.tokens += sub.tokens;
+    st.usage = addUsage(st.usage ?? emptyUsage(), sub.usage ?? emptyUsage());
+    if (out.status !== 'done') throw new Error(`item ${i + 1}: ${out.error ?? out.status}`);
+    results.push(sub.final ?? sub.last ?? null);
+  }
+  return { output: { results, count: results.length }, handles: ['done'] };
+}

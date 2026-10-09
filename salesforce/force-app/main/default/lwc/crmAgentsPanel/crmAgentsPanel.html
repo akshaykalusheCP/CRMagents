@@ -1,0 +1,68 @@
+<template>
+    <lightning-card title="CRMagents" icon-name="standard:bot">
+        <div class="slds-var-p-horizontal_medium">
+            <template lwc:if={error}>
+                <div class="slds-text-color_error slds-var-m-bottom_small">{error}</div>
+            </template>
+
+            <template lwc:if={noWorkflows}>
+                <p class="slds-text-color_weak">
+                    No workflows are set up for {objectApiName}. Create one in CRMagents with a Salesforce record trigger.
+                </p>
+            </template>
+
+            <template lwc:if={hasWorkflows}>
+                <lightning-combobox
+                    label="Workflow"
+                    value={selected}
+                    options={options}
+                    onchange={handleSelect}
+                    disabled={isBusy}
+                ></lightning-combobox>
+                <lightning-textarea
+                    label="Extra instructions (optional)"
+                    value={input}
+                    onchange={handleInput}
+                    disabled={isBusy}
+                ></lightning-textarea>
+                <div class="slds-var-m-top_small">
+                    <lightning-button
+                        variant="brand"
+                        label="Run"
+                        onclick={handleRun}
+                        disabled={cannotRun}
+                    ></lightning-button>
+                </div>
+            </template>
+
+            <template lwc:if={loading}>
+                <lightning-spinner alternative-text="Working" size="small"></lightning-spinner>
+            </template>
+
+            <template lwc:if={run}>
+                <div class="slds-var-m-top_medium">
+                    <lightning-badge label={statusLabel}></lightning-badge>
+                </div>
+
+                <template lwc:if={isWaiting}>
+                    <div class="slds-box slds-var-m-top_small">
+                        <p class="slds-text-title_caps">Needs your approval</p>
+                        <p class="slds-var-m-vertical_x-small slds-text-longform">{run.approval}</p>
+                        <lightning-button variant="brand" label="Approve" onclick={handleApprove}></lightning-button>
+                        <lightning-button class="slds-var-m-left_x-small" label="Reject" onclick={handleReject}></lightning-button>
+                    </div>
+                </template>
+
+                <template lwc:if={run.output}>
+                    <div class="slds-box slds-box_x-small slds-var-m-top_small slds-text-longform output">{run.output}</div>
+                </template>
+
+                <ul class="slds-var-m-top_small slds-text-body_small">
+                    <template for:each={steps} for:item="s">
+                        <li key={s.key}>{s.icon} {s.label}</li>
+                    </template>
+                </ul>
+            </template>
+        </div>
+    </lightning-card>
+</template>

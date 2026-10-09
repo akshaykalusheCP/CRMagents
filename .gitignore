@@ -1,0 +1,8 @@
+node_modules
+dist
+.env
+.sf
+.sfdx
+*.log
+apps/api/evals/data/
+apps/api/evals/results/

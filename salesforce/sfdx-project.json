@@ -1,0 +1,23 @@
+{
+  "packageDirectories": [
+    {
+      "versionName": "ver 0.1",
+      "versionNumber": "0.1.0.NEXT",
+      "path": "force-app",
+      "default": true,
+      "package": "CRMagents",
+      "versionDescription": "CRMagents connector: OAuth app, record-page agent components and Flow actions"
+    }
+  ],
+  "name": "crmagents",
+  "namespace": "",
+  "sfdcLoginUrl": "https://login.salesforce.com",
+  "sourceApiVersion": "67.0",
+  "packageAliases": {
+    "CRMagents": "0HoQy00000027S1KAI",
+    "CRMagents@0.1.0-1": "04tQy000000ZqrlIAC",
+    "CRMagents@0.1.0-2": "04tQy000000ZrHZIA0",
+    "CRMagents@0.1.0-3": "04tQy000000ZtjBIAS",
+    "CRMagents@0.1.0-4": "04tQy000000ZtknIAC"
+  }
+}

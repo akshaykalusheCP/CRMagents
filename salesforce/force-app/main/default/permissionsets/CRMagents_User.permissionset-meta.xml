@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
+    <classAccesses>
+        <apexClass>CRMAgentsController</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
+        <apexClass>CRMRunWorkflowAction</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <description>Lets users run CRMagents workflows from record pages and Flows.</description>
+    <hasActivationRequired>false</hasActivationRequired>
+    <label>CRMagents User</label>
+</PermissionSet>
