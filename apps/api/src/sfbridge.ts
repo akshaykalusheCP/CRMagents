@@ -1,3 +1,4 @@
+import { markSuggestion, recordSuggestions } from './knowledge/suggestions.js';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -202,9 +203,23 @@ FORMAT (mandatory, overrides any other style instruction): you are answering in 
 - First line: one sentence, at most 25 words, that directly answers what was asked.
 - Then a blank line and 3 to 5 bullets ("- "), each at most 14 words. Facts or next actions only.
 - Bold at most one short phrase per bullet. No headings, no sub-bullets, no tables, no closing remarks.
-- Answer only what was asked; don't restate the whole record.`;
+- Answer only what was asked; don't restate the whole record.${rows[0].tools?.includes('soql_query') ? `
+- If the user gives a record number (e.g. Case Number 00001066, with leading zeros), look that record up with soql_query before answering.` : ''}
+- When knowledge sections were used, end bullets with their number like [1] and add a last line "Sources: <document titles>".`;
     const r = await runAgent(tenantId, { id: rows[0].id, systemPrompt: system, tools: rows[0].tools }, b.question, context, b.history);
     return { answer: r.output, runId: r.runId };
+  });
+
+  // Suggestions agents saved on a record, for the Suggestions card on its page.
+  app.get('/sf/v1/suggestions', async (req) => {
+    const { recordId } = z.object({ recordId: z.string().regex(/^[a-zA-Z0-9]{15,18}$/) }).parse(req.query);
+    return recordSuggestions(req.sfTenant!.tenantId, recordId);
+  });
+
+  app.post('/sf/v1/suggestions/:id', async (req) => {
+    const b = z.object({ status: z.enum(['helpful', 'not_helpful', 'dismissed']), userEmail: z.string().max(200).optional() }).parse(req.body);
+    await markSuggestion(req.sfTenant!.tenantId, (req.params as { id: string }).id, b.status, b.userEmail);
+    return { ok: true };
   });
 
   app.get('/sf/v1/runs/:id', async (req) => getRun(req.sfTenant!.tenantId, (req.params as { id: string }).id));

@@ -26,6 +26,8 @@ import { compileRule, listRules } from './smart/policies.js';
 import { regression } from './smart/regress.js';
 import { builderChat } from './builder/chat.js';
 import { listOrgActions } from './salesforce/actions.js';
+import { addDocument, deleteDocument, extractText, listDocuments, MAX_UPLOAD_BYTES, searchKnowledge } from './knowledge/store.js';
+import { listSuggestions, markSuggestion } from './knowledge/suggestions.js';
 import { config } from './config.js';
 import { migrate, pool } from './db.js';
 import { buildAuthorizeUrl, handleCallback, redirectUri, validateOwnApp } from './salesforce/oauth.js';
@@ -407,6 +409,50 @@ app.post('/api/tenants/:tenantId/provision', async (req) => provisionOrg((req.pa
 
 app.post('/api/tenants/:tenantId/setup', async (req) => {
   void setupOrg((req.params as { tenantId: string }).tenantId);
+  return { ok: true };
+});
+
+// ---- Knowledge base (per account: the same guides serve every connected org) ----
+app.get('/api/knowledge', async (req) => listDocuments(req.user!.accountId));
+
+app.post('/api/knowledge', { bodyLimit: Math.ceil(MAX_UPLOAD_BYTES * 1.4) }, async (req) => {
+  const b = z.object({
+    title: z.string().max(200).optional(),
+    fileName: z.string().max(300).optional(),
+    data: z.string().optional(), // base64 file contents
+    text: z.string().max(2_000_000).optional(), // or pasted text
+  }).refine((v) => v.data || v.text, 'Upload a file or paste some text').parse(req.body);
+  let kind: 'pdf' | 'docx' | 'text' = 'text';
+  let text = b.text ?? '';
+  if (b.data) {
+    const buf = Buffer.from(b.data, 'base64');
+    if (buf.length > MAX_UPLOAD_BYTES) throw Object.assign(new Error('Files up to 15 MB'), { statusCode: 400 });
+    try {
+      ({ kind, text } = await extractText(b.fileName ?? 'file.txt', buf));
+    } catch (e) {
+      throw Object.assign(new Error((e as Error).message || 'Could not read this file'), { statusCode: 400 });
+    }
+  }
+  const title = b.title?.trim() || (b.fileName ?? 'Untitled').replace(/\.[a-z0-9]+$/i, '').replace(/[_-]+/g, ' ').trim();
+  return addDocument(req.user!.accountId, { title, fileName: b.fileName, kind, text, createdBy: req.user!.email });
+});
+
+app.delete('/api/knowledge/:id', async (req) => {
+  await deleteDocument(req.user!.accountId, (req.params as { id: string }).id);
+  return { ok: true };
+});
+
+app.post('/api/knowledge/search', async (req) => {
+  const b = z.object({ query: z.string().min(1).max(2000), limit: z.number().int().optional() }).parse(req.body);
+  return searchKnowledge(req.user!.accountId, b.query, b.limit ?? 5);
+});
+
+// ---- Suggestions saved on records ----
+app.get('/api/tenants/:tenantId/record-suggestions', async (req) => listSuggestions((req.params as { tenantId: string }).tenantId));
+app.post('/api/tenants/:tenantId/record-suggestions/:id', async (req) => {
+  const { tenantId, id } = req.params as { tenantId: string; id: string };
+  const b = z.object({ status: z.enum(['helpful', 'not_helpful', 'dismissed']) }).parse(req.body);
+  await markSuggestion(tenantId, id, b.status, req.user!.email);
   return { ok: true };
 });
 

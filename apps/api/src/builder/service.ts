@@ -1,3 +1,4 @@
+import { listDocuments } from '../knowledge/store.js';
 import type { Workflow } from '@crmagents/shared';
 import { anthropicClient, createLlm } from '../agent/llm.js';
 import { addUsage, emptyUsage, type Usage } from '../agent/pricing.js';
@@ -68,6 +69,10 @@ export async function draftWorkflow(tenantId: string, request: string, current?:
   const automation = await orgAutomation(tenantId, sf).catch(() => null);
   const rulesText = automation ? rulesContext(automation, objectNames.slice(0, 3)) : '';
 
+  // Knowledge base: titles only, so the planner knows guides exist (and doesn't promise steps from none).
+  const docs = (await listDocuments(accountId)).slice(0, 30).map((d) => d.title as string);
+  const kbText = docs.length ? `Knowledge base documents (for search_knowledge): ${docs.join('; ')}` : 'Knowledge base: empty (search_knowledge would find nothing; if the request needs guides, still build it and the admin will upload them).';
+
   let usage: Usage = emptyUsage();
   let plan: Plan | undefined;
   let errors: string[] = [];
@@ -81,6 +86,7 @@ export async function draftWorkflow(tenantId: string, request: string, current?:
           `Objects: ${objectNames.join(', ')}`,
           primary ? `Fields of ${primary} (name:type [picklist values]):\n${fieldContext(fs)}` : 'No object detected; pick trigger_object from Objects if the request is about records.',
           actionsText ? `Org actions (key (label) inputs, * = required -> outputs):\n${actionsText}` : '',
+          kbText,
           rulesText ? `Validation rules your values must pass (object: error shown when broken):\n${rulesText}` : '',
         ].filter(Boolean).join('\n\n')
       : [

@@ -25,8 +25,8 @@ export function forgetAccessToken(tenantId: string): void {
 
 export class SalesforceClient {
   private constructor(
-    private tenantId: string,
-    private accountId: string,
+    readonly tenantId: string,
+    readonly accountId: string,
     private own: { clientId: string; clientSecret: string } | undefined,
     private instanceUrl: string,
   ) {}

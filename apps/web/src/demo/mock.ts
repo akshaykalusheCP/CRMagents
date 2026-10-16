@@ -17,6 +17,9 @@ function route(method: string, url: URL, body: any): Response {
   if (p === '/t/agents' && method === 'GET') return json(DEMO_ASSISTANTS);
   if (/^\/t\/agents\/[^/]+\/run$/.test(p)) return json({ runId: 'x', output: body.history?.length ? 'Of those 9, 4 are High priority: 00001042, 00001039, 00001031 and 00001027.' : '**9 open cases**, mostly high priority.\n\n- **High:** 4 (oldest is 00001042, 12 days)\n- **Medium:** 3\n- **Low:** 2\n- Two are **past their SLA**: 00001042 and 00001039' });
   if (p === '/api/tools') return json(DEMO_TOOLS);
+  if (p === '/api/knowledge' && method === 'GET') return json(DEMO_DOCS);
+  if (p === '/api/knowledge/search') return json(DEMO_HITS);
+  if (p === '/t/record-suggestions' && method === 'GET') return json(DEMO_RECORD_SUGGESTIONS);
   if (p === '/t/suggestions') return json(DEMO_SUGGESTIONS);
   if (/^\/t\/suggestions\/.+\/dismiss$/.test(p)) return json({ ok: true });
   if (p === '/t/agent-health') return json(DEMO_HEALTH);
@@ -129,4 +132,22 @@ const DEMO_TOOLS = [
   { name: 'describe_object', description: 'List the fields of an object.', write: false },
   { name: 'create_task', description: 'Create a follow-up Task.', write: true },
   { name: 'update_record', description: 'Update fields on a record.', write: true },
+];
+
+const DEMO_DOCS = [
+  { id: 'd1', title: 'Enterprise Network Troubleshooting Guide', fileName: 'network-troubleshooting-v1.pdf', kind: 'pdf', chars: 48210, chunks: 41, createdBy: 'owner@demo-company.com', createdAt: ago(30) },
+  { id: 'd2', title: 'VPN and Remote Access', fileName: 'vpn-remote-access.docx', kind: 'docx', chars: 12900, chunks: 11, createdBy: 'owner@demo-company.com', createdAt: ago(30) },
+  { id: 'd3', title: 'Microsoft 365 Admin Runbook', fileName: 'm365-admin.pdf', kind: 'pdf', chars: 61330, chunks: 52, createdBy: 'it@demo-company.com', createdAt: ago(76) },
+  { id: 'd4', title: 'Refund policy', fileName: null, kind: 'text', chars: 2100, chunks: 2, createdBy: 'owner@demo-company.com', createdAt: ago(200) },
+];
+const DEMO_HITS = [
+  { docId: 'd1', title: 'Enterprise Network Troubleshooting Guide', heading: 'Page 4 · WiFi connectivity', rank: 0.4, body: 'Collect user context first: location, device type, IP address, operating system and the exact error message. Confirm whether the issue affects one SSID or all wireless networks. Forget the network and reconnect.' },
+  { docId: 'd1', title: 'Enterprise Network Troubleshooting Guide', heading: 'Page 5 · DHCP and IP conflicts', rank: 0.2, body: 'If the device shows a 169.254.x.x address, it did not get an address from DHCP. Renew the lease (ipconfig /renew) and check the DHCP scope is not exhausted.' },
+];
+const DEMO_RECORD_SUGGESTIONS = [
+  { id: 's1', recordId: '500Qy00000gaJpjIAE', objectName: 'Case', title: 'Troubleshooting steps', agentName: 'Case suggestions from guides', status: 'helpful', decidedBy: 'agent@demo-company.com', createdAt: ago(1),
+    body: 'WiFi drops for one user on the 3rd floor; other networks work.\n\n1. **Collect context**: device, OS, IP address and exact error [1].\n2. **Check the address**: a 169.254.x.x IP means DHCP failed; renew the lease [2].\n3. **Forget and rejoin** the SSID, then test again [1].\n4. Escalate to the network team if several users on the floor are affected.',
+    sources: [{ title: 'Enterprise Network Troubleshooting Guide', section: 'Page 4 · WiFi connectivity' }, { title: 'Enterprise Network Troubleshooting Guide', section: 'Page 5 · DHCP and IP conflicts' }] },
+  { id: 's2', recordId: '500Qy00000gaK1aIAE', objectName: 'Case', title: 'Troubleshooting steps', agentName: 'Case suggestions from guides', status: 'new', decidedBy: null, createdAt: ago(3), body: 'VPN error 809 from home: check UDP ports 500 and 4500 are open on the router [1].', sources: [] },
+  { id: 's3', recordId: '500Qy00000gaK2bIAE', objectName: 'Case', title: 'Troubleshooting steps', agentName: 'Case suggestions from guides', status: 'not_helpful', decidedBy: 'agent@demo-company.com', createdAt: ago(26), body: 'Reset the Outlook profile and re-add the mailbox [1].', sources: [] },
 ];

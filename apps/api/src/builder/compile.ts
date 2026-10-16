@@ -7,6 +7,7 @@ import type { Plan, PlanStep } from './plan.js';
 const WRITES = new Set(['create_task', 'update_record', 'create_record', 'run_action']);
 // Rough per-run cost of each AI action (USD), from typical prompt sizes at current prices.
 const COST: Record<string, number> = { classify: 0.0003, extract: 0.004, ai_write: 0.01, research: 0.03 };
+const KNOWLEDGE_RULES = 'Base the steps on the knowledge sections given and cite them like [1]. If they do not cover the problem, say so in one line and give general guidance. Be concise.';
 const CLASSIFY_MODEL = 'claude-haiku-5-5'; // matched Opus on real cases at ~2% of the cost (evals/model-eval.mts)
 const READ_TOOLS = ['soql_query', 'get_record', 'describe_object'];
 
@@ -42,7 +43,7 @@ export function compilePlan(plan: Plan): CompileResult {
 
   let x = 0;
   const add = (type: string, config: Record<string, unknown>, label?: string, y = 120): WFNode => {
-    const prefix = { 'trigger.salesforce': 'trigger', 'trigger.manual': 'trigger', 'sf.getRecord': 'sf_get', 'logic.branch': 'branch', 'logic.approval': 'approval', 'util.output': 'output', 'ai.classify': 'ai_classify', 'ai.extract': 'ai_extract', 'ai.agent': 'ai_agent', 'sf.query': 'sf_query', 'sf.createTask': 'sf_task', 'sf.updateRecord': 'sf_update', 'sf.createRecord': 'sf_create', 'notify.slack': 'slack', 'sf.action': 'sf_action', 'logic.wait': 'wait' }[type] ?? 'node';
+    const prefix = { 'trigger.salesforce': 'trigger', 'trigger.manual': 'trigger', 'sf.getRecord': 'sf_get', 'logic.branch': 'branch', 'logic.approval': 'approval', 'util.output': 'output', 'ai.classify': 'ai_classify', 'ai.extract': 'ai_extract', 'ai.agent': 'ai_agent', 'sf.query': 'sf_query', 'sf.createTask': 'sf_task', 'sf.updateRecord': 'sf_update', 'sf.createRecord': 'sf_create', 'notify.slack': 'slack', 'sf.action': 'sf_action', 'logic.wait': 'wait', 'knowledge.search': 'kb', 'crm.suggest': 'suggest' }[type] ?? 'node';
     const n: WFNode = { id: nextId(prefix), type, position: { x, y }, config, ...(label ? { label } : {}) };
     if (y === 120) x += 280;
     nodes.push(n);
@@ -184,9 +185,13 @@ export function compilePlan(plan: Plan): CompileResult {
             if (lastQuery) feed = `\n\nRecords found ({{${lastQuery.id}.totalSize}}):\n{{${lastQuery.id}.table}}`;
           }
         }
+        // Knowledge found by an earlier step goes in too, unless the instruction already places it.
+        const lastKb = [...stepNodes.slice(0, i)].reverse().find((x) => x?.action === 'search_knowledge');
+        const kbIdx = lastKb ? stepNodes.indexOf(lastKb) + 1 : 0;
+        const kb = lastKb && !new RegExp(`\\{step${kbIdx}\\.`).test(s.instruction) ? `\n\nFrom our knowledge base:\n{{${lastKb.id}.text}}` : '';
         node = add('ai.agent', {
-          instructions: 'Do exactly what the task asks. Be concise.',
-          prompt: convert(s.instruction, i) + data + feed + where,
+          instructions: lastKb ? `Do exactly what the task asks. ${KNOWLEDGE_RULES}` : 'Do exactly what the task asks. Be concise.',
+          prompt: convert(s.instruction, i) + data + feed + kb + where,
           tools: s.action === 'research' ? READ_TOOLS : [],
         }, s.action === 'research' ? 'AI research' : 'AI write');
         keys = new Set(['text']);
@@ -249,6 +254,29 @@ export function compilePlan(plan: Plan): CompileResult {
         keys = 'any';
         result = result || `${actionLabel(s.org_action ?? '')}: done.`;
         break;
+      case 'search_knowledge': {
+        const q = s.input_fields.length ? s.input_fields.map((f) => { recordFields.add(f); return `{{sf_get_1.record.${f}}}`; }).join(' ') : convert(s.instruction, i);
+        if (!q.trim()) errors.push(`step ${i + 1}: search_knowledge needs something to look up (instruction or input_fields)`);
+        node = add('knowledge.search', { query: q, limit: 4, docs: '' }, 'Search knowledge');
+        keys = new Set(['text', 'sources', 'count']);
+        break;
+      }
+      case 'suggest': {
+        if (!isRecord && !inLoop) errors.push(`step ${i + 1}: suggest needs a record trigger or a per-record query before it`);
+        const lastAi = [...stepNodes.slice(0, i)].reverse().find((x) => x?.action === 'ai_write' || x?.action === 'research');
+        const lastKb = [...stepNodes.slice(0, i)].reverse().find((x) => x?.action === 'search_knowledge');
+        const text = convert(s.message || s.instruction, i) || (lastAi ? `{{${lastAi.id}.text}}` : '');
+        if (!text) errors.push(`step ${i + 1}: suggest needs a message (usually {stepN.text} of an ai_write)`);
+        node = add('crm.suggest', {
+          title: convert(s.subject, i) || 'Suggestion',
+          text,
+          recordId: inLoop ? '{{item.Id}}' : '{{trigger.recordId}}',
+          sources: lastKb ? `{{${lastKb.id}.sources}}` : '',
+        }, 'Show suggestion');
+        keys = new Set(['id', 'text']);
+        result = result || text;
+        break;
+      }
       case 'wait':
         if (inLoop) errors.push(`step ${i + 1}: a wait can't be inside a per-record loop`);
         node = add('logic.wait', { mode: 'For a while', amount: Math.max(1, s.wait_amount ?? 1), unit: s.wait_unit ?? 'days' }, 'Wait');
@@ -347,6 +375,8 @@ function describe(s: PlanStep, plan: Plan): string {
     case 'notify_slack': return 'Posts a Slack message';
     case 'run_action': return `${actionLabel(s.org_action ?? '')} (your org's own automation)`;
     case 'wait': return `Waits ${s.wait_amount ?? 1} ${s.wait_unit ?? 'days'}`;
+    case 'search_knowledge': return 'Looks up your uploaded guides (no AI)';
+    case 'suggest': return `Shows "${cut(s.subject || 'Suggestion', 40)}" on the record in Salesforce (changes nothing)`;
     default: return s.action;
   }
 }

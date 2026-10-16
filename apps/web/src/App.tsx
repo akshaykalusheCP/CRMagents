@@ -1,16 +1,17 @@
-import { BarChart3, Bot, Check, ChevronsUpDown, History, House, Inbox, LayoutDashboard, LogOut, Moon, Plus, Search, Settings as SettingsIcon, Sun } from 'lucide-react';
+import { BarChart3, BookOpen, Bot, Check, ChevronsUpDown, History, House, Inbox, LayoutDashboard, LogOut, Moon, Plus, Search, Settings as SettingsIcon, Sun } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { api, type Draft, type Me, type Tenant, type WorkflowRow } from './api';
 import { CommandPalette, Menu, Toaster, type Command } from './components/ui';
 import { ApprovalsPage } from './pages/Approvals';
 import { HomePage } from './pages/Home';
 import { InsightsPage } from './pages/Insights';
+import { KnowledgePage } from './pages/Knowledge';
 import { SettingsHub } from './pages/SettingsHub';
 import { AuthPage } from './pages/Auth';
 import { RunsPage } from './pages/Runs';
 import { WorkflowsPage } from './pages/Workflows';
 
-type Tab = 'home' | 'insights' | 'dashboards' | 'agents' | 'approvals' | 'activity' | 'settings';
+type Tab = 'home' | 'insights' | 'dashboards' | 'agents' | 'approvals' | 'activity' | 'knowledge' | 'settings';
 
 const NAV: { group?: string; items: { key: Tab; label: string; icon: ReactNode }[] }[] = [
   { items: [
@@ -20,13 +21,14 @@ const NAV: { group?: string; items: { key: Tab; label: string; icon: ReactNode }
   { group: 'Automate', items: [
     { key: 'agents', label: 'Agents', icon: <Bot size={17} /> },
     { key: 'activity', label: 'Activity', icon: <History size={17} /> },
+    { key: 'knowledge', label: 'Knowledge', icon: <BookOpen size={17} /> },
   ] },
   { group: 'Analyze', items: [
     { key: 'insights', label: 'Insights', icon: <BarChart3 size={17} /> },
     { key: 'dashboards', label: 'Dashboards', icon: <LayoutDashboard size={17} /> },
   ] },
 ];
-const LABEL: Record<Tab, string> = { home: 'Home', approvals: 'Approvals', agents: 'Agents', activity: 'Activity', insights: 'Insights', dashboards: 'Dashboards', settings: 'Settings' };
+const LABEL: Record<Tab, string> = { home: 'Home', approvals: 'Approvals', agents: 'Agents', activity: 'Activity', knowledge: 'Knowledge', insights: 'Insights', dashboards: 'Dashboards', settings: 'Settings' };
 
 function useTheme() {
   const initial = (): 'light' | 'dark' => {
@@ -196,6 +198,7 @@ export function App() {
           {tab === 'dashboards' && <InsightsPage key="dash" fixedView="dashboards" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />}
           {tab === 'agents' && <WorkflowsPage tenant={tenant} goConnections={() => setTab('settings')} incoming={incoming} onIncomingOpened={() => setIncoming(null)} prefill={prefill} onPrefillUsed={() => setPrefill(null)} />}
           {tab === 'approvals' && <ApprovalsPage tenant={tenant} onChange={refreshWaiting} me={me.email} />}
+          {tab === 'knowledge' && <KnowledgePage tenant={tenant} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />}
           {tab === 'activity' && <RunsPage tenant={tenant} goSettings={() => setTab('settings')} />}
           {tab === 'settings' && <SettingsHub key={settingsAt.n} section={settingsAt.section} focusConnect={settingsAt.connect} tenants={tenants} tenant={tenant} onChange={reload} />}
         </main>

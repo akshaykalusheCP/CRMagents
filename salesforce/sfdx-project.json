@@ -1,12 +1,12 @@
 {
   "packageDirectories": [
     {
-      "versionName": "ver 0.4",
-      "versionNumber": "0.4.0.NEXT",
+      "versionName": "ver 0.5",
+      "versionNumber": "0.5.0.NEXT",
       "path": "force-app",
       "default": true,
       "package": "CRMagents",
-      "versionDescription": "Formatted assistant answers and run results in the Agent Panel"
+      "versionDescription": "CRMagents Suggestions card: knowledge-grounded advice on records"
     }
   ],
   "name": "crmagents",
@@ -21,6 +21,7 @@
     "CRMagents@0.1.0-4": "04tQy000000ZtknIAC",
     "CRMagents@0.2.0-1": "04tQy000000aAvJIAU",
     "CRMagents@0.3.0-1": "04tQy000000aB6bIAE",
-    "CRMagents@0.4.0-1": "04tQy000000aB8DIAU"
+    "CRMagents@0.4.0-1": "04tQy000000aB8DIAU",
+    "CRMagents@0.5.0-1": "04tQy000000aB9pIAE"
   }
 }

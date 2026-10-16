@@ -427,3 +427,22 @@
 :root .md a { color: var(--accent-text); }
 :root .output-md { padding: 12px 14px; border-radius: 8px; background: var(--surface-2); font-size: 14px; max-height: 360px; overflow: auto; }
 :root .msg.ai .md.bubble { white-space: normal; }
+
+/* ---- Knowledge ---- */
+:root .kb-drop { display: flex; align-items: center; gap: 14px; padding: 18px 20px; border: 1.5px dashed var(--border-strong); border-radius: var(--radius); background: var(--surface); color: var(--text-2); flex-wrap: wrap; transition: border-color .15s, background .15s; }
+:root .kb-drop.on { border-color: var(--accent); background: var(--accent-soft); }
+:root .kb-drop > div:first-of-type { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+:root .kb-drop b { color: var(--text); font-weight: 600; }
+:root .kb-drop span { font-size: 13px; color: var(--muted); }
+:root .kb-paste { display: flex; flex-direction: column; gap: 10px; }
+:root .kb-paste textarea { width: 100%; resize: vertical; padding: 10px 12px; font-size: 14px; }
+:root .kb-ico { vertical-align: -2px; margin-right: 6px; color: var(--muted); }
+:root .kb-snip { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; max-width: 520px; }
+:root .kb-hits { list-style: none; margin: 14px 0 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+:root .kb-hits li { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; }
+:root .kb-hits p { margin: 6px 0 0; font-size: 13.5px; line-height: 1.55; color: var(--text-2); white-space: pre-line; }
+:root .kb-hit-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+:root .kb-n { display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 6px; background: var(--surface-2); border: 1px solid var(--border); font-size: 12px; font-weight: 600; color: var(--text-2); }
+:root .kb-preview { border-top: 1px solid var(--border); padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+:root .panel-head .kb-meta { color: var(--muted); font-size: 13px; font-weight: 400; }
+:root .kb-rec { white-space: nowrap; font-size: 13px; }

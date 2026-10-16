@@ -252,6 +252,31 @@ export const NODE_DEFS: NodeDef[] = [
     outputs: ['waitedUntil'],
   },
   {
+    type: 'knowledge.search',
+    label: 'Search knowledge',
+    category: 'AI',
+    description: "Find the best-matching sections in your uploaded documents (support guides, policies). No AI cost. Feed {{…text}} to an AI step so its answer follows your own guides.",
+    fields: [
+      { key: 'query', label: 'Look up', kind: 'textarea', placeholder: '{{sf_get_1.record.Subject}} {{sf_get_1.record.Description}}' },
+      { key: 'limit', label: 'Sections', kind: 'number', default: 4 },
+      { key: 'docs', label: 'Only these documents (optional)', kind: 'text', placeholder: 'Network Troubleshooting Guide', help: 'Document titles, comma-separated. Empty = all documents.' },
+    ],
+    outputs: ['text', 'sources', 'count'],
+  },
+  {
+    type: 'crm.suggest',
+    label: 'Show suggestion on record',
+    category: 'Salesforce',
+    description: 'Save advice on the record. People see it in the CRMagents Suggestions card on the record page. Changes nothing in Salesforce, so no approval is needed.',
+    fields: [
+      { key: 'title', label: 'Title', kind: 'text', placeholder: 'Suggested resolution' },
+      { key: 'text', label: 'Suggestion', kind: 'textarea', placeholder: '{{ai_agent_1.text}}' },
+      { key: 'recordId', label: 'Record Id', kind: 'text', placeholder: '{{trigger.recordId}}' },
+      { key: 'sources', label: 'Sources (optional)', kind: 'text', placeholder: '{{kb_1.sources}}' },
+    ],
+    outputs: ['id', 'text'],
+  },
+  {
     type: 'http.request',
     label: 'HTTP request',
     category: 'Integration',

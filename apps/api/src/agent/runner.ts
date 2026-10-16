@@ -6,6 +6,7 @@ import { accountOf } from '../tenants.js';
 import { anthropicClient, createLlm } from './llm.js';
 import { dbResultCache } from './resultCache.js';
 import { runTrust } from '../trust/policy.js';
+import { hasKnowledge } from '../knowledge/store.js';
 
 export interface AgentSpec {
   id?: string;
@@ -33,7 +34,8 @@ export async function runAgent(tenantId: string, agent: AgentSpec, userInput: st
     const r = await llm.agent({
       system: agent.systemPrompt,
       prompt: context ? `${userInput}\n\nContext:\n${JSON.stringify(context)}` : userInput,
-      tools: agent.tools,
+      // Once guides are uploaded, every assistant can look things up in them (read-only, no AI cost).
+      tools: !agent.tools.includes('search_knowledge') && (await hasKnowledge(accountId)) ? [...agent.tools, 'search_knowledge'] : agent.tools,
       history,
     });
     await pool.query(

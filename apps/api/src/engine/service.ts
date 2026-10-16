@@ -82,6 +82,7 @@ async function drive(runId: string, tenantId: string, graph: Workflow, st: RunSt
   try {
     const env = {
       ...(await makeEnv(tenantId, workflowId, st)),
+      run: { tenantId, runId, workflowId },
       checkpoint: async (snap: unknown) => {
         const { rows } = await pool.query(
           "update runs set state=$2, heartbeat_at=now() where id=$1 and status='running' returning id", [runId, JSON.stringify({ st: snap, graph })]);

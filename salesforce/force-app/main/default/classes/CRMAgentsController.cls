@@ -117,6 +117,27 @@ public with sharing class CRMAgentsController {
         }
     }
 
+    /** Suggestions agents saved on this record (JSON list), for the Suggestions card. */
+    @AuraEnabled
+    public static String suggestions(String recordId) {
+        try {
+            return CRMClient.okBody(CRMClient.call('GET', '/sf/v1/suggestions?recordId=' + System.EncodingUtil.urlEncode(recordId, 'UTF-8'), null));
+        } catch (Exception e) {
+            throw fail(e);
+        }
+    }
+
+    /** Feedback on a suggestion: helpful, not_helpful or dismissed, recorded with the user's email. */
+    @AuraEnabled
+    public static void rateSuggestion(String suggestionId, String status) {
+        try {
+            String body = System.JSON.serialize(new Map<String, Object>{ 'status' => status, 'userEmail' => System.UserInfo.getUserEmail() });
+            CRMClient.okBody(CRMClient.call('POST', '/sf/v1/suggestions/' + System.EncodingUtil.urlEncode(suggestionId, 'UTF-8'), body));
+        } catch (Exception e) {
+            throw fail(e);
+        }
+    }
+
     /** Shared by the LWC and the Flow action. waitSeconds > 0 makes the platform wait for the result. */
     public static RunInfo run(String workflowId, String recordId, String objectApiName, String input, Integer waitSeconds) {
         return run(workflowId, null, recordId, objectApiName, input, waitSeconds);

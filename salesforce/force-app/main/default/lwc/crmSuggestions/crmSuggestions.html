@@ -1,0 +1,53 @@
+<template>
+    <lightning-card>
+        <div slot="title" class="head">
+            <lightning-icon icon-name="utility:einstein" size="small" class="head-ico"></lightning-icon>
+            <div class="head-text">
+                <span class="eyebrow">AI case assistant</span>
+                <span class="slds-text-heading_small">CRMagents Suggestions</span>
+            </div>
+        </div>
+        <div slot="actions">
+            <lightning-button-icon icon-name="utility:refresh" variant="border-filled" alternative-text="Refresh" size="small" onclick={load}></lightning-button-icon>
+        </div>
+        <div class="slds-p-horizontal_medium">
+            <template lwc:if={loading}><lightning-spinner size="small" alternative-text="Loading"></lightning-spinner></template>
+            <template lwc:if={error}><p class="slds-text-color_error">{error}</p></template>
+            <template lwc:if={empty}>
+                <p class="slds-text-color_weak empty">No suggestions for this record yet. Agents with a "Show suggestion on record" step add them here.</p>
+            </template>
+            <template lwc:if={latest}>
+                <div class="sug">
+                    <div class="sug-head">
+                        <div class="sug-title">
+                            <b>{latest.title}</b>
+                            <span class="slds-text-color_weak meta">{latest.by}</span>
+                        </div>
+                        <span class="badge">AI generated</span>
+                    </div>
+                    <div class="sug-body md"><lightning-formatted-rich-text value={latest.html}></lightning-formatted-rich-text></div>
+                    <template lwc:if={latest.sourceText}><p class="sources"><lightning-icon icon-name="utility:knowledge_base" size="xx-small"></lightning-icon> {latest.sourceText}</p></template>
+                    <div class="sug-actions">
+                        <lightning-button label="Copy" icon-name="utility:copy" onclick={copy}></lightning-button>
+                        <lightning-button-icon icon-name="utility:like" variant={helpfulVariant} alternative-text="Helpful" title="Helpful" onclick={helpful}></lightning-button-icon>
+                        <lightning-button-icon icon-name="utility:dislike" variant={notHelpfulVariant} alternative-text="Not helpful" title="Not helpful" onclick={notHelpful}></lightning-button-icon>
+                        <lightning-button variant="base" label="Dismiss" class="dismiss" onclick={dismiss}></lightning-button>
+                    </div>
+                    <p class="note">Review AI-generated advice before using it.</p>
+                </div>
+                <template lwc:if={hasOlder}>
+                    <lightning-button variant="base" label={olderLabel} onclick={toggleOlder}></lightning-button>
+                    <template lwc:if={showOlder}>
+                        <template for:each={older} for:item="s">
+                            <div key={s.id} class="sug older">
+                                <div class="sug-title"><b>{s.title}</b><span class="slds-text-color_weak meta">{s.by}</span></div>
+                                <div class="sug-body md"><lightning-formatted-rich-text value={s.html}></lightning-formatted-rich-text></div>
+                            </div>
+                        </template>
+                    </template>
+                </template>
+            </template>
+            <div class="copy-host"></div>
+        </div>
+    </lightning-card>
+</template>

@@ -2,7 +2,7 @@
 // so the model only spends tokens on understanding the request, not on wiring blocks together.
 
 export const OPERATORS = ['equals', 'not_equals', 'contains', 'greater_than', 'less_than', 'is_empty', 'not_empty'] as const;
-export const ACTIONS = ['classify', 'extract', 'ai_write', 'research', 'query', 'create_task', 'update_record', 'create_record', 'notify_slack', 'run_action', 'wait'] as const;
+export const ACTIONS = ['classify', 'extract', 'ai_write', 'research', 'query', 'create_task', 'update_record', 'create_record', 'notify_slack', 'run_action', 'wait', 'search_knowledge', 'suggest'] as const;
 
 export type Action = (typeof ACTIONS)[number];
 
@@ -125,9 +125,12 @@ Steps run in order. Actions:
 - research: AI that looks up related Salesforce records itself. Most expensive; only when the data is not on the triggering record. Output: text.
 - create_task: Task on the triggering record (subject, message). update_record: set fields on the triggering record. create_record: new record (object, fields). notify_slack: message.
 - wait: pause before the next steps (wait_amount, wait_unit), e.g. "if no reply in 3 days" = wait 3 days, then a query/only_if that checks the record again.
+- search_knowledge: find matching sections in the company's uploaded documents (support guides, policies). instruction = what to look up, usually the record's own words, e.g. "{record.Subject} {record.Description}". No AI, free. Output: text (numbered sections), sources. A later ai_write automatically gets these sections; tell it what to write (e.g. "troubleshooting steps for this case").
+- suggest: show advice on the record's page in Salesforce (subject = short title, message = the text, usually {stepN.text} of an ai_write). Changes nothing in Salesforce, so it needs no approval. Prefer it over update_record when the admin wants a recommendation, suggested reply or next steps "on the case/record".
 - run_action: run one of the org's own automations listed under "Org actions" (org_action = its key; fields = its inputs as field=input name, value; fill every input marked *). Outputs: the action's listed outputs. Prefer an existing org action over rebuilding the same logic from steps.
 References inside text and values: {record.Field} = field of the triggering record, {stepN.key} = output of step N (1-based; a query's results are {stepN.table}), {trigger.input} = free text passed in, {item.Field} = field of the current record inside a per_record query.
 Rules:
+- When the admin mentions guides, documents, knowledge, SOPs, policies or "our troubleshooting steps": search_knowledge, then ai_write, then suggest (or create_task/update_record if they asked for that).
 - Use AI actions only where judgement or writing is needed; prefer query/create_task/update_record otherwise.
 - Use conditions to skip records that don't need processing (e.g. closed ones); they mean "run only when all are true" for the whole workflow.
 - To make one step conditional, use its only_if (e.g. value "{step1.category}", operator equals, compare "Breakdown"); leave only_if.value empty to always run the step.

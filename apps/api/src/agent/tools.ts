@@ -1,6 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import type { DescribeField, SalesforceClient } from '../salesforce/client.js';
 import { recordsToTable } from '../salesforce/table.js';
+import { hitsToText, searchKnowledge } from '../knowledge/store.js';
 
 export interface Tool {
   def: Anthropic.Tool;
@@ -23,6 +24,25 @@ function describeLine(f: DescribeField, withPicklists: boolean): string {
 }
 
 export const TOOLS: Record<string, Tool> = {
+  search_knowledge: {
+    write: false,
+    def: {
+      name: 'search_knowledge',
+      description:
+        "Search the company's own documents (support guides, policies, product manuals) uploaded to the knowledge base. Returns the best-matching numbered sections with their document title. Use it before giving troubleshooting steps or policy answers, and cite sections as [1], [2]. Search with the key words of the problem (e.g. \"wifi not connecting windows 11\"), not a full sentence.",
+      input_schema: {
+        type: 'object',
+        properties: {
+          query: { type: 'string', description: 'Key words of what to look up' },
+          limit: { type: 'integer', description: 'How many sections (default 4, max 8)' },
+        },
+        required: ['query'],
+      },
+    },
+    async run(sf, { query, limit }) {
+      return hitsToText(await searchKnowledge(sf.accountId, String(query ?? ''), Math.min(Number(limit) || 4, 8)));
+    },
+  },
   soql_query: {
     write: false,
     def: {

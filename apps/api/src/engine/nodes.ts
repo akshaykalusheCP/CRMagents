@@ -6,6 +6,8 @@ import type { WFNode } from '@crmagents/shared';
 import { recordsToTable } from '../salesforce/table.js';
 import { safeFetch } from './net.js';
 import { render, renderJson, resolveRaw } from './template.js';
+import { hitSources, hitsToText, searchKnowledge } from '../knowledge/store.js';
+import { saveSuggestion } from '../knowledge/suggestions.js';
 
 export interface Env {
   sf: SalesforceClient;
@@ -22,6 +24,8 @@ export interface Env {
   approved?: boolean;
   /** Admin-confirmed examples for a block, most similar first (learning from corrections). */
   examples?: (nodeId: string, text: string) => Promise<Example[]>;
+  /** The run this step belongs to (absent in previews). */
+  run?: { tenantId: string; runId: string; workflowId?: string };
 }
 
 export interface NodeResult {
@@ -247,6 +251,32 @@ export const EXECUTORS: Record<string, Executor> = {
       body: JSON.stringify({ text: render(node.config.text, scope) }),
     });
     return { output: { ok: res.ok } };
+  },
+
+  async 'knowledge.search'(node, scope, env) {
+    const query = cfg(node, 'query', scope);
+    if (!query) throw new Error('Say what to look up');
+    const docs = lines(cfg(node, 'docs', scope));
+    const hits = await searchKnowledge(env.sf.accountId, query, Number(node.config.limit) || 4, docs);
+    return { output: { text: hitsToText(hits), sources: hitSources(hits), count: hits.length } };
+  },
+
+  // Saves advice against a record, shown on that record's page in Salesforce. Not a Salesforce write.
+  async 'crm.suggest'(node, scope, env) {
+    const recordId = cfg(node, 'recordId', scope) || String(scope.trigger?.recordId ?? '');
+    if (!/^[a-zA-Z0-9]{15,18}$/.test(recordId)) throw new Error('No record to attach the suggestion to');
+    let body = render(node.config.text, scope).trim();
+    if (!body) throw new Error('The suggestion is empty');
+    if (env.unmask) body = env.unmask(body);
+    const raw = node.config.sources ? resolveRaw(node.config.sources, scope) : [];
+    const sources = Array.isArray(raw) ? raw : [];
+    const title = cfg(node, 'title', scope) || 'Suggestion';
+    if (env.dryRun || !env.run) return { output: { id: '(preview)', wouldDo: `Show a suggestion on record ${recordId}`, title, text: body } };
+    const id = await saveSuggestion(env.run.tenantId, {
+      recordId, objectName: String(scope.trigger?.objectApiName ?? node.config.objectName ?? ''), title, body, sources,
+      workflowId: env.run.workflowId, runId: env.run.runId,
+    });
+    return { output: { id, text: body } };
   },
 
   async 'util.set'(node, scope) {

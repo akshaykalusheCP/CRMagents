@@ -126,4 +126,21 @@ private class CRMagentsTest {
         System.assertEquals('Customer is upset about a late refund.', ans[0].answer);
         System.assertEquals('Assistant not found', bad[0].error);
     }
+
+    @IsTest
+    static void suggestionsAndFeedback() {
+        configure();
+        Mock m = new Mock(200, '[{"id":"s1","title":"Suggested resolution","body":"Restart the router [1]."}]');
+        System.Test.setMock(System.HttpCalloutMock.class, m);
+        System.Test.startTest();
+        String list1 = CRMAgentsController.suggestions('500000000000001');
+        System.assert(list1.contains('Suggested resolution'));
+        System.assert(m.last.getEndpoint().contains('/sf/v1/suggestions?recordId=500000000000001'));
+        m.body = '{"ok":true}';
+        CRMAgentsController.rateSuggestion('s1', 'helpful');
+        System.Test.stopTest();
+        System.assert(m.last.getEndpoint().contains('/sf/v1/suggestions/s1'));
+        System.assert(m.last.getBody().contains('helpful'));
+        System.assert(m.last.getBody().contains('userEmail'));
+    }
 }

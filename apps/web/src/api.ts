@@ -16,6 +16,12 @@ export interface Tenant {
   id: string; sf_org_id: string; sf_instance_url: string; sf_username: string | null;
   setup_status?: string; setup_message?: string | null; use_package?: boolean;
 }
+export interface KnowledgeDoc { id: string; title: string; fileName: string | null; kind: 'pdf' | 'docx' | 'text'; chars: number; chunks: number; createdBy: string | null; createdAt: string }
+export interface KnowledgeHit { docId: string; title: string; heading: string; body: string; rank: number }
+export interface RecordSuggestion {
+  id: string; recordId: string; objectName: string; title: string; body: string; sources: { title: string; section: string }[];
+  status: 'new' | 'helpful' | 'not_helpful' | 'dismissed'; agentName: string | null; decidedBy: string | null; createdAt: string;
+}
 export interface Agent { id: string; name: string; systemPrompt: string; tools: string[] }
 export interface ToolInfo { name: string; description: string; write: boolean }
 export interface Run {
@@ -122,6 +128,12 @@ export const api = {
   dropApproval: (t: string, id: string) => req<{ ok: boolean; graph: Workflow }>('POST', `/api/tenants/${t}/workflows/${id}/autonomy`, { approval: false }),
   diagnose: (t: string, runId: string) => req<Diagnosis>('POST', `/api/tenants/${t}/runs/${runId}/diagnose`),
   applyFix: (t: string, id: string, nodeId: string, changes: Record<string, string>) => req('POST', `/api/tenants/${t}/workflows/${id}/apply-fix`, { nodeId, changes }),
+  knowledge: () => req<KnowledgeDoc[]>('GET', '/api/knowledge'),
+  addKnowledge: (b: { fileName?: string; data?: string; title?: string; text?: string }) => req<{ id: string; chunks: number }>('POST', '/api/knowledge', b),
+  deleteKnowledge: (id: string) => req('DELETE', `/api/knowledge/${id}`),
+  searchKnowledge: (query: string) => req<KnowledgeHit[]>('POST', '/api/knowledge/search', { query }),
+  recordSuggestions: (t: string) => req<RecordSuggestion[]>('GET', `/api/tenants/${t}/record-suggestions`),
+  markSuggestion: (t: string, id: string, status: RecordSuggestion['status']) => req('POST', `/api/tenants/${t}/record-suggestions/${id}`, { status }),
   rules: (t: string) => req<RuleRow[]>('GET', `/api/tenants/${t}/rules`),
   addRule: (t: string, text: string) => req<RuleRow>('POST', `/api/tenants/${t}/rules`, { text, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
   toggleRule: (t: string, id: string, enabled: boolean) => req('PATCH', `/api/tenants/${t}/rules/${id}`, { enabled }),
