@@ -529,3 +529,19 @@
   :root .app-top > main.stripe-main { background-image: none; }
   :root .app-top > main > .app-ribbon { opacity: .35; height: 260px; }
 }
+
+/* Lighter top navigation: smaller, regular weight, quiet active state. */
+:root .app .tnav-inner { height: 52px; gap: 24px; }
+:root .app .tnav-brand { font-size: 15px; font-weight: 600; letter-spacing: -0.02em; gap: 8px; }
+:root .app .tnav-brand .brand-mark { width: 22px; height: 22px; border-radius: 6px; }
+:root .app .tnav-brand .brand-mark svg { width: 13px; height: 13px; }
+:root .app .tnav-links { gap: 2px; }
+:root .app-top .tnav-link, :root .app-top .tnav-link:not(.on) { font-size: 13.5px; font-weight: 400; color: var(--muted); padding: 0 9px; letter-spacing: 0; }
+:root .app-top .tnav-link:hover { color: var(--text); }
+:root .app-top .tnav-link.on { color: var(--text); font-weight: 500; }
+:root .app .tnav-link.on::after { left: 9px; right: 9px; height: 1.5px; opacity: .9; }
+:root .app .tnav-link .count { min-width: 16px; height: 16px; font-size: 10.5px; padding: 0 4px; }
+:root .app .tnav-right { gap: 4px; }
+:root .app .tnav-right .ghost.icon { width: 30px; height: 30px; color: var(--muted); }
+:root .app .tnav-right .org-btn { height: 30px; font-size: 12.5px; font-weight: 400; }
+:root .app .acct, :root .app .acct .ws-mark { width: 26px; height: 26px; font-size: 10px; }
