@@ -1,3 +1,4 @@
+import type { Prefetched } from './prefetch.js';
 import { APPROVERS, validateWorkflow, type Workflow } from '@crmagents/shared';
 import { anthropicClient, createLlm, type Llm } from '../agent/llm.js';
 import { pool } from '../db.js';
@@ -18,6 +19,8 @@ export interface TriggerPayload {
   recordId?: string;
   objectApiName?: string;
   context?: unknown;
+  /** The record's data when it came with the trigger (saves the "get record" call). */
+  prefetched?: Prefetched;
 }
 
 export interface RunSnapshot {
@@ -202,6 +205,38 @@ export async function startRunAsync(tenantId: string, workflowId: string, trigge
   const job = drive(runId, tenantId, graph, newState({ ...trigger }), workflowId).catch(() => undefined);
   if (waitMs > 0) await Promise.race([job, new Promise((r) => setTimeout(r, waitMs))]);
   return getRun(tenantId, runId);
+}
+
+/**
+ * Bulk starts (a data load in Salesforce runs the Flow for hundreds of records): each run is queued and started
+ * as room frees up under the per-minute run limit, instead of being refused.
+ */
+export async function queueRun(tenantId: string, workflowId: string, trigger: TriggerPayload, startedBy?: string): Promise<{ runId: string; status: string }> {
+  const { rows } = await pool.query(
+    `insert into runs (tenant_id, workflow_id, input, status, started_by)
+     select $1, w.id, $3, 'queued', $4 from workflows w where w.id=$2 and w.tenant_id=$1 returning id`,
+    [tenantId, workflowId, JSON.stringify(trigger), startedBy ?? null]);
+  if (!rows[0]) throw Object.assign(new Error('workflow not found'), { statusCode: 404 });
+  return { runId: rows[0].id, status: 'queued' };
+}
+
+/** Starts queued runs, oldest first, while each workspace has room this minute. */
+export async function startQueued(): Promise<number> {
+  const { rows } = await pool.query(
+    `select r.id, r.tenant_id, r.workflow_id, r.input, w.graph, t.account_id
+     from runs r join workflows w on w.id = r.workflow_id join tenants t on t.id = r.tenant_id
+     where r.status = 'queued' order by r.created_at limit 500`);
+  const full = new Set<string>();
+  let started = 0;
+  for (const r of rows) {
+    if (full.has(r.account_id)) continue;
+    try { checkRunRate(r.account_id); } catch { full.add(r.account_id); continue; }
+    const claimed = await pool.query("update runs set status='running', heartbeat_at=now() where id=$1 and status='queued' returning id", [r.id]);
+    if (!claimed.rowCount) continue;
+    started++;
+    void drive(r.id, r.tenant_id, r.graph as Workflow, newState({ ...(r.input ?? {}) }), r.workflow_id).catch(() => undefined);
+  }
+  return started;
 }
 
 export async function getRun(tenantId: string, runId: string): Promise<RunSnapshot> {

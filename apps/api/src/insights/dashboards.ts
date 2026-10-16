@@ -1,3 +1,4 @@
+import { allowed, apiLevel, assertBudget } from '../salesforce/limits.js';
 import { config } from '../config.js';
 import { pool } from '../db.js';
 import type { SalesforceClient } from '../salesforce/client.js';
@@ -173,10 +174,26 @@ export async function draftDashboard(tenantId: string, prompt: string, opts: { m
 
 // ---------- Saved dashboards ----------
 
-export async function runTiles(sf: SalesforceClient, tiles: (TileSpec & { id: string })[], range: Range) {
+// Tile results are kept for 10 minutes: reopening a dashboard or switching tabs costs no API calls. While the org's
+// API allowance runs low, the last results are shown whatever their age.
+const TILE_TTL = 10 * 60_000;
+const tileCache = new Map<string, { at: number; data: Awaited<ReturnType<typeof runSoql>> }>();
+
+export async function runTiles(sf: SalesforceClient, tiles: (TileSpec & { id: string })[], range: Range, refresh = false) {
+  const low = !allowed(apiLevel(sf.tenantId), 'background');
+  // All tiles' queries start together, so they reach Salesforce as one composite batch (one API call per 25).
   return Promise.all(tiles.map(async (t) => {
-    try { return { ...t, ...(await runSoql(sf, applyDateFilter(t.soql, t.date_field, range))) }; }
-    catch (e) { return { ...t, columns: [], rows: [], error: e instanceof Error ? e.message.replace(/^Salesforce GET \S+ -> /, '').slice(0, 300) : String(e) }; }
+    const soql = applyDateFilter(t.soql, t.date_field, range);
+    const key = `${sf.tenantId}|${soql}`;
+    const hit = tileCache.get(key);
+    if (hit && (low || (!refresh && Date.now() - hit.at < TILE_TTL))) return { ...t, ...hit.data, cachedAt: new Date(hit.at).toISOString() };
+    try {
+      if (low) assertBudget(sf.tenantId, 'background');
+      const data = await runSoql(sf, soql);
+      tileCache.set(key, { at: Date.now(), data });
+      if (tileCache.size > 2000) tileCache.delete(tileCache.keys().next().value!);
+      return { ...t, ...data };
+    } catch (e) { return { ...t, columns: [], rows: [], error: e instanceof Error ? e.message.replace(/^Salesforce GET \S+ -> /, '').slice(0, 300) : String(e) }; }
   }));
 }
 

@@ -1,7 +1,7 @@
 import { ExternalLink, Loader2, MoreHorizontal, Plug } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, type Settings, type Tenant } from '../api';
-import { Drawer, Menu, Panel, Status, Table, toast, type Column } from '../components/ui';
+import { Drawer, Menu, Panel, Status, Table, toast, type Column, Meter } from '../components/ui';
 
 // Salesforce orgs: who is connected and in what state, how to connect another, and (rarely) your own login app.
 
@@ -55,6 +55,7 @@ export function ConnectionsPage({ tenants, onChange, goSettings, focusConnect }:
         {t.setup_message && st !== 'ready' && <span className="cell-sub">{t.setup_message}</span>}
       </div>;
     } },
+    { key: 'api', header: 'API use (24h)', hideSm: true, render: (t) => <ApiUse t={t} /> },
     { key: 'panel', header: 'In Salesforce', render: (t) => {
       const st = t.setup_status ?? 'pending';
       if (t.use_package && BUSY.has(st)) return <span className="row muted small" style={{ gap: 6 }}><Loader2 size={14} className="spin" /> Installing…</span>;
@@ -145,6 +146,26 @@ export function ConnectionsPage({ tenants, onChange, goSettings, focusConnect }:
           <button className="primary" style={{ alignSelf: 'flex-start' }} disabled={!own.clientId.trim()} onClick={connectOwn}>Connect with my app</button>
         </div>
       </details>
+    </div>
+  );
+}
+
+/**
+ * The org's daily API allowance as Salesforce last reported it. It is shared with the customer's other
+ * integrations, so CRMagents slows down at 50%, pauses optional work at 80% and keeps only essentials at 95%.
+ */
+function ApiUse({ t }: { t: Tenant }) {
+  if (!t.api_max || t.api_used == null) return <span className="cell-sub">Not measured yet</span>;
+  const pct = Math.round((t.api_used / t.api_max) * 100);
+  const note = pct >= 95 ? 'Only approvals and changes continue'
+    : pct >= 80 ? 'Dashboards and insights paused'
+    : pct >= 50 ? 'Checking for records less often'
+    : 'Plenty left';
+  return (
+    <div className="cell-main api-use" title={`CRMagents gives way as usage rises: slower record checks at 50%, optional work paused at 80%, only approvals and changes at 95%. Reported ${t.api_checked_at ? new Date(t.api_checked_at).toLocaleTimeString() : ''}.`}>
+      <span><b>{pct}%</b> <span className="cell-sub">{t.api_used.toLocaleString()} of {t.api_max.toLocaleString()}</span></span>
+      <Meter value={t.api_used} max={t.api_max} label="API use" />
+      <span className={'cell-sub' + (pct >= 80 ? ' api-warn' : '')}>{note}</span>
     </div>
   );
 }

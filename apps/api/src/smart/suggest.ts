@@ -1,3 +1,4 @@
+import { allowed, apiLevel } from '../salesforce/limits.js';
 import type { Workflow } from '@crmagents/shared';
 import { pool } from '../db.js';
 import type { SalesforceClient } from '../salesforce/client.js';
@@ -113,7 +114,10 @@ const TTL = 6 * 3600_000;
 export async function suggestAgents(tenantId: string, sf: SalesforceClient, refresh = false): Promise<Suggestion[]> {
   const hit = cache.get(tenantId);
   let list = hit && !refresh && Date.now() - hit.at < TTL ? hit.list : undefined;
+  // Optional: while the org's API allowance runs low, show the last suggestions (or none) instead.
+  if (!list && !allowed(apiLevel(tenantId), 'background')) list = hit?.list ?? [];
   if (!list) {
+    // The detectors' queries start together: Salesforce gets them as composite batches (one call per 25).
     const found = await Promise.all(DETECTORS.map(async (d) => {
       try {
         const r = await sf.query(d.soql);

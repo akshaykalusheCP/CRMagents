@@ -4,7 +4,8 @@ import home from '@salesforce/apex/CRMAgentsController.home';
 import startRun from '@salesforce/apex/CRMAgentsController.startRun';
 import getRun from '@salesforce/apex/CRMAgentsController.getRun';
 import decideWithNote from '@salesforce/apex/CRMAgentsController.decideWithNote';
-import ask from '@salesforce/apex/CRMAgentsController.ask';
+import startAsk from '@salesforce/apex/CRMAgentsController.startAsk';
+import askResult from '@salesforce/apex/CRMAgentsController.askResult';
 import { markdownToHtml } from 'c/crmMarkdown';
 
 const CHANNEL = '/event/CRMagents_Run_Event__e';
@@ -51,6 +52,7 @@ export default class CrmAgentsPanel extends LightningElement {
 
     disconnectedCallback() {
         clearTimeout(this.timer);
+        clearTimeout(this.askTimer);
         document.removeEventListener('visibilitychange', this.onVisible);
         if (this.subscription) unsubscribe(this.subscription, () => {});
     }
@@ -171,11 +173,27 @@ export default class CrmAgentsPanel extends LightningElement {
         this.thread = [...this.thread, { role: 'user', text: q }];
         this.question = '';
         this.asking = true;
-        ask({ assistantId: this.assistantId, question: q, recordId: this.recordId, objectApiName: this.objectApiName, historyJson: JSON.stringify(history) })
-            .then((json) => { this.thread = [...this.thread, { role: 'assistant', text: JSON.parse(json).answer }]; })
+        // Start the question, then check for the answer: nothing in Salesforce waits on the AI.
+        startAsk({ assistantId: this.assistantId, question: q, recordId: this.recordId, objectApiName: this.objectApiName, historyJson: JSON.stringify(history) })
+            .then((json) => this.waitForAnswer(JSON.parse(json).runId, 0))
+            .then((text) => { this.thread = [...this.thread, { role: 'assistant', text }]; })
             .catch((e) => { this.thread = [...this.thread, { role: 'assistant', text: 'Sorry: ' + this.message(e) }]; })
             .finally(() => { this.asking = false; });
     }
+    waitForAnswer(runId, tries) {
+        if (tries > 150) return Promise.reject(new Error('The answer is taking too long. Try again in a moment.'));
+        // Quick checks at first (most answers take a few seconds), then every 3 seconds.
+        const delay = tries < 10 ? 1200 : 3000;
+        return new Promise((resolve) => { this.askTimer = setTimeout(resolve, delay); })
+            .then(() => askResult({ runId }))
+            .then((json) => {
+                const r = JSON.parse(json);
+                if (r.status === 'done') return r.answer;
+                if (r.status === 'error') throw new Error(r.error || 'The assistant could not answer');
+                return this.waitForAnswer(runId, tries + 1);
+            });
+    }
+
     newConversation() { this.thread = []; }
 
     refresh() { this.load(); }

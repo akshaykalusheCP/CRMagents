@@ -1,3 +1,4 @@
+import { assertBudget } from '../salesforce/limits.js';
 import type { Workflow } from '@crmagents/shared';
 import { pool } from '../db.js';
 import { previewWorkflow, type PreviewRow } from '../engine/service.js';
@@ -69,11 +70,17 @@ export async function backtest(tenantId: string, workflowId: string, sample = 10
 
   const trig = triggerOf(graph);
   if (!trig) throw new Error('Replay needs a record trigger or a schedule.');
+  assertBudget(tenantId, 'background');
   const sf = await SalesforceClient.forTenant(tenantId);
   const since = new Date(Date.now() - days * 86_400_000);
-  const { soql, field } = watchQuery(trig.object, trig.event, since);
-  const count = await sf.query(`SELECT COUNT() FROM ${trig.object} WHERE ${field} >= ${since.toISOString().replace(/\.\d+Z$/, 'Z')}`);
-  const ids = await sf.query(soql.replace(/LIMIT \d+$/, 'LIMIT 200'));
+  const { field } = watchQuery(trig.object, trig.event, since);
+  const at = since.toISOString().replace(/\.\d+Z$/, 'Z');
+  // Every matching Id across the period, so the sample is spread over all of it (not just the first days).
+  // Large periods are read with a Bulk API 2.0 job: a few calls whatever the number of records.
+  const [count, ids] = await Promise.all([
+    sf.query(`SELECT COUNT() FROM ${trig.object} WHERE ${field} >= ${at}`),
+    sf.queryAll(`SELECT Id FROM ${trig.object} WHERE ${field} >= ${at} ORDER BY ${field} ASC`, 50_000),
+  ]);
   const picked = spread((ids.records as { Id: string }[]).map((r) => r.Id), sample);
   if (!picked.length) return { kind: 'record', object: trig.object, days, total: 0, sampled: 0, acted: 0, skipped: 0, failed: 0, actions: [], costPerRunUsd: 0, estCostUsd: 0, examples: [], errors: [] };
   const p = await previewWorkflow(tenantId, workflowId, picked.length, { ids: picked, note: `Replay of last ${days} days on ${picked.length} sample records (nothing written)` });

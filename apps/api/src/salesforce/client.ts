@@ -2,6 +2,8 @@ import { config } from '../config.js';
 import { decrypt, encrypt } from '../crypto.js';
 import { pool } from '../db.js';
 import { getSfConfig } from '../settings.js';
+import { markExhausted, recordUsage, seedUsage } from './limits.js';
+import { parseCsv } from './csv.js';
 
 export const RECONNECT_MESSAGE =
   'The Salesforce login for this org has expired or was revoked. Reconnect the org on the Connections page.';
@@ -33,10 +35,11 @@ export class SalesforceClient {
 
   static async forTenant(tenantId: string): Promise<SalesforceClient> {
     const { rows } = await pool.query(
-      'select account_id, sf_instance_url, sf_client_id, sf_client_secret_enc from tenants where id = $1',
+      'select account_id, sf_instance_url, sf_client_id, sf_client_secret_enc, api_used, api_max, api_checked_at from tenants where id = $1',
       [tenantId],
     );
     if (!rows[0]) throw new Error('Unknown tenant');
+    seedUsage(tenantId, rows[0].api_used, rows[0].api_max, rows[0].api_checked_at);
     return new SalesforceClient(
       tenantId,
       rows[0].account_id,
@@ -99,23 +102,46 @@ export class SalesforceClient {
     }
   }
 
-  private async call<T>(method: string, path: string, body?: unknown, retried = false): Promise<T> {
-    const res = await fetch(`${this.instanceUrl}/services/data/${config.sf.apiVersion}${path}`, {
+  /**
+   * One HTTP request to the org. `path` is relative to /services/data/vXX unless it starts with /services/.
+   * Every response reports the org's API usage, which feeds the budget (limits.ts).
+   */
+  private async request(method: string, path: string, o: { body?: string; type?: string; accept?: string } = {}, retried = false): Promise<Response> {
+    this.calls++;
+    const url = path.startsWith('/services/') ? `${this.instanceUrl}${path}` : `${this.instanceUrl}/services/data/${config.sf.apiVersion}${path}`;
+    const res = await fetch(url, {
       method,
       headers: {
         Authorization: `Bearer ${await this.token()}`,
-        'Content-Type': 'application/json',
+        ...(o.body !== undefined ? { 'Content-Type': o.type ?? 'application/json' } : {}),
+        ...(o.accept ? { Accept: o.accept } : {}),
       },
-      body: body ? JSON.stringify(body) : undefined,
+      body: o.body,
     });
+    recordUsage(this.tenantId, res.headers.get('sforce-limit-info'));
     if (res.status === 401 && !retried) {
       // Access token expired or was revoked early: drop it and retry once with a fresh one.
       accessCache.delete(this.tenantId);
-      return this.call<T>(method, path, body, true);
+      return this.request(method, path, o, true);
     }
-    if (!res.ok) throw new Error(`Salesforce ${method} ${path} -> ${res.status}: ${await res.text()}`);
+    if (!res.ok) {
+      const text = await res.text();
+      if (res.status === 403 && /REQUEST_LIMIT_EXCEEDED/.test(text)) {
+        markExhausted(this.tenantId);
+        throw Object.assign(new Error('This Salesforce org has used its whole daily API allowance. CRMagents resumes automatically as the allowance frees up over the next hours.'), { statusCode: 429 });
+      }
+      throw new Error(`Salesforce ${method} ${path.split('?')[0]} -> ${res.status}: ${text}`);
+    }
+    return res;
+  }
+
+  private async call<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const res = await this.request(method, path, body === undefined ? {} : { body: JSON.stringify(body) });
     return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
   }
+
+  /** API calls this client has made (for tests and run logs). */
+  calls = 0;
 
   /** Any REST call under /services/data/vXX (e.g. /actions/standard/customNotificationAction). */
   rest<T = any>(method: string, path: string, body?: unknown) {
@@ -131,9 +157,89 @@ export class SalesforceClient {
     return this.tooling<{ records: T[] }>('GET', `/query?q=${encodeURIComponent(soql)}`);
   }
 
-  async query(soql: string) {
-    const r = await this.call<{ totalSize: number; records: unknown[] }>('GET', `/query?q=${encodeURIComponent(soql)}`);
-    return { totalSize: r.totalSize, records: r.records.map((x) => compactRecord(x)) };
+  /**
+   * One page of results (up to 2,000 rows). Queries started together (Promise.all) go to Salesforce as one
+   * composite batch of up to 25, which counts as a single API call.
+   */
+  query(soql: string): Promise<{ totalSize: number; records: any[]; done?: boolean; nextRecordsUrl?: string }> {
+    return new Promise((resolve, reject) => {
+      this.queued.push({ soql, resolve, reject });
+      if (this.queued.length === 1) setImmediate(() => void this.flushQueries());
+    }).then((r: any) => ({ totalSize: r.totalSize, records: r.records.map((x: unknown) => compactRecord(x)), done: r.done, nextRecordsUrl: r.nextRecordsUrl }));
+  }
+
+  private queued: { soql: string; resolve: (v: unknown) => void; reject: (e: unknown) => void }[] = [];
+
+  private async flushQueries() {
+    const all = this.queued.splice(0);
+    for (let i = 0; i < all.length; i += BATCH_SIZE) {
+      const part = all.slice(i, i + BATCH_SIZE);
+      if (part.length === 1) {
+        await this.call('GET', `/query?q=${encodeURIComponent(part[0].soql)}`).then(part[0].resolve, part[0].reject);
+        continue;
+      }
+      try {
+        const r = await this.call<{ results: { statusCode: number; result: any }[] }>('POST', '/composite/batch', {
+          haltOnError: false,
+          batchRequests: part.map((q) => ({ method: 'GET', url: `${config.sf.apiVersion}/query?q=${encodeURIComponent(q.soql)}` })),
+        });
+        part.forEach((q, j) => {
+          const one = r.results[j];
+          if (one && one.statusCode < 300) q.resolve(one.result);
+          else q.reject(new Error(`Salesforce query -> ${one?.statusCode}: ${JSON.stringify(one?.result ?? '').slice(0, 500)}`));
+        });
+      } catch (e) {
+        for (const q of part) q.reject(e);
+      }
+    }
+  }
+
+  /**
+   * All rows up to `max`, using the cheapest way for the size: one call up to 2,000 rows, following pages up to
+   * BULK_OVER rows, and a Bulk API 2.0 job above that (a few calls for any number of rows).
+   */
+  async queryAll(soql: string, max = 50_000): Promise<{ totalSize: number; records: any[]; via: 'rest' | 'bulk' }> {
+    const first = await this.query(soql);
+    if (first.done !== false || first.records.length >= max) return { totalSize: first.totalSize, records: first.records.slice(0, max), via: 'rest' };
+    if (first.totalSize > BULK_OVER && max > BULK_OVER && !/\b(count|sum|avg|min|max)\s*\(|\bgroup\s+by\b|\(\s*select\b/i.test(soql)) {
+      try {
+        const records = await this.bulkQuery(soql, max);
+        return { totalSize: first.totalSize, records, via: 'bulk' };
+      } catch { /* some queries can't run in bulk (e.g. certain relationship fields): page through instead */ }
+    }
+    const records = [...first.records];
+    let next = first.nextRecordsUrl;
+    while (next && records.length < max) {
+      const page = await this.call<{ records: unknown[]; nextRecordsUrl?: string }>('GET', next);
+      records.push(...page.records.map((x) => compactRecord(x)));
+      next = page.nextRecordsUrl;
+    }
+    return { totalSize: first.totalSize, records: records.slice(0, max), via: 'rest' };
+  }
+
+  /** Bulk API 2.0 query: create the job, wait for it, read the CSV results in large pages. */
+  async bulkQuery(soql: string, max = 1_000_000, timeoutMs = 10 * 60_000): Promise<any[]> {
+    const job = await this.call<{ id: string }>('POST', '/jobs/query', { operation: 'query', query: soql });
+    await this.waitForJob(`/jobs/query/${job.id}`, timeoutMs);
+    const out: any[] = [];
+    let locator = '';
+    do {
+      const res = await this.request('GET', `/jobs/query/${job.id}/results?maxRecords=${Math.min(max - out.length, 100_000)}${locator ? `&locator=${locator}` : ''}`, { accept: 'text/csv' });
+      out.push(...csvToRecords(await res.text()));
+      locator = res.headers.get('sforce-locator') ?? 'null';
+    } while (locator && locator !== 'null' && out.length < max);
+    return out.slice(0, max);
+  }
+
+  private async waitForJob(path: string, timeoutMs: number): Promise<any> {
+    const start = Date.now();
+    for (let wait = 1000; ; wait = Math.min(wait * 2, 10_000)) {
+      const j = await this.call<{ state: string; errorMessage?: string }>('GET', path);
+      if (j.state === 'JobComplete') return j;
+      if (j.state === 'Failed' || j.state === 'Aborted') throw new Error(`Salesforce bulk job ${j.state.toLowerCase()}: ${j.errorMessage ?? ''}`);
+      if (Date.now() - start > timeoutMs) throw new Error('Salesforce bulk job is taking too long');
+      await new Promise((r) => setTimeout(r, wait));
+    }
   }
 
   /** All objects in the org (name, labels, flags). */
@@ -186,6 +292,103 @@ export class SalesforceClient {
   updateRecord(sobject: string, id: string, fields: Record<string, unknown>) {
     return this.call<void>('PATCH', `/sobjects/${encodeURIComponent(sobject)}/${encodeURIComponent(id)}`, fields);
   }
+
+  /**
+   * Many creates/updates at once, each succeeding or failing on its own. Up to 200 records go in one
+   * sObject Collections call; more than BULK_OVER of one kind go through a Bulk API 2.0 job.
+   * Results come back in the same order as `ops`.
+   */
+  async saveMany(ops: SaveOp[]): Promise<SaveResult[]> {
+    const results: SaveResult[] = new Array(ops.length);
+    const groups = new Map<string, number[]>();
+    ops.forEach((op, i) => {
+      const k = `${op.kind}:${op.sobject}`;
+      groups.set(k, [...(groups.get(k) ?? []), i]);
+    });
+    for (const [k, idx] of groups) {
+      const kind = k.split(':')[0] as SaveOp['kind'];
+      const sobject = k.slice(kind.length + 1);
+      if (idx.length > BULK_OVER) {
+        const r = await this.bulkSave(kind, sobject, idx.map((i) => ops[i]));
+        idx.forEach((i, j) => { results[i] = r[j]; });
+        continue;
+      }
+      for (let c = 0; c < idx.length; c += COLLECTION_SIZE) {
+        const part = idx.slice(c, c + COLLECTION_SIZE);
+        const r = await this.call<{ id?: string; success: boolean; errors: { message: string; statusCode: string }[] }[]>(
+          kind === 'create' ? 'POST' : 'PATCH', '/composite/sobjects', {
+            allOrNone: false,
+            records: part.map((i) => ({ attributes: { type: sobject }, ...ops[i].fields, ...(kind === 'update' ? { Id: ops[i].id } : {}) })),
+          },
+        );
+        part.forEach((i, j) => {
+          const x = r[j];
+          results[i] = x?.success ? { ok: true, id: x.id ?? ops[i].id } : { ok: false, error: x?.errors?.map((e) => `${e.statusCode}: ${e.message}`).join('; ') || 'Failed' };
+        });
+      }
+    }
+    return results;
+  }
+
+  /** Bulk API 2.0 ingest (insert/update) for large volumes. */
+  private async bulkSave(kind: SaveOp['kind'], sobject: string, ops: SaveOp[]): Promise<SaveResult[]> {
+    const cols = [...new Set(ops.flatMap((o) => Object.keys(o.fields)))];
+    const header = kind === 'update' ? ['Id', ...cols] : cols;
+    // A field an op doesn't set stays empty (Bulk API leaves it unchanged); an explicit null clears it.
+    const cell = (o: SaveOp, h: string) => (h === 'Id' ? csvCell(o.id) : Object.prototype.hasOwnProperty.call(o.fields, h) && o.fields[h] !== undefined ? csvCell(o.fields[h]) : '');
+    const csv = [header.join(','), ...ops.map((o) => header.map((h) => cell(o, h)).join(','))].join('\n');
+    const job = await this.call<{ id: string }>('POST', '/jobs/ingest', { object: sobject, operation: kind === 'create' ? 'insert' : 'update', contentType: 'CSV', lineEnding: 'LF' });
+    await this.request('PUT', `/jobs/ingest/${job.id}/batches`, { body: csv, type: 'text/csv' });
+    await this.call('PATCH', `/jobs/ingest/${job.id}`, { state: 'UploadComplete' });
+    await this.waitForJob(`/jobs/ingest/${job.id}`, 30 * 60_000);
+    // Successes and failures come back as separate files in no fixed order: updates match by Id,
+    // inserts by the row as sent.
+    const ok = csvToRecords(await (await this.request('GET', `/jobs/ingest/${job.id}/successfulResults`, { accept: 'text/csv' })).text(), false);
+    const bad = csvToRecords(await (await this.request('GET', `/jobs/ingest/${job.id}/failedResults`, { accept: 'text/csv' })).text(), false);
+    const key = (r: Record<string, unknown>) => (kind === 'update' ? String(r.Id ?? r.sf__Id ?? '').slice(0, 15) : cols.map((h) => String(r[h] ?? '')).join('\u0001'));
+    const sent = (o: SaveOp) => (kind === 'update' ? String(o.id).slice(0, 15) : cols.map((h) => (o.fields[h] === null || o.fields[h] === undefined ? '' : typeof o.fields[h] === 'object' ? JSON.stringify(o.fields[h]) : String(o.fields[h]))).join('\u0001'));
+    const okByKey = new Map<string, string[]>();
+    for (const r of ok) okByKey.set(key(r), [...(okByKey.get(key(r)) ?? []), String(r.sf__Id ?? '')]);
+    const badByKey = new Map(bad.map((r) => [key(r), String(r.sf__Error ?? 'Failed')]));
+    return ops.map((o) => {
+      const ids = okByKey.get(sent(o));
+      if (ids?.length) return { ok: true, id: ids.shift() || o.id };
+      return { ok: false, error: badByKey.get(sent(o)) ?? 'Not processed' };
+    });
+  }
+}
+
+const BATCH_SIZE = 25; // composite batch: subrequests per call
+const COLLECTION_SIZE = 200; // sObject Collections: records per call
+/** Above this many rows/records, a Bulk API 2.0 job uses fewer calls than paging or collections. */
+export const BULK_OVER = 10_000;
+
+export interface SaveOp { kind: 'create' | 'update'; sobject: string; id?: string; fields: Record<string, unknown> }
+export interface SaveResult { ok: boolean; id?: string; error?: string }
+
+function csvCell(v: unknown): string {
+  if (v === null || v === undefined) return '#N/A'; // Bulk API: explicit null
+  const s = typeof v === 'object' ? JSON.stringify(v) : String(v);
+  return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+/** Bulk CSV rows as records like the REST API returns them: "Account.Name" becomes { Account: { Name } }. */
+export function csvToRecords(text: string, compact = true): any[] {
+  const rows = parseCsv(text);
+  if (rows.length < 2) return [];
+  const [head, ...data] = rows;
+  return data.map((r) => {
+    const rec: Record<string, any> = {};
+    head.forEach((h, i) => {
+      const v = r[i] ?? '';
+      if (compact && v === '') return;
+      const parts = h.split('.');
+      let at = rec;
+      for (const p of parts.slice(0, -1)) at = at[p] ??= {};
+      at[parts[parts.length - 1]] = v;
+    });
+    return rec;
+  });
 }
 
 export type ActionKind = 'apex' | 'flow' | 'standard';

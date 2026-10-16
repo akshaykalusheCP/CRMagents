@@ -83,23 +83,113 @@ public with sharing class CRMAgentsController {
         }
     }
 
-    /** Ask an assistant, optionally about this record. historyJson: [{"role":"user|assistant","text":"..."}]. */
+    /** Ask an assistant, optionally about this record, and wait for the answer. historyJson: [{"role":"user|assistant","text":"..."}]. */
     @AuraEnabled
     public static String ask(String assistantId, String question, String recordId, String objectApiName, String historyJson) {
         try {
-            Map<String, Object> body = new Map<String, Object>{ 'assistantId' => assistantId, 'question' => question };
-            if (String.isNotBlank(recordId)) {
-                body.put('recordId', recordId);
-            }
-            if (String.isNotBlank(objectApiName)) {
-                body.put('objectApiName', objectApiName);
-            }
-            if (String.isNotBlank(historyJson)) {
-                body.put('history', System.JSON.deserializeUntyped(historyJson));
-            }
-            return CRMClient.okBody(CRMClient.call('POST', '/sf/v1/ask', System.JSON.serialize(body)));
+            return CRMClient.okBody(CRMClient.call('POST', '/sf/v1/ask', System.JSON.serialize(askBody(assistantId, null, question, recordId, objectApiName, historyJson, false))));
         } catch (Exception e) {
             throw fail(e);
+        }
+    }
+
+    /**
+     * Starts a question and returns {"runId": ...} right away; the panel then checks askResult. Nothing waits on
+     * the AI inside Salesforce, so long answers can't hit the 120-second callout limit or hold a request open.
+     */
+    @AuraEnabled
+    public static String startAsk(String assistantId, String question, String recordId, String objectApiName, String historyJson) {
+        try {
+            return CRMClient.okBody(CRMClient.call('POST', '/sf/v1/ask', System.JSON.serialize(askBody(assistantId, null, question, recordId, objectApiName, historyJson, true)), 30000));
+        } catch (Exception e) {
+            throw fail(e);
+        }
+    }
+
+    /** {"status": "running" | "done" | "error", "answer": "..."} for a question started with startAsk. */
+    @AuraEnabled
+    public static String askResult(String runId) {
+        try {
+            return CRMClient.okBody(CRMClient.call('GET', '/sf/v1/ask/' + System.EncodingUtil.urlEncode(runId, 'UTF-8'), null, 30000));
+        } catch (Exception e) {
+            throw fail(e);
+        }
+    }
+
+    public static Map<String, Object> askBody(String assistantId, String assistantName, String question, String recordId, String objectApiName, String historyJson, Boolean async) {
+        Map<String, Object> body = new Map<String, Object>{ 'question' => question };
+        if (String.isNotBlank(assistantId)) {
+            body.put('assistantId', assistantId);
+        }
+        if (String.isNotBlank(assistantName)) {
+            body.put('assistantName', assistantName);
+        }
+        if (String.isNotBlank(recordId)) {
+            body.put('recordId', recordId);
+            Map<String, Object> rec = recordFor(recordId);
+            if (rec != null) {
+                body.put('record', rec);
+            }
+        }
+        if (String.isNotBlank(objectApiName)) {
+            body.put('objectApiName', objectApiName);
+        }
+        if (String.isNotBlank(historyJson)) {
+            body.put('history', System.JSON.deserializeUntyped(historyJson));
+        }
+        if (async == true) {
+            body.put('async', true);
+        }
+        return body;
+    }
+
+    static final Set<String> SKIP_FIELDS = new Set<String>{ 'IsDeleted', 'SystemModstamp', 'LastViewedDate', 'LastReferencedDate', 'PhotoUrl', 'MasterRecordId', 'Jigsaw', 'JigsawContactId', 'CleanStatus' };
+    static final Integer MAX_TEXT = 4000;
+
+    /**
+     * The record as the signed-in user may see it (field-level security applies), read inside Salesforce:
+     * queries inside the org don't use the API allowance, so CRMagents doesn't need to call back for it.
+     */
+    public static Map<String, Object> recordFor(String recordId) {
+        try {
+            Id rid = (Id) recordId;
+            Schema.DescribeSObjectResult d = rid.getSObjectType().getDescribe();
+            List<String> fields = new List<String>();
+            for (Schema.SObjectField f : d.fields.getMap().values()) {
+                Schema.DescribeFieldResult fd = f.getDescribe();
+                Schema.DisplayType t = fd.getType();
+                if (!fd.isAccessible() || SKIP_FIELDS.contains(fd.getName())) {
+                    continue;
+                }
+                if (t == Schema.DisplayType.BASE64 || t == Schema.DisplayType.ADDRESS || t == Schema.DisplayType.LOCATION || t == Schema.DisplayType.ENCRYPTEDSTRING) {
+                    continue;
+                }
+                fields.add(fd.getName());
+                if (fields.size() >= 150) {
+                    break;
+                }
+            }
+            List<SObject> rows = Database.queryWithBinds(
+                'SELECT ' + String.join(fields, ',') + ' FROM ' + d.getName() + ' WHERE Id = :rid LIMIT 1',
+                new Map<String, Object>{ 'rid' => rid }, AccessLevel.USER_MODE
+            );
+            if (rows.isEmpty()) {
+                return null;
+            }
+            Map<String, Object> out = new Map<String, Object>();
+            for (String k : rows[0].getPopulatedFieldsAsMap().keySet()) {
+                Object v = rows[0].get(k);
+                if (v == null) {
+                    continue;
+                }
+                if (v instanceof String && ((String) v).length() > MAX_TEXT) {
+                    v = ((String) v).left(MAX_TEXT) + '…';
+                }
+                out.put(k, v);
+            }
+            return out;
+        } catch (Exception e) {
+            return null; // CRMagents reads the record itself instead
         }
     }
 

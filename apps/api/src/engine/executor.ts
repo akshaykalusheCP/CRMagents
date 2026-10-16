@@ -1,7 +1,7 @@
 import { topoOrder, WRITE_NODE_TYPES, type WFNode, type Workflow } from '@crmagents/shared';
 import { ApprovalRequired } from '../smart/policies.js';
 import { addUsage, emptyUsage, totalTokens, type Usage } from '../agent/pricing.js';
-import { EXECUTORS, type Env, type NodeResult } from './nodes.js';
+import { EXECUTORS, type Env, type NodeResult, type WriteBuffer } from './nodes.js';
 import { resolveRaw } from './template.js';
 
 export interface Step {
@@ -229,6 +229,8 @@ export async function execute(
   return { status: 'done' };
 }
 
+const BATCHABLE = new Set(['sf.updateRecord', 'sf.createRecord', 'sf.createTask']);
+
 async function runLoop(wf: Workflow, node: WFNode, env: Env, st: RunState): Promise<NodeResult> {
   let items = resolveRaw(node.config.items, st.scope);
   if (typeof items === 'string') {
@@ -239,15 +241,35 @@ async function runLoop(wf: Workflow, node: WFNode, env: Env, st: RunState): Prom
   const body = loopBody(wf, node.id);
   const eachEdges = wf.edges.filter((e) => e.source === node.id && (e.sourceHandle ?? 'out') === 'each').map((e) => e.id);
 
+  // Writes in the loop are collected and sent together at the end: up to 200 records per API call instead of
+  // one call each. Only steps whose output nothing reads can wait (a created record's Id isn't known until then).
+  const defer = new Set<string>([...body].filter((id) => {
+    const n = wf.nodes.find((x) => x.id === id);
+    if (!n || !BATCHABLE.has(n.type)) return false;
+    return !wf.nodes.some((o) => o.id !== id && JSON.stringify(o.config).includes(`{{${id}.`));
+  }));
+  const writes: WriteBuffer | undefined = defer.size && !env.dryRun ? { defer, ops: [], item: 0 } : undefined;
+  const loopEnv = writes ? { ...env, writes } : env;
+
   const results: unknown[] = [];
   for (const [i, item] of items.slice(0, max).entries()) {
     const sub: RunState = { scope: { ...st.scope, item, index: i }, active: [...eachEdges], steps: [], cursor: 0, tokens: 0, usage: emptyUsage() };
-    const out = await execute(wf, env, sub, body, true);
+    if (writes) writes.item = i;
+    const out = await execute(wf, loopEnv, sub, body, true);
     for (const s of sub.steps) st.steps.push({ ...s, iteration: i });
     st.tokens += sub.tokens;
     st.usage = addUsage(st.usage ?? emptyUsage(), sub.usage ?? emptyUsage());
     if (out.status !== 'done') throw new Error(`item ${i + 1}: ${out.error ?? out.status}`);
     results.push(sub.final ?? sub.last ?? null);
+  }
+  if (writes?.ops.length) {
+    const saved = await env.sf.saveMany(writes.ops);
+    const failed = saved.map((r, j) => ({ r, op: writes.ops[j] })).filter((x) => !x.r.ok);
+    if (failed.length) {
+      const first = failed.slice(0, 3).map((f) => `item ${f.op.item + 1} (${f.op.label}): ${f.r.error}`).join('; ');
+      throw new Error(`${saved.length - failed.length} of ${saved.length} changes saved; ${failed.length} failed: ${first}${failed.length > 3 ? '; …' : ''}`);
+    }
+    return { output: { results, count: results.length, saved: saved.length }, handles: ['done'] };
   }
   return { output: { results, count: results.length }, handles: ['done'] };
 }

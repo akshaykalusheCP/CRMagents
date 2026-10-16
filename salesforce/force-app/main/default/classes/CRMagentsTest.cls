@@ -143,4 +143,61 @@ private class CRMagentsTest {
         System.assert(m.last.getBody().contains('helpful'));
         System.assert(m.last.getBody().contains('userEmail'));
     }
+
+    @IsTest
+    static void asksInBackgroundWithRecordReadInOrg() {
+        configure();
+        Account a = new Account(Name = 'Acme Test', Description = 'Big customer');
+        insert a;
+        Mock m = new Mock(200, '{"runId":"r5","status":"running"}');
+        System.Test.setMock(System.HttpCalloutMock.class, m);
+        System.Test.startTest();
+        String started = CRMAgentsController.startAsk('a1', 'Summarise', a.Id, 'Account', null);
+        System.assert(started.contains('r5'));
+        // The record goes along (read inside Salesforce), so CRMagents doesn't call back for it.
+        System.assert(m.last.getBody().contains('Acme Test'), m.last.getBody());
+        System.assert(m.last.getBody().contains('"async":true'));
+        m.body = '{"status":"done","answer":"Acme is a big customer."}';
+        String r = CRMAgentsController.askResult('r5');
+        System.Test.stopTest();
+        System.assert(r.contains('big customer'));
+        System.assert(m.last.getEndpoint().contains('/sf/v1/ask/r5'));
+    }
+
+    @IsTest
+    static void manyRecordsStartInOneCallout() {
+        configure();
+        Mock m = new Mock(200, '{"results":[{"runId":"r1","status":"queued"},{"runId":"r2","status":"queued"},{"runId":"r3","status":"queued"}]}');
+        System.Test.setMock(System.HttpCalloutMock.class, m);
+        List<CRMRunWorkflowAction.Request> reqs = new List<CRMRunWorkflowAction.Request>();
+        for (Integer i = 0; i < 3; i++) {
+            CRMRunWorkflowAction.Request q = new CRMRunWorkflowAction.Request();
+            q.workflowName = 'Triage';
+            q.recordId = '50000000000000' + i;
+            reqs.add(q);
+        }
+        System.Test.startTest();
+        List<CRMRunWorkflowAction.Result> res = CRMRunWorkflowAction.run(reqs);
+        System.assertEquals(1, System.Limits.getCallouts());
+        System.Test.stopTest();
+        System.assertEquals(3, res.size());
+        System.assertEquals('r3', res[2].runId);
+        System.assertEquals('queued', res[0].status);
+        System.assert(m.last.getEndpoint().endsWith('/sf/v1/run/batch'));
+    }
+
+    @IsTest
+    static void askActionStopsBeforeTheCalloutTimeLimit() {
+        configure();
+        System.Test.setMock(System.HttpCalloutMock.class, new Mock(200, '{"answer":"ok","runId":"r1"}'));
+        CRMAskAssistantAction.Request q = new CRMAskAssistantAction.Request();
+        q.assistantName = 'Casey';
+        q.question = 'Summarise';
+        System.Test.startTest();
+        CRMClient.remainingCalloutMs = 5000; // as if earlier answers used most of the 120 seconds
+        List<CRMAskAssistantAction.Result> res = CRMAskAssistantAction.ask(new List<CRMAskAssistantAction.Request>{ q });
+        System.Test.stopTest();
+        System.assert(res[0].error.contains('callout time limit'), res[0].error);
+        System.assertEquals(null, res[0].answer);
+    }
 }

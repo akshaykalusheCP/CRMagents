@@ -229,7 +229,8 @@ app.get('/api/tenants/:tenantId/dashboards/:id', async (req) => {
   const { tenantId, id } = req.params as { tenantId: string; id: string };
   const { range } = rangeQ.parse(req.query);
   const d = await loadDashboard(tenantId, id);
-  return { ...d, range, tiles: await runTiles(await SalesforceClient.forTenant(tenantId), d.tiles, range as Range) };
+  const refresh = (req.query as { refresh?: string }).refresh === '1';
+  return { ...d, range, tiles: await runTiles(await SalesforceClient.forTenant(tenantId), d.tiles, range as Range, refresh) };
 });
 
 app.put('/api/tenants/:tenantId/dashboards/:id', async (req) => {
@@ -393,7 +394,7 @@ app.get('/api/usage', async (req) => {
 // ---- Tenants (connected orgs) ----
 app.get('/api/tenants', async (req) => {
   const { rows } = await pool.query(
-    'select id, sf_org_id, sf_instance_url, sf_username, setup_status, setup_message, use_package, created_at from tenants where account_id = $1 order by created_at desc',
+    'select id, sf_org_id, sf_instance_url, sf_username, setup_status, setup_message, use_package, created_at, api_used, api_max, api_checked_at from tenants where account_id = $1 order by created_at desc',
     [req.user!.accountId],
   );
   return rows;

@@ -23,14 +23,15 @@ public with sharing class CRMAskAssistantAction {
         List<Result> out = new List<Result>();
         for (Request r : requests) {
             Result res = new Result();
+            // Salesforce allows 100 callouts and 120 seconds of callout time per transaction. Answers that would
+            // go over are returned as errors instead of failing the whole transaction.
+            if (System.Limits.getCallouts() >= System.Limits.getLimitCallouts() - 1 || CRMClient.remainingCalloutMs < 15000) {
+                res.error = 'Not asked: Salesforce\'s callout time limit for one transaction was reached. For many records, use the "Run CRMagents agent" action instead (it works in the background).';
+                out.add(res);
+                continue;
+            }
             try {
-                Map<String, Object> body = new Map<String, Object>{ 'assistantName' => r.assistantName, 'question' => r.question };
-                if (String.isNotBlank(r.recordId)) {
-                    body.put('recordId', r.recordId);
-                }
-                if (String.isNotBlank(r.objectApiName)) {
-                    body.put('objectApiName', r.objectApiName);
-                }
+                Map<String, Object> body = CRMAgentsController.askBody(null, r.assistantName, r.question, r.recordId, r.objectApiName, null, false);
                 Map<String, Object> m = (Map<String, Object>) System.JSON.deserializeUntyped(
                     CRMClient.okBody(CRMClient.call('POST', '/sf/v1/ask', System.JSON.serialize(body)))
                 );

@@ -1,13 +1,14 @@
 import { parseJsonLoose, type CallOptions, type Effort, type Llm } from '../agent/llm.js';
 import { addUsage, type Usage } from '../agent/pricing.js';
 import type { Example } from './learn.js';
-import type { SalesforceClient } from '../salesforce/client.js';
+import type { SalesforceClient, SaveOp } from '../salesforce/client.js';
 import type { WFNode } from '@crmagents/shared';
 import { recordsToTable } from '../salesforce/table.js';
 import { safeFetch } from './net.js';
 import { render, renderJson, resolveRaw } from './template.js';
 import { hitSources, hitsToText, searchKnowledge } from '../knowledge/store.js';
 import { saveSuggestion } from '../knowledge/suggestions.js';
+import { usePrefetched } from './prefetch.js';
 
 export interface Env {
   sf: SalesforceClient;
@@ -24,6 +25,8 @@ export interface Env {
   approved?: boolean;
   /** Admin-confirmed examples for a block, most similar first (learning from corrections). */
   examples?: (nodeId: string, text: string) => Promise<Example[]>;
+  /** Inside a loop: writes collected here and sent together when the loop ends (sObject Collections). */
+  writes?: WriteBuffer;
   /** The run this step belongs to (absent in previews). */
   run?: { tenantId: string; runId: string; workflowId?: string };
 }
@@ -37,6 +40,20 @@ export interface NodeResult {
   reused?: boolean;
   /** Extra detail for the run log (e.g. tool calls). */
   trace?: unknown;
+}
+
+/** Writes queued during a loop. `defer` lists the steps whose output nothing else reads, so they can wait. */
+export interface WriteBuffer {
+  defer: Set<string>;
+  ops: (SaveOp & { label: string; item: number })[];
+  item: number;
+}
+
+/** Queues a write when the loop batches it; returns false when it must run now. */
+function queued(env: Env, node: WFNode, op: SaveOp): boolean {
+  if (!env.writes || env.dryRun || !env.writes.defer.has(node.id)) return false;
+  env.writes.ops.push({ ...op, label: node.label || node.type, item: env.writes.item });
+  return true;
 }
 
 export type Executor = (node: WFNode, scope: Record<string, any>, env: Env) => Promise<NodeResult>;
@@ -153,6 +170,9 @@ export const EXECUTORS: Record<string, Executor> = {
     const id = cfg(node, 'id', scope);
     if (!sobject || !id) throw new Error('Object and Record Id are required');
     const fields = cfg(node, 'fields', scope).split(',').map((f) => f.trim()).filter(Boolean);
+    // The triggering record often arrived with its data (polling query or change event): no API call needed.
+    const pre = usePrefetched(scope.trigger, sobject, id, fields);
+    if (pre) return { output: { record: pre, prefetched: true } };
     return { output: { record: await env.sf.getRecord(sobject, id, fields.length ? fields : undefined) } };
   },
 
@@ -162,6 +182,7 @@ export const EXECUTORS: Record<string, Executor> = {
     const fields = env.unmask ? env.unmask(renderJson(node.config.fields, scope)) : renderJson(node.config.fields, scope);
     await env.guard?.({ approved: env.approved, action: 'create', object: sobject, values: fields });
     if (env.dryRun) return { output: { id: '(preview)', wouldDo: `Create ${sobject}`, fields } };
+    if (queued(env, node, { kind: 'create', sobject, fields })) return { output: { id: '(saved with the batch)', queued: true } };
     const r = await env.sf.createRecord(sobject, fields);
     return { output: { id: r.id } };
   },
@@ -173,6 +194,7 @@ export const EXECUTORS: Record<string, Executor> = {
     const fields = env.unmask ? env.unmask(renderJson(node.config.fields, scope)) : renderJson(node.config.fields, scope);
     await env.guard?.({ approved: env.approved, action: 'update', object: sobject, values: fields, recordId: id });
     if (env.dryRun) return { output: { success: true, wouldDo: `Update ${sobject} ${id}`, fields } };
+    if (queued(env, node, { kind: 'update', sobject, id, fields })) return { output: { success: true, queued: true } };
     await env.sf.updateRecord(sobject, id, fields);
     return { output: { success: true } };
   },
@@ -193,6 +215,7 @@ export const EXECUTORS: Record<string, Executor> = {
     if (env.unmask) Object.assign(fields, env.unmask({ Subject: fields.Subject, Description: fields.Description }));
     await env.guard?.({ approved: env.approved, action: 'task', object: 'Task', values: fields });
     if (env.dryRun) return { output: { id: '(preview)', wouldDo: 'Create Task', fields } };
+    if (queued(env, node, { kind: 'create', sobject: 'Task', fields })) return { output: { id: '(saved with the batch)', queued: true } };
     return { output: { id: (await env.sf.createRecord('Task', fields)).id } };
   },
 

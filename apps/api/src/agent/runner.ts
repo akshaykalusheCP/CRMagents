@@ -15,7 +15,7 @@ export interface AgentSpec {
 }
 
 // Standalone single-agent run (the "Single agents" page). Workflows use the engine instead.
-export async function runAgent(tenantId: string, agent: AgentSpec, userInput: string, context?: unknown, history?: { role: 'user' | 'assistant'; text: string }[]) {
+export async function runAgent(tenantId: string, agent: AgentSpec, userInput: string, context?: unknown, history?: { role: 'user' | 'assistant'; text: string }[], opts: { onStarted?: (runId: string) => void } = {}) {
   const accountId = await accountOf(tenantId);
   checkRunRate(accountId);
   const apiKey = await getSetting(accountId, 'anthropicKey');
@@ -30,6 +30,7 @@ export async function runAgent(tenantId: string, agent: AgentSpec, userInput: st
     [tenantId, agent.id ?? null, JSON.stringify({ userInput, context })],
   );
   const runId = rows[0].id as string;
+  opts.onStarted?.(runId);
   try {
     const r = await llm.agent({
       system: agent.systemPrompt,

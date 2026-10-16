@@ -6,7 +6,7 @@ import type { Workflow } from '@crmagents/shared';
 import { config } from './config.js';
 import { decrypt, encrypt } from './crypto.js';
 import { pool } from './db.js';
-import { decideRun, getRun, startRunAsync } from './engine/service.js';
+import { decideRun, getRun, queueRun, startQueued, startRunAsync } from './engine/service.js';
 import { runAgent } from './agent/runner.js';
 import { SalesforceClient } from './salesforce/client.js';
 
@@ -175,13 +175,38 @@ export function registerSfBridge(app: FastifyInstance) {
     }, (b.waitSeconds ?? 0) * 1000, b.userEmail);
   });
 
+  // Many records at once from a Flow (data loads): one callout starts them all, each run in the background.
+  app.post('/sf/v1/run/batch', { bodyLimit: 5_000_000 }, async (req) => {
+    const { items } = z.object({ items: z.array(runBody).min(1).max(2000) }).parse(req.body);
+    const tenantId = req.sfTenant!.tenantId;
+    const { rows } = await pool.query('select id, lower(name) as name from workflows where tenant_id=$1', [tenantId]);
+    const results = [];
+    for (const b of items) {
+      const id = b.workflowId ?? rows.find((w) => w.name === b.workflowName?.trim().toLowerCase())?.id;
+      if (!id) { results.push({ status: 'error', error: b.workflowName ? `No agent named "${b.workflowName}"` : 'Give an agent id or name' }); continue; }
+      try {
+        results.push(await queueRun(tenantId, id, { input: b.input, recordId: b.recordId, objectApiName: b.objectApiName, context: b.context }, b.userEmail));
+      } catch (e) {
+        results.push({ status: 'error', error: e instanceof Error ? e.message : String(e) });
+      }
+    }
+    // As many as fit start now; the rest within the next minutes, in order.
+    void startQueued().catch(() => undefined);
+    return { results };
+  });
+
   // Ask an assistant, optionally about a record (its fields go along as context, masked like everything else).
   const askBody = z.object({
     assistantId: z.string().uuid().optional(), assistantName: z.string().max(200).optional(),
     question: z.string().min(1).max(20_000), recordId: z.string().max(18).optional(), objectApiName: z.string().max(80).optional(),
     history: z.array(z.object({ role: z.enum(['user', 'assistant']), text: z.string().max(20_000) })).max(40).optional(),
+    /** The record as read inside Salesforce (package 0.6+): no API call back to the org needed. */
+    record: z.record(z.unknown()).optional(),
+    /** Return a run id at once; the answer is read with GET /sf/v1/ask/:id. */
+    async: z.boolean().optional(),
   });
-  app.post('/sf/v1/ask', async (req) => {
+  const SYSTEM_FIELDS = /^(SystemModstamp|LastViewedDate|LastReferencedDate|IsDeleted|PhotoUrl|attributes)$/;
+  app.post('/sf/v1/ask', { bodyLimit: 5_000_000 }, async (req) => {
     const b = askBody.parse(req.body);
     const tenantId = req.sfTenant!.tenantId;
     const { rows } = await pool.query(
@@ -191,10 +216,10 @@ export function registerSfBridge(app: FastifyInstance) {
     if (!rows[0]) throw Object.assign(new Error('Assistant not found'), { statusCode: 404 });
     let context: unknown;
     if (b.recordId && b.objectApiName && /^\w+$/.test(b.objectApiName)) {
-      const sf = await SalesforceClient.forTenant(tenantId);
-      const rec = await sf.getRecord(b.objectApiName, b.recordId).catch(() => null) as Record<string, unknown> | null;
+      // Sent along by Salesforce when it can (read in-org, no API call); older packages: fetch it here.
+      const rec = b.record ?? await (await SalesforceClient.forTenant(tenantId)).getRecord(b.objectApiName, b.recordId).catch(() => null) as Record<string, unknown> | null;
       // Enough of the record to answer about it, without sending every system field.
-      if (rec) context = { record: { object: b.objectApiName, id: b.recordId, fields: Object.fromEntries(Object.entries(rec).filter(([k]) => !/^(SystemModstamp|LastViewedDate|LastReferencedDate|IsDeleted|PhotoUrl)$/.test(k)).slice(0, 60)) } };
+      if (rec) context = { record: { object: b.objectApiName, id: b.recordId, fields: Object.fromEntries(Object.entries(rec).filter(([k, v]) => !SYSTEM_FIELDS.test(k) && v !== null && v !== '').slice(0, 60)) } };
     }
     // Answers show in a narrow Salesforce panel: keep them short and scannable.
     const system = `${rows[0].system_prompt}
@@ -206,8 +231,23 @@ FORMAT (mandatory, overrides any other style instruction): you are answering in 
 - Answer only what was asked; don't restate the whole record.${rows[0].tools?.includes('soql_query') ? `
 - If the user gives a record number (e.g. Case Number 00001066, with leading zeros), look that record up with soql_query before answering.` : ''}
 - When knowledge sections were used, end bullets with their number like [1] and add a last line "Sources: <document titles>".`;
-    const r = await runAgent(tenantId, { id: rows[0].id, systemPrompt: system, tools: rows[0].tools }, b.question, context, b.history);
+    const spec = { id: rows[0].id, systemPrompt: system, tools: rows[0].tools };
+    if (b.async) {
+      // Answer in the background; the panel checks GET /sf/v1/ask/:id (short calls, nothing held open in Salesforce).
+      const runId = await new Promise<string>((resolve, reject) => {
+        runAgent(tenantId, spec, b.question, context, b.history, { onStarted: resolve }).catch(reject);
+      });
+      return { runId, status: 'running' };
+    }
+    const r = await runAgent(tenantId, spec, b.question, context, b.history);
     return { answer: r.output, runId: r.runId };
+  });
+
+  app.get('/sf/v1/ask/:id', async (req) => {
+    const { rows } = await pool.query('select status, output from runs where id=$1 and tenant_id=$2', [(req.params as { id: string }).id, req.sfTenant!.tenantId]);
+    if (!rows[0]) throw Object.assign(new Error('Question not found'), { statusCode: 404 });
+    const status = rows[0].status === 'done' ? 'done' : rows[0].status === 'error' ? 'error' : 'running';
+    return { status, ...(status === 'done' ? { answer: rows[0].output } : status === 'error' ? { error: rows[0].output } : {}) };
   });
 
   // Suggestions agents saved on a record, for the Suggestions card on its page.

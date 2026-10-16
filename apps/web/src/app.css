@@ -446,3 +446,6 @@
 :root .kb-preview { border-top: 1px solid var(--border); padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
 :root .panel-head .kb-meta { color: var(--muted); font-size: 13px; font-weight: 400; }
 :root .kb-rec { white-space: nowrap; font-size: 13px; }
+:root .api-use { min-width: 150px; gap: 4px; }
+:root .api-use .meter { width: 140px; }
+:root .api-warn { color: var(--warn, #b45309); }

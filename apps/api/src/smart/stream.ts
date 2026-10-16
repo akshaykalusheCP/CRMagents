@@ -1,3 +1,4 @@
+import { fromCreateEvent, prefetchFields } from '../engine/prefetch.js';
 import type { Workflow } from '@crmagents/shared';
 import { config } from '../config.js';
 import { pool } from '../db.js';
@@ -47,6 +48,28 @@ export async function enableCdc(sf: SalesforceClient, object: string) {
   }
 }
 
+/** Salesforce editions include change events for 5 objects unless the org buys more. */
+const CDC_INCLUDED = 5;
+
+/**
+ * Turns on real-time changes for an object when that costs the customer nothing: the object is already enabled,
+ * or at least two of the org's change-event slots are free (one is always left for their own use).
+ * Returns whether real-time is on. Best effort: never throws.
+ */
+export async function autoEnableCdc(sf: SalesforceClient, object: string): Promise<boolean> {
+  try {
+    const entity = changeEventFor(object);
+    const r = await sf.toolingQuery<{ SelectedEntity: string }>("SELECT SelectedEntity FROM PlatformEventChannelMember WHERE EventChannel = 'ChangeEvents'");
+    const selected = r.records.map((x) => x.SelectedEntity);
+    if (selected.includes(entity)) return true;
+    if (CDC_INCLUDED - selected.length < 2) return false;
+    await enableCdc(sf, object);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 interface Live { id: string; tenant_id: string; graph: Workflow; sf_user_id: string | null }
 
 class OrgStream {
@@ -93,7 +116,7 @@ class OrgStream {
               if (!m.successful) throw new Error(m.error ?? 'connect failed'); // re-handshake
               continue;
             }
-            if (m.data?.payload?.ChangeEventHeader) await this.handle(m.channel, m.data.payload.ChangeEventHeader, m.data.event?.replayId);
+            if (m.data?.payload?.ChangeEventHeader) await this.handle(m.channel, m.data.payload.ChangeEventHeader, m.data.event?.replayId, m.data.payload);
           }
           await this.mark(channels, null);
         }
@@ -107,13 +130,17 @@ class OrgStream {
     }
   }
 
-  private async handle(channel: string, h: ChangeHeader, replayId?: number) {
+  private async handle(channel: string, h: ChangeHeader, replayId?: number, payload: Record<string, unknown> = {}) {
     const { rows } = await pool.query(
       `select w.id, w.graph, t.sf_user_id from workflows w join tenants t on t.id = w.tenant_id
        where w.tenant_id=$1 and w.live and w.realtime`, [this.tenantId]);
     const agents = rows.flatMap((r) => { const t = triggerOf(r.graph); return t ? [{ id: r.id, object: t.object, event: t.event }] : []; });
     for (const job of routeEvent(h, agents, rows[0]?.sf_user_id ?? null)) {
-      await startRunAsync(this.tenantId, job.workflowId, { recordId: job.recordId, objectApiName: h.entityName }).catch(() => undefined);
+      // A "created" event carries every field with a value: the run can skip fetching the record.
+      const graph = rows.find((r) => r.id === job.workflowId)?.graph;
+      const fields = h.changeType === 'CREATE' && graph ? prefetchFields(graph, h.entityName) : null;
+      const prefetched = fields?.length && h.recordIds.length === 1 ? fromCreateEvent(payload, fields) : null;
+      await startRunAsync(this.tenantId, job.workflowId, { recordId: job.recordId, objectApiName: h.entityName, ...(prefetched ? { prefetched } : {}) }).catch(() => undefined);
     }
     if (replayId !== undefined) {
       await pool.query(

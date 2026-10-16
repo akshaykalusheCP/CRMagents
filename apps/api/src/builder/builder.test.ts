@@ -182,8 +182,10 @@ test('scheduled per-record job: one approval for the batch, then a task per reco
   assert.equal(c.workflow.nodes.find((n) => n.type === 'sf.query')!.config.soql, 'SELECT Id, Name, OwnerId FROM Opportunity WHERE IsClosed = false AND CloseDate < TODAY LIMIT 50');
   const records = [{ Id: '006A', Name: 'Big deal', OwnerId: '005X' }, { Id: '006B', Name: 'Small deal', OwnerId: '005Y' }];
   const tasks: any[] = [];
+  let batches = 0;
   const env = {
-    sf: { query: async () => ({ totalSize: 2, records }), createRecord: async (_o: string, f: any) => (tasks.push(f), { id: '00T' }) },
+    // The loop's tasks go to Salesforce together at the end (one sObject Collections call), not one call each.
+    sf: { query: async () => ({ totalSize: 2, records }), createRecord: async () => { throw new Error('should be batched'); }, saveMany: async (ops: any[]) => (batches++, ops.map((o) => (tasks.push(o.fields), { ok: true, id: '00T' }))) },
     llm: { complete: async () => { throw new Error('no AI'); }, agent: async () => { throw new Error('no AI'); } },
   } as unknown as Env;
   const st = newState({});
@@ -193,6 +195,7 @@ test('scheduled per-record job: one approval for the batch, then a task per reco
   assert.equal((await execute(c.workflow, env, st)).status, 'done');
   assert.deepEqual(tasks.map((t) => [t.Subject, t.WhatId, t.OwnerId]), [['Update Big deal', '006A', '005X'], ['Update Small deal', '006B', '005Y']]);
   assert.match(String(st.final), /Processed 2 Opportunity record/);
+  assert.equal(batches, 1);
 });
 
 test('org actions: ranking picks matching Flows/Apex, compile wires inputs and approval', async () => {

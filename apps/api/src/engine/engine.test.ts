@@ -11,6 +11,7 @@ function mockEnv(over: Partial<{ score: number }> = {}) {
     getRecord: async (...a: any[]) => (calls.push({ fn: 'getRecord', args: a }), { Id: a[1], Subject: 'Printer broken', Description: 'help', CaseNumber: '1' }),
     createRecord: async (...a: any[]) => (calls.push({ fn: 'createRecord', args: a }), { id: 'new1' }),
     updateRecord: async (...a: any[]) => (calls.push({ fn: 'updateRecord', args: a })),
+    saveMany: async (ops: any[]) => (calls.push({ fn: 'saveMany', args: [ops] }), ops.map(() => ({ ok: true, id: 'new1' }))),
     query: async (soql: string) => (calls.push({ fn: 'query', args: [soql] }), { totalSize: 2, records: [{ Subject: 'A', CaseNumber: '1', Status: 'New' }, { Subject: 'B', CaseNumber: '2', Status: 'New' }] }),
   };
   const llm: any = {
@@ -66,6 +67,29 @@ test('loop runs the body per item and continues on done', async () => {
   assert.match(String(st.final), /Drafted 2 follow-ups/);
   assert.match(String(st.final), /case 1: A/);
   assert.match(String(st.final), /case 2: B/);
+});
+
+test('loop writes go to Salesforce in one batch, and a failed record is reported', async () => {
+  const { env, calls } = mockEnv();
+  const wf: Workflow = {
+    nodes: [
+      { id: 't', type: 'trigger.manual', position: { x: 0, y: 0 }, config: {} },
+      { id: 'q', type: 'sf.query', position: { x: 0, y: 0 }, config: { soql: 'SELECT Id FROM Case' } },
+      { id: 'l', type: 'logic.loop', position: { x: 0, y: 0 }, config: { items: '{{q.records}}' } },
+      { id: 'u', type: 'sf.updateRecord', position: { x: 0, y: 0 }, config: { sobject: 'Case', id: '{{item.CaseNumber}}', fields: '{"Status":"Working"}' } },
+    ],
+    edges: [{ id: 'a', source: 't', target: 'q' }, { id: 'b', source: 'q', target: 'l' }, { id: 'c', source: 'l', target: 'u', sourceHandle: 'each' }],
+  };
+  assert.equal((await execute(wf, env, newState({}))).status, 'done');
+  assert.equal(calls.filter((c) => c.fn === 'updateRecord').length, 0);
+  const batch = calls.filter((c) => c.fn === 'saveMany');
+  assert.equal(batch.length, 1);
+  assert.deepEqual(batch[0].args[0].map((o: any) => [o.kind, o.id]), [['update', '1'], ['update', '2']]);
+
+  env.sf.saveMany = async (ops: any[]) => ops.map((_o: any, i: number) => (i === 1 ? { ok: false, error: 'FIELD_CUSTOM_VALIDATION_EXCEPTION: Reason is required' } : { ok: true }));
+  const out = await execute(wf, env, newState({}));
+  assert.equal(out.status, 'error');
+  assert.match(String(out.error), /1 of 2 changes saved; 1 failed: item 2 .*Reason is required/);
 });
 
 test('approval pauses, then resumes on approve and on reject', async () => {

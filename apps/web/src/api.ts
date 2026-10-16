@@ -15,6 +15,8 @@ export type { Workflow };
 export interface Tenant {
   id: string; sf_org_id: string; sf_instance_url: string; sf_username: string | null;
   setup_status?: string; setup_message?: string | null; use_package?: boolean;
+  /** Salesforce API calls used in the last 24 hours, as last reported by the org. */
+  api_used?: number | null; api_max?: number | null; api_checked_at?: string | null;
 }
 export interface KnowledgeDoc { id: string; title: string; fileName: string | null; kind: 'pdf' | 'docx' | 'text'; chars: number; chunks: number; createdBy: string | null; createdAt: string }
 export interface KnowledgeHit { docId: string; title: string; heading: string; body: string; rank: number }

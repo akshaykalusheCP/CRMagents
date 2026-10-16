@@ -1,3 +1,4 @@
+import { allowed, apiLevel, assertBudget } from '../salesforce/limits.js';
 import { pool } from '../db.js';
 import type { SalesforceClient } from '../salesforce/client.js';
 
@@ -52,11 +53,13 @@ export async function computeInsights(sf: SalesforceClient, periodDays: number):
   const w = windows(periodDays);
   const q = async (soql: string) => (await sf.query(soql)).records as Row[];
   const one = async (soql: string) => (await q(soql))[0] ?? {};
-  const currency = (await safe(async () => String((await one('SELECT DefaultCurrencyIsoCode FROM Organization')).DefaultCurrencyIsoCode ?? ''))) || 'USD';
+  // Every section starts at once, so their queries reach Salesforce together as composite batches
+  // (one API call per 25 queries) instead of one call each.
+  const currencyP = safe(async () => String((await one('SELECT DefaultCurrencyIsoCode FROM Organization')).DefaultCurrencyIsoCode ?? ''));
   const sections: Insights['sections'] = [];
 
   // ---------- Sales ----------
-  const sales = await safe(async () => {
+  const salesP = safe(async () => {
     const [openP, wonNow, wonPrev, lostNow, byStage, monthly, closingSoon, stale, topOpen, topAccounts, pastDue] = await Promise.all([
       one('SELECT COUNT(Id) c, SUM(Amount) s FROM Opportunity WHERE IsClosed = false'),
       one(`SELECT COUNT(Id) c, SUM(Amount) s FROM Opportunity WHERE IsWon = true AND ${w.dNow('CloseDate')}`),
@@ -100,10 +103,9 @@ export async function computeInsights(sf: SalesforceClient, periodDays: number):
       ] as List[],
     };
   });
-  if (sales) sections.push(sales);
 
   // ---------- Forecast (this quarter) ----------
-  const forecast = await safe(async () => {
+  const forecastP = safe(async () => {
     const [wonQtd, openQ, hist] = await Promise.all([
       one('SELECT COUNT(Id) c, SUM(Amount) s FROM Opportunity WHERE IsWon = true AND CloseDate = THIS_QUARTER'),
       q('SELECT StageName, COUNT(Id) c, SUM(Amount) s, AVG(Probability) p FROM Opportunity WHERE IsClosed = false AND CloseDate = THIS_QUARTER AND CloseDate >= TODAY GROUP BY StageName'),
@@ -131,10 +133,9 @@ export async function computeInsights(sf: SalesforceClient, periodDays: number):
       lists: [] as List[],
     };
   });
-  if (forecast) sections.push(forecast);
 
   // ---------- Deal risk radar (rules in code; reasons are shown, not a black box) ----------
-  const risk = await safe(async () => {
+  const riskP = safe(async () => {
     const base = 'Id, Name, Account.Name, Owner.Name, Amount, StageName, CloseDate, Probability, LastActivityDate, LastModifiedDate';
     let deals: Row[];
     try { deals = await q(`SELECT ${base}, LastStageChangeDate, PushCount FROM Opportunity WHERE IsClosed = false ORDER BY Amount DESC NULLS LAST LIMIT 200`); }
@@ -157,10 +158,9 @@ export async function computeInsights(sf: SalesforceClient, periodDays: number):
       }] as List[],
     };
   });
-  if (risk) sections.push(risk);
 
   // ---------- Leads ----------
-  const leads = await safe(async () => {
+  const leadsP = safe(async () => {
     const [newNow, newPrev, convNow, bySource, open] = await Promise.all([
       one(`SELECT COUNT(Id) c FROM Lead WHERE CreatedDate ${w.dtNow}`),
       one(`SELECT COUNT(Id) c FROM Lead WHERE ${w.dtPrev('CreatedDate')}`),
@@ -182,10 +182,9 @@ export async function computeInsights(sf: SalesforceClient, periodDays: number):
       lists: [] as List[],
     };
   });
-  if (leads) sections.push(leads);
 
   // ---------- Service ----------
-  const service = await safe(async () => {
+  const serviceP = safe(async () => {
     const [newNow, newPrev, open, byPriority, closed, oldest] = await Promise.all([
       one(`SELECT COUNT(Id) c FROM Case WHERE CreatedDate ${w.dtNow}`),
       one(`SELECT COUNT(Id) c FROM Case WHERE ${w.dtPrev('CreatedDate')}`),
@@ -213,10 +212,9 @@ export async function computeInsights(sf: SalesforceClient, periodDays: number):
       ] as List[],
     };
   });
-  if (service) sections.push(service);
 
   // ---------- Team activity ----------
-  const activity = await safe(async () => {
+  const activityP = safe(async () => {
     const [overdue, doneNow] = await Promise.all([
       one('SELECT COUNT(Id) c FROM Task WHERE IsClosed = false AND ActivityDate < TODAY'),
       one(`SELECT COUNT(Id) c FROM Task WHERE IsClosed = true AND LastModifiedDate ${w.dtNow}`),
@@ -231,7 +229,9 @@ export async function computeInsights(sf: SalesforceClient, periodDays: number):
       lists: [] as List[],
     };
   });
-  if (activity) sections.push(activity);
+
+  const currency = (await currencyP) || 'USD';
+  for (const sct of await Promise.all([salesP, forecastP, riskP, leadsP, serviceP, activityP])) if (sct) sections.push(sct);
 
   return { periodDays, currency, generatedAt: new Date().toISOString(), sections };
 }
@@ -245,6 +245,13 @@ export async function cachedInsights(tenantId: string, sf: SalesforceClient, per
     );
     if (rows[0]) return rows[0].data as Insights;
   }
+  if (!allowed(apiLevel(tenantId), 'background')) {
+    // The org is close to its API limit: show the last numbers rather than spend calls on a refresh.
+    const { rows } = await pool.query('select data from sf_schema_cache where tenant_id=$1 and key=$2', [tenantId, key]);
+    if (rows[0]) return { ...(rows[0].data as Insights), stale: true } as Insights;
+    assertBudget(tenantId, 'background');
+  }
+  // About 25 queries, started together: they go to Salesforce as one or two composite batch calls.
   const data = await computeInsights(sf, periodDays);
   await saveSnapshot(tenantId, data);
   await addHistory(tenantId, data);
