@@ -5,6 +5,7 @@ import startRun from '@salesforce/apex/CRMAgentsController.startRun';
 import getRun from '@salesforce/apex/CRMAgentsController.getRun';
 import decideWithNote from '@salesforce/apex/CRMAgentsController.decideWithNote';
 import ask from '@salesforce/apex/CRMAgentsController.ask';
+import { markdownToHtml } from 'c/crmMarkdown';
 
 const CHANNEL = '/event/CRMagents_Run_Event__e';
 const POLL_MS = 3000;
@@ -107,6 +108,7 @@ export default class CrmAgentsPanel extends LightningElement {
         return ((this.data && this.data.recent) || []).map((r) => ({ ...r, label: STATUS[r.status] || r.status, when: new Date(r.createdAt).toLocaleString() }));
     }
     get hasRecent() { return this.recent.length > 0 && !this.compact; }
+    get runOutputHtml() { return this.run && this.run.output ? markdownToHtml(this.run.output) : ''; }
     get runLabel() { return this.run ? STATUS[this.run.status] || this.run.status : ''; }
     get runTone() { return 'slds-badge ' + ((this.run && TONE[this.run.status]) || ''); }
     get runWaiting() { return this.run && this.run.status === 'waiting'; }
@@ -115,7 +117,7 @@ export default class CrmAgentsPanel extends LightningElement {
         return ((this.run && this.run.steps) || []).map((s, i) => ({ key: i + s.label, label: s.label, icon: s.status === 'ok' ? 'utility:success' : s.status === 'error' ? 'utility:error' : 'utility:clock' }));
     }
     get messages() {
-        return this.thread.map((m, i) => ({ key: i, text: m.text, css: m.role === 'user' ? 'bubble me' : 'bubble ai' }));
+        return this.thread.map((m, i) => ({ key: i, text: m.text, mine: m.role === 'user', html: m.role === 'user' ? '' : markdownToHtml(m.text), css: m.role === 'user' ? 'bubble me' : 'bubble ai md' }));
     }
     get cannotAsk() { return this.asking || !this.question.trim() || !this.assistantId; }
     get notConnected() { return this.error && /not connected|CRMagents_Config/i.test(this.error); }

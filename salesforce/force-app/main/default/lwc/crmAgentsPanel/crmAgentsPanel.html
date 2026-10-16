@@ -41,7 +41,7 @@
                                         </lightning-button-group>
                                     </div>
                                 </template>
-                                <template lwc:if={run.output}><div class="output pre">{run.output}</div></template>
+                                <template lwc:if={run.output}><div class="output md"><lightning-formatted-rich-text value={runOutputHtml}></lightning-formatted-rich-text></div></template>
                             </div>
                         </template>
 
@@ -79,7 +79,10 @@
                             <lightning-combobox label="Assistant" value={assistantId} options={assistants} onchange={handleAssistant}></lightning-combobox>
                             <div class="thread">
                                 <template for:each={messages} for:item="m">
-                                    <div key={m.key} class={m.css}>{m.text}</div>
+                                    <div key={m.key} class={m.css}>
+                                        <template lwc:if={m.mine}>{m.text}</template>
+                                        <template lwc:else><lightning-formatted-rich-text value={m.html}></lightning-formatted-rich-text></template>
+                                    </div>
                                 </template>
                                 <template lwc:if={asking}><div class="bubble ai weak">Looking it up…</div></template>
                             </div>

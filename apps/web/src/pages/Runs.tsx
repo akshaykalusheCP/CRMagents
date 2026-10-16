@@ -1,4 +1,5 @@
 import { Loader2, RefreshCw, Wrench } from 'lucide-react';
+import { Markdown } from '../components/Markdown';
 import { useEffect, useMemo, useState } from 'react';
 import { api, type Diagnosis, type Run, type Tenant, type UsageSummary } from '../api';
 import { Drawer, Empty, Facts, FilterTabs, Meter, PageHeader, Panel, SkeletonRows, Status, Table, toast, type Column } from '../components/ui';
@@ -145,7 +146,7 @@ export function RunsPage({ tenant, goSettings, workflowId, embedded }: { tenant?
                 )}
             </div>
           )}
-          {open.output && <div className="dsec"><h3>Result</h3><pre className="output">{open.output}</pre></div>}
+          {open.output && <div className="dsec"><h3>Result</h3><Markdown className="output-md" text={open.output} /></div>}
           {open.steps?.length > 0 && (
             <div className="dsec"><h3>Steps</h3>
               <ol className="tl2">

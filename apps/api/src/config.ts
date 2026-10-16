@@ -14,7 +14,7 @@ export const config = {
   // Orgs where the package source is deployed directly (our own dev/publisher orgs): never install the package there.
   sourceOrgIds: (process.env.SOURCE_ORG_IDS ?? '00DQy00000Li8r5MAB').split(',').map((s) => s.trim()),
   subscriberPackageId: process.env.SUBSCRIBER_PACKAGE_ID ?? '033Qy000000R05ZIAS',
-  packageVersionId: process.env.PACKAGE_VERSION_ID ?? '04tQy000000aB6bIAE',
+  packageVersionId: process.env.PACKAGE_VERSION_ID ?? '04tQy000000aB8DIAU',
   webUrl: process.env.WEB_URL ?? 'http://localhost:5173',
   sf: { apiVersion: 'v67.0' },
   model: process.env.MODEL ?? 'claude-opus-5-5',

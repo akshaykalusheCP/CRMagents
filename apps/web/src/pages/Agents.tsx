@@ -1,4 +1,5 @@
 import { Loader2, Plus, Send } from 'lucide-react';
+import { Markdown } from '../components/Markdown';
 import { useEffect, useState } from 'react';
 import { api, type Agent, type Tenant, type ToolInfo } from '../api';
 import { Empty, Panel, Status, toast, useConfirm } from '../components/ui';
@@ -99,7 +100,7 @@ export function AgentsPage({ tenant, goConnections }: { tenant?: Tenant; goConne
                 <div className="try">
                   <div className="row between"><h3>Try it</h3>{thread.length > 0 && <button className="link-btn" onClick={() => setThread([])}>New conversation</button>}</div>
                   {thread.length > 0 && (
-                    <div className="thread">{thread.map((m, i) => <div key={i} className={'msg ' + (m.role === 'user' ? 'me' : 'ai')}><div className="bubble">{m.text}</div></div>)}
+                    <div className="thread">{thread.map((m, i) => <div key={i} className={'msg ' + (m.role === 'user' ? 'me' : 'ai')}>{m.role === 'user' ? <div className="bubble">{m.text}</div> : <Markdown className="bubble" text={m.text} />}</div>)}
                       {busy && <div className="msg ai"><div className="bubble typing"><Loader2 size={14} className="spin" /> Looking it up…</div></div>}</div>
                   )}
                   <div className="agent-start">

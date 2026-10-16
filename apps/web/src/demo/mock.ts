@@ -15,7 +15,7 @@ function route(method: string, url: URL, body: any): Response {
   if (p === '/t/builder/chat') return json(demoChat(body));
   if (p === '/t/workflows' && method === 'GET') return json(DEMO_AGENTS);
   if (p === '/t/agents' && method === 'GET') return json(DEMO_ASSISTANTS);
-  if (/^\/t\/agents\/[^/]+\/run$/.test(p)) return json({ runId: 'x', output: body.history?.length ? 'Of those 9, 4 are High priority: 00001042, 00001039, 00001031 and 00001027.' : 'There are 9 open cases: 4 High, 3 Medium, 2 Low.' });
+  if (/^\/t\/agents\/[^/]+\/run$/.test(p)) return json({ runId: 'x', output: body.history?.length ? 'Of those 9, 4 are High priority: 00001042, 00001039, 00001031 and 00001027.' : '**9 open cases**, mostly high priority.\n\n- **High:** 4 (oldest is 00001042, 12 days)\n- **Medium:** 3\n- **Low:** 2\n- Two are **past their SLA**: 00001042 and 00001039' });
   if (p === '/api/tools') return json(DEMO_TOOLS);
   if (p === '/t/suggestions') return json(DEMO_SUGGESTIONS);
   if (/^\/t\/suggestions\/.+\/dismiss$/.test(p)) return json({ ok: true });

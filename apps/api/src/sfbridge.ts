@@ -195,7 +195,9 @@ export function registerSfBridge(app: FastifyInstance) {
       // Enough of the record to answer about it, without sending every system field.
       if (rec) context = { record: { object: b.objectApiName, id: b.recordId, fields: Object.fromEntries(Object.entries(rec).filter(([k]) => !/^(SystemModstamp|LastViewedDate|LastReferencedDate|IsDeleted|PhotoUrl)$/.test(k)).slice(0, 60)) } };
     }
-    const r = await runAgent(tenantId, { id: rows[0].id, systemPrompt: rows[0].system_prompt, tools: rows[0].tools }, b.question, context, b.history);
+    // Answers show in a narrow Salesforce panel: keep them short and scannable.
+    const system = `${rows[0].system_prompt}\n\nYou are answering inside a narrow Salesforce side panel. Start with a one-line answer, then at most 5 short bullet points. Use **bold** only for key facts. No headings, no tables, no long paragraphs.`;
+    const r = await runAgent(tenantId, { id: rows[0].id, systemPrompt: system, tools: rows[0].tools }, b.question, context, b.history);
     return { answer: r.output, runId: r.runId };
   });
 

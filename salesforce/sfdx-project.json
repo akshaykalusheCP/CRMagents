@@ -1,12 +1,12 @@
 {
   "packageDirectories": [
     {
-      "versionName": "ver 0.3",
-      "versionNumber": "0.3.0.NEXT",
+      "versionName": "ver 0.4",
+      "versionNumber": "0.4.0.NEXT",
       "path": "force-app",
       "default": true,
       "package": "CRMagents",
-      "versionDescription": "Agent Panel lists scheduled and on-demand agents everywhere; utility bar shows all agents"
+      "versionDescription": "Formatted assistant answers and run results in the Agent Panel"
     }
   ],
   "name": "crmagents",
@@ -20,6 +20,7 @@
     "CRMagents@0.1.0-3": "04tQy000000ZtjBIAS",
     "CRMagents@0.1.0-4": "04tQy000000ZtknIAC",
     "CRMagents@0.2.0-1": "04tQy000000aAvJIAU",
-    "CRMagents@0.3.0-1": "04tQy000000aB6bIAE"
+    "CRMagents@0.3.0-1": "04tQy000000aB6bIAE",
+    "CRMagents@0.4.0-1": "04tQy000000aB8DIAU"
   }
 }
