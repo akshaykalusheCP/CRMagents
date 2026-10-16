@@ -240,3 +240,20 @@ test('sf.action runs the org action with rendered inputs, and only describes it 
   assert.equal(dry.output.wouldDo, 'Run Flow Close_Case');
   assert.equal(calls.length, 1);
 });
+
+test('AI write after a query gets the query results even if the plan forgot to reference them', () => {
+  const c = compilePlan(plan({
+    trigger_kind: 'manual', trigger_object: '',
+    steps: [
+      step({ action: 'query', object: 'Lead', fields: [{ field: 'Name', value: '' }], where: 'IsConverted = false' }),
+      step({ action: 'ai_write', instruction: 'Write a short report listing the leads from the query results.' }),
+    ],
+  }));
+  assert.deepEqual(c.errors, []);
+  const ai = c.workflow.nodes.find((n) => n.type === 'ai.agent')!;
+  assert.match(String(ai.config.prompt), /\{\{sf_query_1\.table\}\}/);
+  assert.match(String(ai.config.prompt), /\{\{sf_query_1\.totalSize\}\}/);
+  // An explicit reference is left alone (no duplicate data).
+  const c2 = compilePlan(plan({ trigger_kind: 'manual', trigger_object: '', steps: [step({ action: 'query', object: 'Lead', fields: [{ field: 'Name', value: '' }] }), step({ action: 'ai_write', instruction: 'Summarise {step1.table}' })] }));
+  assert.equal((String(c2.workflow.nodes.find((n) => n.type === 'ai.agent')!.config.prompt).match(/sf_query_1\.table/g) ?? []).length, 1);
+});

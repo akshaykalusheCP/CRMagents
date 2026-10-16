@@ -174,9 +174,19 @@ export function compilePlan(plan: Plan): CompileResult {
       case 'research': {
         const data = s.input_fields.length ? `\n\nData:\n${fieldLines(s.input_fields)}` : '';
         const where = s.action === 'research' && isRecord ? '\n\nRecord: {{trigger.objectApiName}} {{trigger.recordId}}' : '';
+        // The AI only sees what the prompt contains: if it doesn't reference earlier data, hand it the latest
+        // query's results (or, inside a per-record loop, the current record) so it never works blind.
+        let feed = '';
+        if (!/\{(step\d+|item)\./.test(s.instruction)) {
+          if (inLoop) feed = '\n\nRecord:\n{{item}}';
+          else {
+            const lastQuery = [...stepNodes.slice(0, i)].reverse().find((x) => x?.action === 'query');
+            if (lastQuery) feed = `\n\nRecords found ({{${lastQuery.id}.totalSize}}):\n{{${lastQuery.id}.table}}`;
+          }
+        }
         node = add('ai.agent', {
           instructions: 'Do exactly what the task asks. Be concise.',
-          prompt: convert(s.instruction, i) + data + where,
+          prompt: convert(s.instruction, i) + data + feed + where,
           tools: s.action === 'research' ? READ_TOOLS : [],
         }, s.action === 'research' ? 'AI research' : 'AI write');
         keys = new Set(['text']);

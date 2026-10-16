@@ -126,7 +126,7 @@ Steps run in order. Actions:
 - create_task: Task on the triggering record (subject, message). update_record: set fields on the triggering record. create_record: new record (object, fields). notify_slack: message.
 - wait: pause before the next steps (wait_amount, wait_unit), e.g. "if no reply in 3 days" = wait 3 days, then a query/only_if that checks the record again.
 - run_action: run one of the org's own automations listed under "Org actions" (org_action = its key; fields = its inputs as field=input name, value; fill every input marked *). Outputs: the action's listed outputs. Prefer an existing org action over rebuilding the same logic from steps.
-References inside text and values: {record.Field} = field of the triggering record, {stepN.key} = output of step N (1-based), {trigger.input} = free text passed in, {item.Field} = field of the current record inside a per_record query.
+References inside text and values: {record.Field} = field of the triggering record, {stepN.key} = output of step N (1-based; a query's results are {stepN.table}), {trigger.input} = free text passed in, {item.Field} = field of the current record inside a per_record query.
 Rules:
 - Use AI actions only where judgement or writing is needed; prefer query/create_task/update_record otherwise.
 - Use conditions to skip records that don't need processing (e.g. closed ones); they mean "run only when all are true" for the whole workflow.
