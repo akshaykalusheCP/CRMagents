@@ -1,131 +1,206 @@
-import { Check, ChevronRight, Inbox, Loader2, Rocket, Sparkles, Wallet, Workflow as WorkflowIcon, Zap } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
-import { api, type Draft, type Me, type Run, type Settings, type Tenant, type UsageSummary, type WorkflowRow } from '../api';
+import { ChevronRight, Lightbulb, Plus, X } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { api, type AgentHealth, type Me, type Run, type Settings, type Suggestion, type Tenant, type UsageSummary, type WorkflowRow } from '../api';
+import { Empty, Meter, PageHeader, Panel, Status, Table, Trend, toast, type Column } from '../components/ui';
 
-const EXAMPLES = [
-  'When a new case comes in, sort it by type and create a follow-up task. Skip closed cases.',
-  'Score new leads from 0 to 100 and create a call task for the hot ones',
-  'List hot leads nobody has contacted yet',
-];
+// Home is a "today" view: what ran, what it cost, and what needs a person. Building happens on the Agents page.
 
-interface Props {
-  me: Me;
-  tenant?: Tenant;
-  go: (tab: 'insights' | 'agents' | 'approvals' | 'activity' | 'settings') => void;
-  openDraft: (d: Draft) => void;
+type Go = (tab: 'insights' | 'agents' | 'approvals' | 'activity' | 'settings') => void;
+
+const DAYS = 14;
+const day = (d: Date) => d.toISOString().slice(0, 10);
+const short = (iso: string) => new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' });
+const time = (iso: string) => {
+  const d = new Date(iso);
+  return day(d) === day(new Date()) ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : short(iso);
+};
+const money = (v: number) => (v < 0.01 && v > 0 ? `$${v.toFixed(4)}` : `$${v.toFixed(2)}`);
+
+export function runTone(status: string) {
+  return status === 'done' ? 'ok' : status === 'error' ? 'bad' : status === 'waiting' ? 'warn' : 'neutral';
+}
+export function runLabel(status: string) {
+  return ({ done: 'Succeeded', error: 'Failed', waiting: 'Waiting for approval', running: 'Running' } as Record<string, string>)[status] ?? status;
 }
 
-export function HomePage({ me, tenant, go, openDraft }: Props) {
+export function HomePage({ me, tenant, go, newAgent }: { me: Me; tenant?: Tenant; go: Go; newAgent: (request?: string) => void }) {
   const [settings, setSettings] = useState<Settings>();
   const [flows, setFlows] = useState<WorkflowRow[]>([]);
   const [usage, setUsage] = useState<UsageSummary>();
-  const [waiting, setWaiting] = useState<Run[]>([]);
-  const [recent, setRecent] = useState<Run[]>([]);
-  const [request, setRequest] = useState('');
-  const [building, setBuilding] = useState(false);
-  const [err, setErr] = useState('');
+  const [runs, setRuns] = useState<Run[]>([]);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
+  const [health, setHealth] = useState<AgentHealth[]>([]);
+  const [busy, setBusy] = useState('');
 
   useEffect(() => {
     api.settings().then(setSettings).catch(() => {});
     api.usage().then(setUsage).catch(() => {});
     if (!tenant) return;
     api.workflows(tenant.id).then(setFlows).catch(() => {});
-    api.runs(tenant.id, 'waiting').then(setWaiting).catch(() => {});
-    api.runs(tenant.id).then((r) => setRecent(r.slice(0, 6))).catch(() => {});
+    api.runs(tenant.id).then(setRuns).catch(() => {});
+    api.suggestions(tenant.id).then(setSuggestions).catch(() => {});
+    api.agentHealth(tenant.id).then(setHealth).catch(() => {});
   }, [tenant?.id]);
 
-  const live = flows.filter((f) => f.live).length;
-  const tested = recent.some((r) => r.workflow_id && r.status !== 'error');
-  // Stripe-style setup checklist: visible until every step is done.
-  const checklist: { label: string; done: boolean; action: () => void; cta: string }[] = [
-    { label: 'Connect your Salesforce org', done: tenant?.setup_status === 'ready', action: () => go('settings'), cta: 'Connect' },
-    { label: 'Add your AI key', done: !!settings?.anthropicKey?.set, action: () => go('settings'), cta: 'Add key' },
-    { label: 'Build your first agent', done: flows.length > 0, action: () => document.getElementById('describe')?.focus(), cta: 'Describe it' },
-    { label: 'Test it on real records', done: tested, action: () => go('agents'), cta: 'Open agents' },
-    { label: 'Turn it on', done: live > 0, action: () => go('agents'), cta: 'Open agents' },
-  ];
-  const doneCount = checklist.filter((c) => c.done).length;
-
-  const build = async () => {
-    if (!tenant) { go('settings'); return; }
-    setBuilding(true); setErr('');
-    try { openDraft(await api.draftWorkflow(tenant.id, request.trim())); }
-    catch (e) { setErr((e as Error).message); }
-    finally { setBuilding(false); }
+  const dismiss = async (key: string) => {
+    if (!tenant) return;
+    setSuggestions((s) => s.filter((x) => x.key !== key));
+    await api.dismissSuggestion(tenant.id, key).catch(() => {});
+    toast('Suggestion hidden', 'info');
   };
+  const dropApproval = async (workflowId: string) => {
+    if (!tenant) return;
+    setBusy(workflowId);
+    try { await api.dropApproval(tenant.id, workflowId); setHealth((h) => h.map((x) => (x.workflowId === workflowId ? { ...x, suggestion: undefined } : x))); toast('Approval step removed: it now acts on its own'); }
+    finally { setBusy(''); }
+  };
+  const advice = health.filter((h) => h.suggestion);
+  const nameOf = (id: string) => flows.find((f) => f.id === id)?.name ?? 'Agent';
+
+  const agentRuns = runs.filter((r) => r.workflow_id);
+  const waiting = runs.filter((r) => r.status === 'waiting');
+  const failed = agentRuns.filter((r) => r.status === 'error' && Date.now() - Date.parse(r.created_at) < 86_400_000);
+  const broken = flows.filter((f) => f.live && f.watch_error);
+  const live = flows.filter((f) => f.live).length;
+
+  // Runs per day for the last two weeks (zero-filled so quiet days show).
+  const trend = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of agentRuns) counts.set(day(new Date(r.created_at)), (counts.get(day(new Date(r.created_at))) ?? 0) + 1);
+    return Array.from({ length: DAYS }, (_, i) => {
+      const d = new Date(Date.now() - (DAYS - 1 - i) * 86_400_000);
+      return { label: d.toLocaleDateString([], { month: 'short', day: 'numeric' }), value: counts.get(day(d)) ?? 0 };
+    });
+  }, [runs]);
+  const total = trend.reduce((a, p) => a + p.value, 0);
+
+  const setup = [
+    { label: 'Connect Salesforce', done: tenant?.setup_status === 'ready', go: () => go('settings') },
+    { label: 'Add your AI key', done: !!settings?.anthropicKey?.set, go: () => go('settings') },
+    { label: 'Build an agent', done: flows.length > 0, go: () => newAgent() },
+    { label: 'Try it on records', done: agentRuns.some((r) => r.status !== 'error'), go: () => go('agents') },
+    { label: 'Turn it on', done: live > 0, go: () => go('agents') },
+  ];
+  const setupLeft = setup.filter((s) => !s.done).length;
 
   const hour = new Date().getHours();
   const hello = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   const first = me.email.split('@')[0].split(/[._]/)[0];
+  const name = first.charAt(0).toUpperCase() + first.slice(1);
+
+  const cols: Column<Run>[] = [
+    { key: 'agent', header: 'Agent', render: (r) => <b style={{ fontWeight: 500 }}>{r.agent_name ?? (r.workflow_id ? 'Agent run' : 'Assistant')}</b> },
+    { key: 'status', header: 'Status', render: (r) => <Status tone={runTone(r.status)}>{runLabel(r.status)}</Status> },
+    { key: 'cost', header: 'AI cost', align: 'right', hideSm: true, render: (r) => <span className="muted">{r.cost_usd ? money(Number(r.cost_usd)) : '—'}</span> },
+    { key: 'when', header: 'When', align: 'right', render: (r) => <span className="muted">{time(r.created_at)}</span> },
+  ];
 
   return (
-    <div className="page home">
-      <h1 className="hello">{hello}, {first.charAt(0).toUpperCase() + first.slice(1)}</h1>
-      <p className="muted" style={{ marginTop: 4 }}>Tell CRMagents what you want done in Salesforce. It builds the agent, you check it and turn it on.</p>
+    <div className="pg">
+      <PageHeader
+        title={`${hello}, ${name}`}
+        description={tenant ? <>Working in <b style={{ color: 'var(--text)', fontWeight: 500 }}>{tenant.sf_username ?? tenant.sf_org_id}</b> · {new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</> : 'Connect a Salesforce org to get started.'}
+        actions={<button className="primary cta" onClick={() => newAgent()}><Plus size={15} /> New agent</button>}
+      />
 
-      <div className="card builder-hero">
-        <div className="row"><Sparkles size={18} color="var(--accent)" /><h3>What should your agent do?</h3></div>
-        <textarea
-          id="describe" rows={3} value={request} onChange={(e) => setRequest(e.target.value)} disabled={building}
-          placeholder="e.g. When a new case comes in, sort it by type and create a follow-up task for the owner."
-          onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') void build(); }}
-        />
-        <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
-          {EXAMPLES.map((x) => <button key={x} className="chip example" onClick={() => setRequest(x)} disabled={building}>{x.length > 64 ? `${x.slice(0, 62)}…` : x}</button>)}
-        </div>
-        <div className="row">
-          <button className="primary" onClick={build} disabled={building || request.trim().length < 5}>
-            {building ? <><Loader2 size={15} className="spin" /> Building from your org…</> : <><Sparkles size={15} /> Build my agent</>}
-          </button>
-          {err && <span className="err">{err}</span>}
-        </div>
-      </div>
-
-      <div className="stats">
-        <Stat icon={<Inbox size={18} />} label="Waiting for you" value={String(waiting.length)} hint={waiting.length ? 'Review approvals' : 'Nothing to approve'} onClick={() => go('approvals')} accent={waiting.length > 0} />
-        <Stat icon={<Zap size={18} />} label="Runs, last 24 h" value={String(usage?.runs ?? 0)} hint="See activity" onClick={() => go('activity')} />
-        <Stat icon={<Wallet size={18} />} label="AI spend today" value={`$${(usage?.costUsd ?? 0).toFixed(2)}`} hint={usage?.budgetUsd != null ? `of $${usage.budgetUsd.toFixed(2)} budget` : 'no budget set'} onClick={() => go('settings')} />
-        <Stat icon={<Rocket size={18} />} label="Agents turned on" value={String(live)} hint={`${flows.length} agent${flows.length === 1 ? '' : 's'} built`} onClick={() => go('agents')} />
-      </div>
-
-      <div className="home-cols">
-        {doneCount < checklist.length && (
-          <div className="card">
-            <div className="row between"><h3>Get set up</h3><span className="muted small">{doneCount} of {checklist.length} done</span></div>
-            <div className="progress"><span style={{ width: `${(doneCount / checklist.length) * 100}%` }} /></div>
-            {checklist.map((c) => (
-              <div key={c.label} className={'check-row' + (c.done ? ' done' : '')}>
-                <span className="check-dot">{c.done && <Check size={13} />}</span>
-                <span className="grow">{c.label}</span>
-                {!c.done && <button className="sm" onClick={c.action}>{c.cta}</button>}
+      {setupLeft > 0 && (
+        <Panel flush title="Finish setting up" action={<span className="muted small">{setup.length - setupLeft} of {setup.length} done</span>}>
+          <div className="setup-steps">
+            {setup.map((s, i) => (
+              <div key={s.label} className={'setup-step' + (s.done ? ' done' : '')}>
+                <span className="n">{s.done ? 'Done' : `Step ${i + 1}`}</span>
+                <b>{s.label}</b>
+                {!s.done && <button className="link-btn" onClick={s.go}>Start <ChevronRight size={14} /></button>}
               </div>
             ))}
           </div>
-        )}
-        <div className="card">
-          <div className="row between"><h3>Recent activity</h3><button className="ghost sm" onClick={() => go('activity')}>See all <ChevronRight size={14} /></button></div>
-          {recent.length === 0 && <span className="muted small">No runs yet. Build an agent and test it.</span>}
-          {recent.map((r) => (
-            <div key={r.id} className="activity-row">
-              <span className={'dot ' + (r.status === 'done' ? 'ok' : r.status === 'error' ? 'error' : 'waiting')} />
-              <WorkflowIcon size={14} className="muted" />
-              <span className="grow">{r.agent_name ?? 'Run'}</span>
-              <span className="muted small">{new Date(r.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+        </Panel>
+      )}
+
+      {suggestions.length > 0 && (
+        <section className="dsec" aria-label="Suggested agents">
+          <div className="row between"><h2 className="sec-h"><Lightbulb size={16} /> Suggested for you</h2><span className="muted small">Found in your Salesforce data · no AI used</span></div>
+          <div className="sugg-grid">
+            {suggestions.slice(0, 3).map((s) => (
+              <article key={s.key} className="sugg">
+                <span className="tag">{s.object}</span>
+                <h3>{s.title}</h3>
+                <p>{s.finding}</p>
+                <div className="sugg-actions">
+                  <button className="primary cta sm" onClick={() => newAgent(s.request)}>Build this agent</button>
+                  <button className="ghost sm" onClick={() => void dismiss(s.key)} aria-label={`Dismiss ${s.title}`}><X size={14} /> Dismiss</button>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <div className="home2-top">
+        <Panel>
+          <div className="metric-head">
+            <div>
+              <div className="metric-label">Agent runs</div>
+              <div className="metric-value">{total}</div>
+              <div className="metric-sub">Last {DAYS} days · {short(new Date(Date.now() - (DAYS - 1) * 86_400_000).toISOString())} to today</div>
             </div>
-          ))}
-        </div>
+            <button className="link-btn" onClick={() => go('activity')}>View activity <ChevronRight size={14} /></button>
+          </div>
+          <Trend points={trend} format={(v) => `${v} run${v === 1 ? '' : 's'}`} />
+        </Panel>
+
+        <Panel flush>
+          <div className="side-metrics">
+            <button className="side-metric" onClick={() => go('approvals')}>
+              <div className="row1"><span className="metric-label">Waiting for approval</span>{waiting.length > 0 && <Status tone="warn">Needs you</Status>}</div>
+              <span className="v">{waiting.length}</span>
+            </button>
+            <button className="side-metric" onClick={() => go('settings')}>
+              <div className="row1"><span className="metric-label">AI spend today</span><span className="muted small">{usage?.budgetUsd != null ? `of ${money(usage.budgetUsd)}` : 'no budget'}</span></div>
+              <span className="v">{money(usage?.costUsd ?? 0)}</span>
+              {usage?.budgetUsd != null && <Meter value={usage.costUsd} max={usage.budgetUsd} label="AI budget used today" />}
+            </button>
+            <button className="side-metric" onClick={() => go('agents')}>
+              <div className="row1"><span className="metric-label">Agents turned on</span><span className="muted small">of {flows.length}</span></div>
+              <span className="v">{live}</span>
+            </button>
+          </div>
+        </Panel>
+      </div>
+
+      <div className="home2-cols">
+        <Panel flush title="Needs attention">
+          {waiting.length + broken.length + failed.length + advice.length === 0 ? (
+            <Empty title="All clear" body="Approvals, failed runs and agents with problems show up here." />
+          ) : (
+            <>
+              {advice.map((h) => (
+                <div key={'h' + h.workflowId} className="att-row">
+                  <Status tone={h.suggestion!.kind === 'drop_approval' ? 'ok' : h.suggestion!.kind === 'review' ? 'warn' : 'bad'}>{h.suggestion!.kind === 'drop_approval' ? 'Earned trust' : h.suggestion!.kind === 'review' ? 'Review' : 'Fix'}</Status>
+                  <div className="grow"><b>{nameOf(h.workflowId)}: {h.suggestion!.title}</b><span>{h.suggestion!.detail}</span></div>
+                  {h.suggestion!.kind === 'drop_approval'
+                    ? <button className="sm" disabled={busy === h.workflowId} onClick={() => void dropApproval(h.workflowId)} title="Remove the approval step so it acts on its own">Let it act</button>
+                    : <button className="sm" onClick={() => go(h.suggestion!.kind === 'fix' ? 'activity' : 'agents')}>Open</button>}
+                </div>
+              ))}
+              {waiting.slice(0, 4).map((r) => (
+                <div key={r.id} className="att-row"><Status tone="warn">Approve</Status><div className="grow"><b>{r.agent_name ?? 'Agent run'}</b><span>Waiting since {time(r.created_at)}</span></div><button className="sm" onClick={() => go('approvals')}>Review</button></div>
+              ))}
+              {broken.map((f) => (
+                <div key={f.id} className="att-row"><Status tone="bad">Problem</Status><div className="grow"><b>{f.name}</b><span>{f.watch_error}</span></div><button className="sm" onClick={() => go('agents')}>Open</button></div>
+              ))}
+              {failed.slice(0, 4).map((r) => (
+                <div key={r.id} className="att-row"><Status tone="bad">Failed</Status><div className="grow"><b>{r.agent_name ?? 'Agent run'}</b><span>{time(r.created_at)}</span></div><button className="sm" onClick={() => go('activity')}>Details</button></div>
+              ))}
+            </>
+          )}
+        </Panel>
+
+        <Panel flush title="Recent activity" action={<button className="link-btn" onClick={() => go('activity')}>See all <ChevronRight size={14} /></button>}>
+          <Table columns={cols} rows={runs.slice(0, 6)} rowKey={(r) => r.id} onRowClick={() => go('activity')}
+            empty={<Empty title="No runs yet" body="Runs appear here once an agent is tested or turned on." action={<button className="sm" onClick={() => newAgent()}>New agent</button>} />} />
+        </Panel>
       </div>
     </div>
-  );
-}
-
-function Stat({ icon, label, value, hint, onClick, accent }: { icon: ReactNode; label: string; value: string; hint: string; onClick: () => void; accent?: boolean }) {
-  return (
-    <button className={'stat' + (accent ? ' accent' : '')} onClick={onClick}>
-      <span className="stat-icon">{icon}</span>
-      <span className="stat-value">{value}</span>
-      <span className="stat-label">{label}</span>
-      <span className="stat-hint">{hint}</span>
-    </button>
   );
 }

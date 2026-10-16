@@ -187,6 +187,17 @@ export const NODE_DEFS: NodeDef[] = [
     outputs: ['id'],
   },
   {
+    type: 'sf.action',
+    label: 'Run Salesforce action',
+    category: 'Salesforce',
+    description: "Run one of the org's own invocable Apex actions, autolaunched Flows, or a standard action (email, Chatter).",
+    fields: [
+      { key: 'action', label: 'Action', kind: 'text', placeholder: 'flow:Close_Case', help: 'apex:ClassName, flow:FlowApiName or standard:emailSimple' },
+      { key: 'inputs', label: 'Inputs (JSON)', kind: 'textarea', placeholder: '{"recordId": "{{trigger.recordId}}"}' },
+    ],
+    outputs: ['success'],
+  },
+  {
     type: 'logic.branch',
     label: 'If / else',
     category: 'Logic',

@@ -4,11 +4,12 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
-  ArrowLeft, Check, ChevronDown, ChevronUp, CloudUpload, FlaskConical, LayoutList, Network, Loader2, MousePointerClick, Play, Save, Search, Sparkles, Trash2, X,
+  ArrowLeft, Check, ChevronDown, ChevronUp, CloudUpload, FlaskConical, GitCompare, History, LayoutList, Network, Loader2, MousePointerClick, Play, Save, Search, Sparkles, Trash2, X, Zap,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CATEGORY_COLORS, NODE_DEFS, NODE_DEF_BY_TYPE, type Category, type Workflow, type WFNode } from '@crmagents/shared';
-import { api, type Draft, type Preview, type RunResult, type ToolInfo } from '../api';
+import { api, type BacktestResult, type Draft, type Preview, type RegressionResult, type RunResult, type ToolInfo } from '../api';
+import { BacktestView, RegressionView, ResultModal, Working } from './Smart';
 import { Inspector } from './Inspector';
 import { StepsView } from './StepsView';
 import { NodeTile } from './nodeIcons';
@@ -48,11 +49,13 @@ interface Props {
   aiDraft?: Draft;
   /** Whether CRMagents is watching Salesforce for this agent's trigger. */
   initialLive?: boolean;
+  /** Started by Salesforce change events instead of 1-minute checks. */
+  initialRealtime?: boolean;
 }
 
 const STATUS_BADGE: Record<string, string> = { done: 'ok', error: 'err', waiting: 'warn', running: 'accent' };
 
-function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDeleted, aiDraft, initialLive }: Props) {
+function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDeleted, aiDraft, initialLive, initialRealtime }: Props) {
   const init = useMemo(() => toRF(initialGraph), [initialGraph]);
   const [nodes, setNodes, onNodesChange] = useNodesState<WFRFNode>(init.nodes);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(init.edges);
@@ -79,6 +82,9 @@ function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDe
   const [previewing, setPreviewing] = useState(false);
   const [previewErr, setPreviewErr] = useState('');
   const [live, setLive] = useState<boolean>(!!initialLive);
+  const [realtime, setRealtimeOn] = useState<boolean>(!!initialRealtime);
+  const [bt, setBt] = useState<BacktestResult | 'loading' | { error: string } | null>(null);
+  const [reg, setReg] = useState<RegressionResult | 'loading' | { error: string } | null>(null);
   const [view, setView] = useState<'steps' | 'canvas'>(() => { try { return localStorage.getItem('builderView') === 'canvas' ? 'canvas' : 'steps'; } catch { return 'steps'; } });
   const [tested, setTested] = useState(false);
   useEffect(() => { try { localStorage.setItem('builderView', view); } catch { /* ignore */ } }, [view]);
@@ -293,6 +299,26 @@ function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDe
   const triggerEvent = String(nodes.find((n) => n.data.type === 'trigger.salesforce')?.data.config.event ?? 'created');
   const schedule = nodes.find((n) => n.data.type === 'trigger.schedule')?.data.config;
   const canTurnOn = !!triggerObject || !!schedule;
+
+  // What would it have done over the last 30 days? (Saves first so the replay uses what's on screen.)
+  const replay = async () => {
+    const wid = dirty || !id ? await save() : id;
+    if (!wid) return;
+    setBt('loading');
+    try { setBt(await api.backtest(tenantId, wid)); } catch (e) { setBt({ error: (e as Error).message }); }
+  };
+  // Before saving an edit: what comes out differently on recent real runs.
+  const checkEdit = async () => {
+    if (!id) return;
+    setReg('loading');
+    try { setReg(await api.regression(tenantId, id, fromRF(nodes, edges, meta))); } catch (e) { setReg({ error: (e as Error).message }); }
+  };
+  const toggleRealtime = async () => {
+    if (!id) return;
+    setMsg('');
+    try { const r = await api.setRealtime(tenantId, id, !realtime); setRealtimeOn(r.realtime); }
+    catch (e) { setMsg((e as Error).message); }
+  };
   const whenText = schedule ? `every ${schedule.every ?? 'day'}${schedule.every === 'hour' ? '' : ` at ${schedule.at || '08:00'} UTC`}` : `for every ${triggerObject} that is ${triggerEvent} in Salesforce (checked every minute)`;
   // Turn on = CRMagents checks Salesforce every minute for matching records. Nothing is installed in the org.
   const turnOn = async () => {
@@ -386,6 +412,7 @@ function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDe
           <button className={view === 'canvas' ? 'on' : ''} onClick={() => setView('canvas')} title="Free-form canvas (advanced)"><Network size={14} /> Canvas</button>
         </div>
         {id && <button className="ghost icon danger" onClick={remove} title="Delete workflow"><Trash2 size={15} /></button>}
+        {id && dirty && <button onClick={() => void checkEdit()} title="Compare this edit with the agent's recent real runs before saving"><GitCompare size={14} /> Check changes</button>}
         <button onClick={() => void save()} disabled={!dirty || saving}><Save size={14} /> Save</button>
         <button
           onClick={tryOnRecords} disabled={previewing || !hasRecordTrigger}
@@ -393,9 +420,17 @@ function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDe
         >
           {previewing ? <Loader2 size={14} className="spin" /> : <FlaskConical size={14} />} Try on 10 records
         </button>
+        <button onClick={() => void replay()} disabled={bt === 'loading' || !canTurnOn} title={canTurnOn ? 'See what it would have done over the last 30 days (nothing is written)' : 'Needs a record trigger or a schedule'}>
+          {bt === 'loading' ? <Loader2 size={14} className="spin" /> : <History size={14} />} Replay 30 days
+        </button>
         <button onClick={doRun} disabled={running || nodes.length === 0}>
           {running ? <Loader2 size={14} className="spin" /> : <Play size={14} />} Test run
         </button>
+        {live && hasRecordTrigger && (
+          <button onClick={() => void toggleRealtime()} title={realtime ? 'Starts within seconds of a change in Salesforce. Click to go back to 1-minute checks.' : 'Start within seconds of a change instead of checking every minute'}>
+            <Zap size={14} /> {realtime ? 'Real-time' : 'Every minute'}
+          </button>
+        )}
         {live ? (
           <button onClick={turnOff} disabled={deploying} title={`Runs ${whenText}. Click to turn off.`}>
             <span className="dot ok" /> On
@@ -564,6 +599,17 @@ function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDe
             )}
         </div>
       </div>
+      {bt && (
+        <ResultModal title="Replay: the last 30 days" sub="What this agent would have done if it had been on. Nothing was written to Salesforce." onClose={() => setBt(null)}>
+          {bt === 'loading' ? <Working text="Replaying on a sample of last month's records…" /> : 'error' in bt ? <div className="err">{bt.error}</div> : <BacktestView b={bt} />}
+        </ResultModal>
+      )}
+      {reg && (
+        <ResultModal title="Check changes" sub="Your unsaved edit, replayed on this agent's recent real runs. Nothing was written to Salesforce." onClose={() => setReg(null)}
+          footer={reg !== 'loading' && !('error' in reg) ? <><button onClick={() => setReg(null)}>Keep editing</button><button className="primary" onClick={() => { setReg(null); void save(); }}>Save</button></> : undefined}>
+          {reg === 'loading' ? <Working text="Replaying recent runs with your edit…" /> : 'error' in reg ? <div className="err">{reg.error}</div> : <RegressionView r={reg} />}
+        </ResultModal>
+      )}
       {(preview || previewErr) && (
         <div className="modal" onClick={() => { setPreview(null); setPreviewErr(''); }}>
           <div className="modal-card wide" onClick={(e) => e.stopPropagation()}>

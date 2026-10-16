@@ -45,6 +45,12 @@ export class SalesforceClient {
     );
   }
 
+  /** Instance URL and a current access token, for the streaming client. `fresh` drops the cached token first. */
+  async session(fresh = false): Promise<{ instanceUrl: string; token: string }> {
+    if (fresh) accessCache.delete(this.tenantId);
+    return { instanceUrl: this.instanceUrl, token: await this.token() };
+  }
+
   private async token(): Promise<string> {
     const cached = accessCache.get(this.tenantId);
     if (cached && Date.now() < cached.expiresAt) return cached.token;
@@ -143,6 +149,31 @@ export class SalesforceClient {
     return compactRecord(r);
   }
 
+  /** Invocable actions: the org's own Apex (@InvocableMethod), autolaunched Flows, and standard actions. */
+  private actionPath(kind: ActionKind, name = '') {
+    const base = kind === 'standard' ? '/actions/standard' : `/actions/custom/${kind}`;
+    return name ? `${base}/${encodeURIComponent(name)}` : base;
+  }
+
+  async listActions(kind: ActionKind) {
+    const r = await this.call<{ actions: { name: string; label: string; type: string }[] }>('GET', this.actionPath(kind));
+    return r.actions ?? [];
+  }
+
+  describeAction(kind: ActionKind, name: string) {
+    return this.call<ActionDescribe>('GET', this.actionPath(kind, name));
+  }
+
+  /** Runs one action with one set of inputs. Throws with Salesforce's message when it reports a failure. */
+  async runAction(kind: ActionKind, name: string, inputs: Record<string, unknown>) {
+    const r = await this.call<{ isSuccess: boolean; outputValues: Record<string, unknown> | null; errors: { message: string }[] | null }[]>(
+      'POST', this.actionPath(kind, name), { inputs: [inputs] },
+    );
+    const first = r[0];
+    if (!first?.isSuccess) throw new Error(first?.errors?.map((e) => e.message).join('; ') || `Action ${name} failed`);
+    return compactRecord(first.outputValues ?? {}) as Record<string, unknown>;
+  }
+
   createRecord(sobject: string, fields: Record<string, unknown>) {
     return this.call<{ id: string }>('POST', `/sobjects/${encodeURIComponent(sobject)}`, fields);
   }
@@ -151,6 +182,10 @@ export class SalesforceClient {
     return this.call<void>('PATCH', `/sobjects/${encodeURIComponent(sobject)}/${encodeURIComponent(id)}`, fields);
   }
 }
+
+export type ActionKind = 'apex' | 'flow' | 'standard';
+export interface ActionParam { name: string; label: string; type: string; required: boolean; description: string | null; sobjectType?: string | null }
+export interface ActionDescribe { name: string; label: string; description: string | null; type: string; inputs: ActionParam[]; outputs: ActionParam[] }
 
 export interface GlobalObject {
   name: string;

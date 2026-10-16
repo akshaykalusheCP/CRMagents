@@ -9,6 +9,7 @@ import { emptyUsage } from '../agent/pricing.js';
 import { dbResultCache } from '../agent/resultCache.js';
 import { execute, newState, type RunState } from './executor.js';
 import { examplesFor } from './learn.js';
+import { makeGuard } from '../smart/policies.js';
 
 export interface TriggerPayload {
   input?: string;
@@ -42,7 +43,8 @@ async function makeEnv(tenantId: string, workflowId?: string) {
     agent: async (o) => (await llm()).agent(o),
     complete: async (o) => (await llm()).complete(o),
   };
-  return { sf, llm: lazy, ...(workflowId ? { examples: examplesFor(workflowId) } : {}) };
+  const guard = await makeGuard(tenantId, sf);
+  return { sf, llm: lazy, guard, ...(workflowId ? { examples: examplesFor(workflowId) } : {}) };
 }
 
 async function persist(runId: string, st: RunState, graph: Workflow, status: string, error?: string) {
@@ -113,14 +115,14 @@ export async function getRun(tenantId: string, runId: string): Promise<RunSnapsh
   };
 }
 
-export async function decideRun(tenantId: string, runId: string, approve: boolean) {
+export async function decideRun(tenantId: string, runId: string, approve: boolean, note?: string) {
   const { rows } = await pool.query('select status, state, workflow_id from runs where id=$1 and tenant_id=$2', [runId, tenantId]);
   if (!rows[0]) throw Object.assign(new Error('run not found'), { statusCode: 404 });
   if (rows[0].status !== 'waiting' || !rows[0].state) throw new Error('Run is not waiting for approval');
   const { st, graph } = rows[0].state as { st: RunState; graph: Workflow };
   if (!st.pending) throw new Error('No pending approval');
   st.decision = { nodeId: st.pending, approve };
-  await pool.query("update runs set status='running' where id=$1", [runId]);
+  await pool.query("update runs set status='running', decision_note=$2, decided_at=now() where id=$1", [runId, note?.trim().slice(0, 500) || null]);
   return drive(runId, tenantId, graph, st, rows[0].workflow_id ?? undefined);
 }
 
@@ -143,21 +145,28 @@ const LABEL_FIELDS = ['CaseNumber', 'Subject', 'Name', 'Title'];
  * Runs a record-triggered workflow on the org's most recent records in preview mode: AI and reads run for real,
  * writes/messages/approvals are only described. Lets an admin judge the results before going live.
  */
-export async function previewWorkflow(tenantId: string, workflowId: string, limit = 10) {
+export async function previewWorkflow(tenantId: string, workflowId: string, limit = 10, opts: { ids?: string[]; graph?: Workflow; triggers?: Record<string, unknown>[]; note?: string } = {}) {
   const { rows } = await pool.query('select graph from workflows where id=$1 and tenant_id=$2', [workflowId, tenantId]);
   if (!rows[0]) throw Object.assign(new Error('workflow not found'), { statusCode: 404 });
-  const graph = rows[0].graph as Workflow;
+  const graph = opts.graph ?? (rows[0].graph as Workflow);
   validateWorkflow(graph);
   const trigger = graph.nodes.find((n) => n.type === 'trigger.salesforce');
   const object = String(trigger?.config.objectApiName ?? '').trim();
-  if (!object) throw new Error('Preview needs a Salesforce record trigger with an object (for example Case).');
+  if (!object && !opts.triggers) throw new Error('Preview needs a Salesforce record trigger with an object (for example Case).');
   checkRunRate(await accountOf(tenantId));
 
   const env = await makeEnv(tenantId, workflowId);
   const { fields } = await import('../salesforce/schema.js');
-  const known = new Set((await fields(tenantId, env.sf, object)).map((f) => f.name));
+  const known = new Set(object ? (await fields(tenantId, env.sf, object)).map((f) => f.name) : []);
   const labelFields = LABEL_FIELDS.filter((f) => known.has(f)).slice(0, 2);
-  const recent = await env.sf.query(`SELECT Id${labelFields.map((f) => `, ${f}`).join('')} FROM ${object} ORDER BY LastModifiedDate DESC LIMIT ${Math.min(Math.max(limit, 1), 20)}`);
+  const cols = `Id${labelFields.map((f) => `, ${f}`).join('')}`;
+  const safeIds = (opts.ids ?? []).filter((id) => /^[a-zA-Z0-9]{15,18}$/.test(id));
+  // Given triggers (regression replays) run as-is; otherwise the chosen records, or the most recent ones.
+  const recent = opts.triggers
+    ? { records: opts.triggers.map((t, i) => ({ Id: String(t.recordId ?? `run-${i}`), __trigger: t })) }
+    : safeIds.length
+      ? await env.sf.query(`SELECT ${cols} FROM ${object} WHERE Id IN (${safeIds.map((i) => `'${i}'`).join(',')})`)
+      : await env.sf.query(`SELECT ${cols} FROM ${object} ORDER BY LastModifiedDate DESC LIMIT ${Math.min(Math.max(limit, 1), 20)}`);
 
   const preview = { ...env, dryRun: true };
   const out: PreviewRow[] = [];
@@ -166,7 +175,7 @@ export async function previewWorkflow(tenantId: string, workflowId: string, limi
   await Promise.all([0, 1, 2].map(async () => {
     while (queue.length) {
       const rec = queue.shift()!;
-      const st = newState({ recordId: rec.Id, objectApiName: object });
+      const st = newState((rec as any).__trigger ?? { recordId: rec.Id, objectApiName: object });
       const outcome = await execute(graph, preview, st).catch((e) => ({ status: 'error' as const, error: String(e instanceof Error ? e.message : e) }));
       const u = st.usage ?? emptyUsage();
       total = { input: total.input + u.input, cacheWrite: total.cacheWrite + u.cacheWrite, cacheRead: total.cacheRead + u.cacheRead, output: total.output + u.output, costUsd: total.costUsd + u.costUsd };
@@ -191,7 +200,7 @@ export async function previewWorkflow(tenantId: string, workflowId: string, limi
   await pool.query(
     `insert into runs (tenant_id, workflow_id, input, status, output, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd)
      values ($1,$2,$3,'done',$4,$5,$6,$7,$8,$9)`,
-    [tenantId, workflowId, JSON.stringify({ preview: out.length }), `Preview on ${out.length} records (nothing written)`, total.input, total.output, total.cacheRead, total.cacheWrite, total.costUsd],
+    [tenantId, workflowId, JSON.stringify({ preview: out.length }), opts.note ?? `Preview on ${out.length} records (nothing written)`, total.input, total.output, total.cacheRead, total.cacheWrite, total.costUsd],
   );
   const order = new Map((recent.records as Record<string, string>[]).map((r, i) => [r.Id, i]));
   out.sort((a, b) => order.get(a.recordId)! - order.get(b.recordId)!);

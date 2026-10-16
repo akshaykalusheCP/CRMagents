@@ -1,19 +1,17 @@
-import { LayoutTemplate, Loader2, Plus, Sparkles, Workflow as WorkflowIcon, X } from 'lucide-react';
+import { LayoutTemplate, Plus, Sparkles, Workflow as WorkflowIcon, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { TEMPLATES, type Workflow } from '@crmagents/shared';
-import { api, type Draft as AiDraft, type Tenant, type WorkflowRow } from '../api';
+import { AgentBuilder } from '../components/AgentBuilder';
+import { Empty, FilterTabs, PageHeader, Panel, SkeletonRows, Status, Table, type Column } from '../components/ui';
+import { Ribbon } from '../components/Ribbon';
+import { api, type AgentHealth, type Draft as AiDraft, type Tenant, type WorkflowRow } from '../api';
 import { NodeTile } from '../components/nodeIcons';
 import { WorkflowEditor } from '../components/WorkflowEditor';
 import { AgentsPage } from './Agents';
+import { AgentPage } from './Agent';
 
-interface Draft { key: string; id: string | null; name: string; graph: Workflow; ai?: AiDraft; live?: boolean }
+interface Draft { key: string; id: string | null; name: string; graph: Workflow; ai?: AiDraft; live?: boolean; realtime?: boolean }
 
-const EXAMPLES = [
-  'When a new case comes in, sort it into installation, breakdown, performance or other and create a follow-up task. Skip closed cases.',
-  'Score new leads from 0 to 100 and create a call task for the hot ones',
-  'Summarize an account: open opportunities, open cases and next steps',
-  'List hot leads nobody has contacted yet',
-];
 const blank: Workflow = { nodes: [], edges: [] };
 
 const triggerLabel = (g: Workflow) => {
@@ -25,11 +23,12 @@ const triggerLabel = (g: Workflow) => {
 };
 
 const ago = (iso: string) => {
-  const s = (Date.now() - new Date(iso).getTime()) / 1000;
-  if (s < 60) return 'just now';
-  if (s < 3600) return `${Math.floor(s / 60)}m ago`;
-  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
-  return new Date(iso).toLocaleDateString();
+  const m = Math.round((Date.now() - Date.parse(iso)) / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  if (m < 60 * 24) return `${Math.round(m / 60)}h ago`;
+  if (m < 60 * 24 * 30) return `${Math.round(m / 1440)}d ago`;
+  return new Date(iso).toLocaleDateString([], { month: 'short', day: 'numeric' });
 };
 
 function TemplatePicker({ onPick, onClose }: { onPick: (name: string, g: Workflow) => void; onClose: () => void }) {
@@ -38,8 +37,8 @@ function TemplatePicker({ onPick, onClose }: { onPick: (name: string, g: Workflo
       <div className="modal-card" onClick={(e) => e.stopPropagation()}>
         <div className="modal-head">
           <div>
-            <h3>New agent</h3>
-            <p className="muted small" style={{ margin: '4px 0 0' }}>Start from a template or an empty canvas. You can change everything later.</p>
+            <h3 style={{ margin: 0 }}>Start from a template</h3>
+            <p className="muted small" style={{ margin: '4px 0 0' }}>Ready-made agents you can adjust, or a blank canvas. Nothing runs until you turn it on.</p>
           </div>
           <button className="ghost icon" onClick={onClose} aria-label="Close"><X size={16} /></button>
         </div>
@@ -71,19 +70,21 @@ export function WorkflowsPage({ tenant, goConnections, incoming, onIncomingOpene
   const [rows, setRows] = useState<WorkflowRow[]>([]);
   const [loaded, setLoaded] = useState(false);
   const [cur, setCur] = useState<Draft | null>(null);
+  const [detail, setDetail] = useState<WorkflowRow | null>(null);
   const [picker, setPicker] = useState(false);
   const [err, setErr] = useState('');
   const [request, setRequest] = useState('');
-  const [building, setBuilding] = useState(false);
+  const [builder, setBuilder] = useState<{ first?: string } | null>(null);
+  const [filter, setFilter] = useState<'all' | 'on' | 'off' | 'problem'>('all');
+  const [health, setHealth] = useState<Record<string, AgentHealth>>({});
 
-  const load = () => tenant && api.workflows(tenant.id).then(setRows).catch((e) => setErr(e.message)).finally(() => setLoaded(true));
-  useEffect(() => { setCur(null); setLoaded(false); load(); }, [tenant?.id]);
+  const load = () => tenant && api.workflows(tenant.id).then((r) => { setRows(r); setDetail((d) => d && (r.find((x) => x.id === d.id) ?? null)); }).catch((e) => setErr(e.message)).finally(() => setLoaded(true));
+  useEffect(() => { setCur(null); setDetail(null); setBuilder(null); setLoaded(false); load(); if (tenant) api.agentHealth(tenant.id).then((h) => setHealth(Object.fromEntries(h.map((x) => [x.workflowId, x])))).catch(() => {}); }, [tenant?.id]);
   // "Fix with an agent" from Insights: put the request in the describe box, ready to build.
   useEffect(() => {
     if (!prefill) return;
-    setSection('automations'); setCur(null); setRequest(prefill);
+    setSection('automations'); setCur(null); setBuilder({ first: prefill });
     onPrefillUsed?.();
-    setTimeout(() => document.getElementById('describe-agent')?.focus(), 50);
   }, [prefill]);
   // A draft built from Home opens straight in the editor.
   useEffect(() => {
@@ -108,7 +109,7 @@ export function WorkflowsPage({ tenant, goConnections, incoming, onIncomingOpene
   if (cur) {
     return (
       <WorkflowEditor
-        key={cur.key} tenantId={tenant.id} id={cur.id} initialName={cur.name} initialGraph={cur.graph} aiDraft={cur.ai} initialLive={!!cur.live}
+        key={cur.key} tenantId={tenant.id} id={cur.id} initialName={cur.name} initialGraph={cur.graph} aiDraft={cur.ai} initialLive={!!cur.live} initialRealtime={!!cur.realtime}
         onBack={() => { setCur(null); load(); }}
         onSaved={(id) => { setCur((c) => c && { ...c, id }); load(); }}
         onDeleted={() => { setCur(null); load(); }}
@@ -116,84 +117,104 @@ export function WorkflowsPage({ tenant, goConnections, incoming, onIncomingOpene
     );
   }
 
-  const build = async () => {
-    if (!tenant || request.trim().length < 5) return;
-    setBuilding(true); setErr('');
-    try {
-      const d = await api.draftWorkflow(tenant.id, request.trim());
-      setCur({ key: crypto.randomUUID(), id: null, name: d.name, graph: d.workflow, ai: d });
-      setRequest('');
-    } catch (e) { setErr((e as Error).message); }
-    finally { setBuilding(false); }
-  };
+  if (detail) {
+    return (
+      <div style={{ overflow: 'auto', height: '100%' }}>
+        <AgentPage tenant={tenant} row={detail} onBack={() => { setDetail(null); load(); }}
+          onEdit={() => setCur({ key: detail.id, id: detail.id, name: detail.name, graph: detail.graph, live: !!detail.live, realtime: !!detail.realtime })}
+          onChanged={(w) => { setDetail((d) => d && { ...d, ...w }); setRows((r) => r.map((x) => (x.id === detail.id ? { ...x, ...w } : x))); }}
+          onDeleted={() => { setDetail(null); load(); }} />
+      </div>
+    );
+  }
+
+  if (builder) {
+    return (
+      <AgentBuilder tenantId={tenant.id} first={builder.first} onBack={() => setBuilder(null)}
+        onOpen={(d) => { setBuilder(null); setCur({ key: crypto.randomUUID(), id: null, name: d.name, graph: d.workflow, ai: d }); }} />
+    );
+  }
+
+  const start = () => { setBuilder({ first: request.trim() || undefined }); setRequest(''); };
 
   const create = (name: string, graph: Workflow) => { setCur({ key: crypto.randomUUID(), id: null, name, graph }); setPicker(false); };
 
+  const counts = { all: rows.length, on: rows.filter((w) => w.live && !w.watch_error).length, off: rows.filter((w) => !w.live).length, problem: rows.filter((w) => w.live && w.watch_error).length };
+  const shown = rows.filter((w) => filter === 'all' || (filter === 'on' ? w.live && !w.watch_error : filter === 'off' ? !w.live : w.live && !!w.watch_error));
+  const open = (w: WorkflowRow) => setDetail(w);
+  const columns: Column<WorkflowRow>[] = [
+    { key: 'name', header: 'Agent', render: (w) => {
+      const types = [...new Set(w.graph.nodes.map((n) => n.type))].filter((t) => !t.startsWith('trigger.') && t !== 'util.output').slice(0, 4);
+      return (
+        <div className="agent-cell">
+          <div className="icon-strip">{types.map((t) => <NodeTile key={t} type={t} />)}</div>
+          <div className="cell-main"><b>{w.name}</b><span className="cell-sub">{triggerLabel(w.graph)}</span></div>
+        </div>
+      );
+    } },
+    { key: 'status', header: 'Status', render: (w) => w.live
+      ? (w.watch_error ? <Status tone="bad" title={w.watch_error}>Problem</Status> : <Status tone="ok">On</Status>)
+      : <Status tone="neutral">Off</Status> },
+    { key: 'health', header: 'Last 30 days', hideSm: true, render: (w) => {
+      const h = health[w.id];
+      if (!h || !h.runs) return <span className="muted">No runs</span>;
+      const rate = Math.round((h.succeeded / Math.max(h.runs - h.waiting, 1)) * 100);
+      return (
+        <div className="cell-main">
+          <span>{h.runs} run{h.runs === 1 ? '' : 's'} · <span style={{ color: rate >= 90 ? 'var(--ok)' : rate >= 70 ? 'var(--warn)' : 'var(--danger)' }}>{rate}% ok</span></span>
+          {h.suggestion && <span className="cell-sub">{h.suggestion.kind === 'drop_approval' ? 'Ready to run on its own' : h.suggestion.title}</span>}
+        </div>
+      );
+    } },
+    { key: 'steps', header: 'Steps', align: 'right', hideSm: true, render: (w) => <span className="muted">{w.graph.nodes.filter((n) => n.type !== 'util.output').length}</span> },
+    { key: 'updated', header: 'Updated', align: 'right', render: (w) => <span className="muted">{ago(w.updated_at)}</span> },
+  ];
+
   return (
     <div style={{ overflow: 'auto', height: '100%' }}>
-      <div className="page">
-        <div className="page-head">
-          <div>
-            <h2>Agents</h2>
-            <p>Agents for <b>{tenant.sf_username ?? tenant.sf_org_id}</b>. Automations run by themselves in Salesforce; assistants answer questions when you ask.</p>
+      <div className="pg">
+        <PageHeader
+          title="Agents"
+          description={<>Automations run by themselves in <b style={{ color: 'var(--text)', fontWeight: 500 }}>{tenant.sf_username ?? tenant.sf_org_id}</b>; assistants answer questions when you ask.</>}
+          actions={<>
+            <button onClick={() => setPicker(true)}><LayoutTemplate size={15} /> Templates</button>
+            <button className="primary cta" onClick={() => setBuilder({})}><Plus size={15} /> New agent</button>
+          </>}
+        >
+          <div className="ptabs" role="tablist">
+            <button role="tab" aria-selected={section === 'automations'} className={section === 'automations' ? 'on' : ''} onClick={() => setSection('automations')}>Automations</button>
+            <button role="tab" aria-selected={section === 'assistants'} className={section === 'assistants' ? 'on' : ''} onClick={() => setSection('assistants')}>Assistants</button>
           </div>
-          <button className="primary" onClick={() => setPicker(true)}><Plus size={15} /> From a template</button>
-        </div>
-        <div className="seg" style={{ marginBottom: 16 }}>
-          <button className={section === 'automations' ? 'on' : ''} onClick={() => setSection('automations')}>Automations</button>
-          <button className={section === 'assistants' ? 'on' : ''} onClick={() => setSection('assistants')}>Assistants</button>
-        </div>
+        </PageHeader>
+
         {section === 'assistants' && <AgentsPage tenant={tenant} goConnections={goConnections} />}
         {section === 'automations' && <>
-        <div className="card builder-hero">
-          <div className="row"><Sparkles size={18} color="var(--accent)" /><h3>Describe what you want</h3></div>
-          <textarea
-            id="describe-agent" rows={3} value={request} onChange={(e) => setRequest(e.target.value)} disabled={building}
-            placeholder="e.g. When a new case comes in, sort it by type and create a follow-up task for the owner. Skip closed cases."
-            onKeyDown={(e) => { if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') void build(); }}
-          />
-          <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
-            {EXAMPLES.map((x) => <button key={x} className="chip example" onClick={() => setRequest(x)} disabled={building}>{x.length > 60 ? `${x.slice(0, 58)}…` : x}</button>)}
-          </div>
-          <div className="row">
-            <button className="primary" onClick={build} disabled={building || request.trim().length < 5}>
-              {building ? <><Loader2 size={15} className="spin" /> Reading your org and building…</> : <><Sparkles size={15} /> Build it</>}
-            </button>
-            <span className="muted small">Uses your org's real objects and fields. You review it before anything runs.</span>
-          </div>
-        </div>
-        {err && <div className="card warn">{err}</div>}
-
-        {loaded && rows.length === 0 ? (
-          <div className="empty">
-            <span className="empty-icon"><LayoutTemplate size={20} /></span>
-            <b style={{ color: 'var(--text)' }}>No agents yet</b>
-            <span>Describe one above, or start from a template like case triage or lead scoring.</span>
-            <button className="primary" onClick={() => setPicker(true)}><Plus size={15} /> From a template</button>
-          </div>
-        ) : (
-          <div className="wf-grid">
-            {rows.map((w) => {
-              const types = [...new Set(w.graph.nodes.map((n) => n.type))];
-              return (
-                <button key={w.id} className="wf-card" onClick={() => setCur({ key: w.id, id: w.id, name: w.name, graph: w.graph, live: !!w.live })}>
-                  <div className="icon-strip">
-                    {types.slice(0, 5).map((t) => <NodeTile key={t} type={t} />)}
-                    {types.length > 5 && <span className="badge">+{types.length - 5}</span>}
-                  </div>
-                  <div className="wf-card-title">{w.name}</div>
-                  <div className="wf-card-meta">
-                    <span className="badge accent">{triggerLabel(w.graph)}</span>
-                    {w.live && !w.watch_error && <span className="badge ok">● On</span>}
-                    {w.live && w.watch_error && <span className="badge err" title={w.watch_error}>● Problem</span>}
-                    <span className="badge">{w.graph.nodes.length} blocks</span>
-                    <span className="muted small" style={{ marginLeft: 'auto' }}>{ago(w.updated_at)}</span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
+          {err && <div className="card warn">{err}</div>}
+          {loaded && rows.length === 0 ? (
+            <form className="start-panel builder-hero" onSubmit={(e) => { e.preventDefault(); start(); }}>
+              <Ribbon className="card-ribbon" strands={180} angle={0.55} width={0.55} />
+              <div className="start-copy">
+                <h2>Build your first agent</h2>
+                <p>Describe what it should do. I'll ask a quick question if something's missing, use your org's real fields, Flows and Apex, and nothing runs until you approve it.</p>
+              </div>
+              <div className="agent-start">
+                <input id="describe-agent" value={request} onChange={(e) => setRequest(e.target.value)} placeholder="e.g. Sort new cases by type and create a follow-up task for the owner" />
+                <button type="submit" className="primary cta">Start</button>
+              </div>
+              <button type="button" className="link-btn" onClick={() => setPicker(true)}>Or start from a template</button>
+            </form>
+          ) : (
+            <>
+              <FilterTabs value={filter} onChange={setFilter} options={[
+                { id: 'all', label: 'All', count: counts.all }, { id: 'on', label: 'On', count: counts.on },
+                { id: 'off', label: 'Off', count: counts.off }, ...(counts.problem ? [{ id: 'problem' as const, label: 'Problems', count: counts.problem }] : []),
+              ]} />
+              <Panel flush>
+                {!loaded ? <SkeletonRows rows={4} cols={4} /> : <Table columns={columns} rows={shown} rowKey={(w) => w.id} onRowClick={open}
+                  empty={<Empty title="No agents match this filter" />} />}
+              </Panel>
+            </>
+          )}
         </>}
       </div>
       {picker && <TemplatePicker onPick={create} onClose={() => setPicker(false)} />}

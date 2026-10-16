@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowRight, LayoutDashboard, Loader2, Maximize2, Plus, Sparkles, Table2, Trash2, X } from 'lucide-react';
+import { ArrowLeft, LayoutDashboard, Loader2, MoreVertical, Plus, Sparkles, Trash2, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api, type ChartKind, type DashRange, type DashSummary, type Tenant, type TileData, type TileSpec } from '../api';
 import { BarChart } from '../components/viz/Charts';
@@ -72,7 +72,11 @@ export function DashboardsPage({ tenant }: { tenant: Tenant }) {
   const t = tenant.id;
 
   const refreshList = () => api.dashboards(t).then(setList).catch((e) => setErr(e.message));
-  useEffect(() => { void refreshList(); setOpen(null); }, [t]);
+  useEffect(() => {
+    void refreshList(); setOpen(null);
+    const id = new URLSearchParams(location.search).get('dash'); // ?dash= deep link
+    if (id) void openSaved(id);
+  }, [t]);
 
   const guard = async (label: string, fn: () => Promise<void>) => {
     setBusy(label); setErr('');
@@ -150,15 +154,14 @@ export function DashboardsPage({ tenant }: { tenant: Tenant }) {
       <div className="dash">
         <div className="card describe">
           <div className="row"><Sparkles size={18} color="var(--accent)" /><h3>Describe a dashboard</h3></div>
-          <p className="muted small">Say what you want to see. We write the queries against your org, check every one, and suggest the right chart. You choose the final chart for each tile.</p>
           <textarea rows={3} value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="e.g. Pipeline by stage and owner, won revenue per month this year, and my 10 biggest open deals" />
           <div className="chips">
             {EXAMPLES.map((x) => <button key={x} className="chip example" onClick={() => setPrompt(x)}>{x.split(':')[0]}</button>)}
           </div>
           <div className="row">
-            <span className="muted small">Date range</span>{rangeSelect}
-            <button className="primary" style={{ marginLeft: 'auto' }} disabled={prompt.trim().length < 5 || !!busy} onClick={() => void draft(prompt.trim())}>
-              {busy ? <Loader2 size={15} className="spin" /> : <Sparkles size={15} />} Build dashboard
+            <label className="row muted small" style={{ gap: 8 }}>Date range {rangeSelect}</label>
+            <button className="primary cta" style={{ marginLeft: 'auto' }} disabled={prompt.trim().length < 5 || !!busy} onClick={() => void draft(prompt.trim())}>
+              {busy ? <Loader2 size={15} className="spin" /> : null} Build dashboard
             </button>
           </div>
           {busy && <div className="muted small row"><Loader2 size={14} className="spin" /> {busy}</div>}
@@ -262,27 +265,44 @@ function TileCard({ tile, onChart, onSize, onMove, onRemove, onDrill, onFocus }:
   onRemove: () => void; onDrill?: (label: string) => void; onFocus: () => void;
 }) {
   const [asTable, setAsTable] = useState(false);
+  const [menu, setMenu] = useState(false);
   const options = chartsFor(tile);
   const rec = recommend(tile);
+  const item = (label: string, fn: () => void, danger = false) => (
+    <button role="menuitem" className={'menu-item' + (danger ? ' danger' : '')} onClick={() => { setMenu(false); fn(); }}>{label}</button>
+  );
   return (
     <div className={`card dash-tile ${tile.size}`}>
       <div className="dash-tile-head">
         <div className="dash-tile-title"><h3 title={tile.question}>{tile.title}</h3>
-          {onDrill && tile.chart !== 'kpi' && tile.chart !== 'table' && <span className="muted small">Click a bar to see the records</span>}
+          {onDrill && tile.chart !== 'kpi' && tile.chart !== 'table' && !asTable && <span className="muted small">Click a bar for records</span>}
         </div>
         <div className="dash-tile-tools">
           <select value={tile.chart} onChange={(e) => onChart(e.target.value as ChartKind)} aria-label="Chart type" title="Chart type">
-            {options.map((c) => <option key={c} value={c}>{CHART_LABEL[c]}{c === rec ? ' ★ suggested' : ''}</option>)}
+            {options.map((c) => <option key={c} value={c}>{CHART_LABEL[c]}{c === rec ? ' ★' : ''}</option>)}
             {!options.includes(tile.chart) && <option value={tile.chart}>{CHART_LABEL[tile.chart]}</option>}
           </select>
-          <select value={tile.size} onChange={(e) => onSize(e.target.value as TileData['size'])} aria-label="Width" title="Width">
-            <option value="third">Small</option><option value="half">Medium</option><option value="full">Wide</option>
-          </select>
-          <button className="ghost icon sm" onClick={() => setAsTable((x) => !x)} title={asTable ? 'Show chart' : 'Show table'} aria-pressed={asTable}><Table2 size={14} /></button>
-          <button className="ghost icon sm" onClick={onFocus} title="Expand"><Maximize2 size={14} /></button>
-          <button className="ghost icon sm" onClick={() => onMove(-1)} title="Move earlier"><ArrowLeft size={14} /></button>
-          <button className="ghost icon sm" onClick={() => onMove(1)} title="Move later"><ArrowRight size={14} /></button>
-          <button className="ghost icon sm" onClick={onRemove} title="Remove tile"><Trash2 size={14} /></button>
+          <div className="menu-wrap">
+            <button className="ghost icon sm" onClick={() => setMenu((m) => !m)} aria-haspopup="menu" aria-expanded={menu} title="More"><MoreVertical size={16} /></button>
+            {menu && (
+              <>
+                <div className="menu-scrim" onClick={() => setMenu(false)} />
+                <div className="menu" role="menu">
+                  {item(asTable ? 'Show chart' : 'Show as table', () => setAsTable((x) => !x))}
+                  {item('Expand', onFocus)}
+                  <div className="menu-sep" />
+                  <div className="menu-label">Width</div>
+                  <div className="menu-seg">
+                    {(['third', 'half', 'full'] as const).map((z) => <button key={z} className={tile.size === z ? 'on' : ''} onClick={() => { setMenu(false); onSize(z); }}>{z === 'third' ? 'S' : z === 'half' ? 'M' : 'L'}</button>)}
+                  </div>
+                  <div className="menu-sep" />
+                  {item('Move earlier', () => onMove(-1))}
+                  {item('Move later', () => onMove(1))}
+                  {item('Remove tile', onRemove, true)}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
       {tile.error ? <div className="card warn small">This tile couldn’t load: {tile.error}</div>
@@ -292,8 +312,13 @@ function TileCard({ tile, onChart, onSize, onMove, onRemove, onDrill, onFocus }:
   );
 }
 
-const cellFormat = (tile: TileData) => (c: string, v: unknown) =>
-  c === tile.value_key && typeof v === 'number' ? fmt(v, tile.format, undefined, false) : v === undefined || v === null ? '' : String(v);
+const MONEY = /amount|revenue|price|value|pipeline|arr|mrr|total/i;
+const cellFormat = (tile: TileData) => (c: string, v: unknown) => {
+  if (v === undefined || v === null) return '';
+  if (typeof v !== 'number') return String(v);
+  if (c === tile.value_key) return fmt(v, tile.format, undefined, false);
+  return fmt(v, tile.format === 'currency' && MONEY.test(c) ? 'currency' : 'number', undefined, false);
+};
 
 export function TileBody({ tile, onDrill }: { tile: TileData; onDrill?: (label: string) => void }) {
   const series = useMemo(() => tile.rows.map((r) => ({ label: labelOf(r, tile.label_key), value: num(r[tile.value_key]) })), [tile]);

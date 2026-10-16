@@ -1,6 +1,7 @@
-import { BarChart3, Bot, History, House, Inbox, LogOut, Moon, Plug, Settings as SettingsIcon, Sparkles, Sun } from 'lucide-react';
+import { BarChart3, Bot, Check, ChevronsUpDown, History, House, Inbox, LayoutDashboard, LogOut, Moon, Plus, Search, Settings as SettingsIcon, Sun } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
-import { api, type Draft, type Me, type Tenant } from './api';
+import { api, type Draft, type Me, type Tenant, type WorkflowRow } from './api';
+import { CommandPalette, Menu, Toaster, type Command } from './components/ui';
 import { ApprovalsPage } from './pages/Approvals';
 import { HomePage } from './pages/Home';
 import { InsightsPage } from './pages/Insights';
@@ -9,20 +10,27 @@ import { AuthPage } from './pages/Auth';
 import { RunsPage } from './pages/Runs';
 import { WorkflowsPage } from './pages/Workflows';
 
-type Tab = 'home' | 'insights' | 'agents' | 'approvals' | 'activity' | 'settings';
+type Tab = 'home' | 'insights' | 'dashboards' | 'agents' | 'approvals' | 'activity' | 'settings';
 
-const NAV: { key: Tab; label: string; icon: ReactNode }[] = [
-  { key: 'home', label: 'Home', icon: <House size={18} /> },
-  { key: 'insights', label: 'Insights', icon: <BarChart3 size={18} /> },
-  { key: 'agents', label: 'Agents', icon: <Bot size={18} /> },
-  { key: 'approvals', label: 'Approvals', icon: <Inbox size={18} /> },
-  { key: 'activity', label: 'Activity', icon: <History size={18} /> },
-  { key: 'settings', label: 'Settings', icon: <SettingsIcon size={18} /> },
+const NAV: { group?: string; items: { key: Tab; label: string; icon: ReactNode }[] }[] = [
+  { items: [
+    { key: 'home', label: 'Home', icon: <House size={17} /> },
+    { key: 'approvals', label: 'Approvals', icon: <Inbox size={17} /> },
+  ] },
+  { group: 'Automate', items: [
+    { key: 'agents', label: 'Agents', icon: <Bot size={17} /> },
+    { key: 'activity', label: 'Activity', icon: <History size={17} /> },
+  ] },
+  { group: 'Analyze', items: [
+    { key: 'insights', label: 'Insights', icon: <BarChart3 size={17} /> },
+    { key: 'dashboards', label: 'Dashboards', icon: <LayoutDashboard size={17} /> },
+  ] },
 ];
+const LABEL: Record<Tab, string> = { home: 'Home', approvals: 'Approvals', agents: 'Agents', activity: 'Activity', insights: 'Insights', dashboards: 'Dashboards', settings: 'Settings' };
 
 function useTheme() {
   const initial = (): 'light' | 'dark' => {
-    const saved = (() => { try { return localStorage.getItem('theme'); } catch { return null; } })();
+    const saved = new URLSearchParams(location.search).get('theme') ?? (() => { try { return localStorage.getItem('theme'); } catch { return null; } })();
     if (saved === 'light' || saved === 'dark') return saved;
     return matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   };
@@ -38,13 +46,15 @@ const initials = (s: string) => s.split(/[\s@.]+/).filter(Boolean).slice(0, 2).m
 
 export function App() {
   const [me, setMe] = useState<Me | null | undefined>(undefined); // undefined = checking
-  const [tab, setTab] = useState<Tab>('home');
+  const [tab, setTab] = useState<Tab>(() => (new URLSearchParams(location.search).get('tab') as Tab | null) ?? 'home'); // ?tab= deep link
   const [incoming, setIncoming] = useState<Draft | null>(null);
   const [prefill, setPrefill] = useState<string | null>(null);
   const [waitingCount, setWaitingCount] = useState(0);
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [tenantId, setTenantId] = useState<string>(() => { try { return localStorage.getItem('tenantId') ?? ''; } catch { return ''; } });
   const [theme, toggleTheme] = useTheme();
+  const [cmdk, setCmdk] = useState(false);
+  const [agentList, setAgentList] = useState<WorkflowRow[]>([]);
 
   const reload = () =>
     api.tenants().then((t) => {
@@ -85,63 +95,110 @@ export function App() {
     return () => clearInterval(t);
   }, [tenantId]);
 
+  // ⌘K / Ctrl+K opens search; the agent list loads when it opens.
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setCmdk((o) => !o); } };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  }, []);
+  useEffect(() => { if (cmdk && tenantId) api.workflows(tenantId).then(setAgentList).catch(() => {}); }, [cmdk, tenantId]);
+
   if (me === undefined) return <div className="pad muted">Loading…</div>;
   if (me === null) return <AuthPage onDone={() => api.me().then(setMe)} />;
 
-  return (
-    <div className="shell">
-      <aside className="sidebar">
-        <div className="brand">
-          <span className="brand-mark"><Sparkles size={16} /></span>
-          <span><b>CRM</b>agents</span>
-        </div>
+  const logout = async () => { await api.logout(); setTenants([]); setTenantId(''); setMe(null); };
+  const newAgent = (request?: string) => { setPrefill(request?.trim() || ' '); setTab('agents'); };
+  const commands: Command[] = [
+    ...(Object.keys(LABEL) as Tab[]).map((t) => ({ id: `go-${t}`, label: LABEL[t], group: 'Pages', run: () => setTab(t) })),
+    { id: 'new-agent', label: 'New agent', hint: 'Build by chatting', group: 'Actions', run: () => newAgent() },
+    { id: 'theme', label: theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode', group: 'Actions', run: toggleTheme },
+    ...agentList.map((w) => ({ id: `a-${w.id}`, label: w.name, hint: w.live ? 'On' : 'Off', group: 'Agents', run: () => setTab('agents') })),
+  ];
+  const statusDot = tenant?.setup_status === 'ready' ? 'dot-ok' : tenant?.setup_status === 'error' ? 'dot-bad' : 'dot-warn';
 
-        {NAV.map((it) => (
-          <button key={it.key} className={'nav' + (tab === it.key ? ' active' : '')} onClick={() => setTab(it.key)}>
-            {it.icon}<span>{it.label}</span>
-            {it.key === 'approvals' && waitingCount > 0 && <span className="count">{waitingCount}</span>}
+  return (
+    <div className="app">
+      <aside className="side" aria-label="Main">
+        <Menu className="ws-menu" trigger={() => (
+          <button className="ws" title="Workspace">
+            <span className="ws-mark">{initials(me.accountName || me.email)}</span>
+            <span className="ws-name">{me.accountName || 'Workspace'}</span>
+            <ChevronsUpDown size={15} />
           </button>
+        )}>
+          {(close) => (
+            <>
+              <div className="mh"><b>{me.accountName}</b>{me.email}</div>
+              <div className="msep" />
+              <button className="mi" onClick={() => { close(); setTab('settings'); }}><SettingsIcon size={15} /> Settings</button>
+              <button className="mi" onClick={() => { close(); toggleTheme(); }}>{theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />} {theme === 'dark' ? 'Light mode' : 'Dark mode'}</button>
+              <div className="msep" />
+              <button className="mi danger" onClick={() => { close(); void logout(); }}><LogOut size={15} /> Log out</button>
+            </>
+          )}
+        </Menu>
+
+        {NAV.map((g, gi) => (
+          <div key={gi} style={{ display: 'contents' }}>
+            {g.group && <div className="side-group">{g.group}</div>}
+            {g.items.map((it) => (
+              <button key={it.key} className={'nav2' + (tab === it.key ? ' on' : '')} onClick={() => setTab(it.key)} aria-current={tab === it.key ? 'page' : undefined}>
+                {it.icon}<span>{it.label}</span>
+                {it.key === 'approvals' && waitingCount > 0 && <span className="count">{waitingCount}</span>}
+              </button>
+            ))}
+          </div>
         ))}
 
-        <div className="spacer" />
-
-        {tenants.length > 0 ? (
-          <div className="org-switch">
-            <div className="org-label">
-              Salesforce org
-              <span className={'dot ' + (tenant?.setup_status === 'ready' ? 'ok' : tenant?.setup_status === 'error' ? 'error' : 'waiting')} title={tenant?.setup_status} />
-            </div>
-            <select value={tenantId} onChange={(e) => setTenantId(e.target.value)}>
-              {tenants.map((t) => <option key={t.id} value={t.id}>{t.sf_username ?? t.sf_org_id}</option>)}
-            </select>
-          </div>
-        ) : (
-          <button className="nav" onClick={() => setTab('settings')}><Plug size={16} /><span>Connect Salesforce</span></button>
-        )}
-
-        <div className="user-row">
-          <span className="avatar">{initials(me.accountName || me.email)}</span>
-          <div className="who">
-            <b>{me.accountName}</b>
-            <span>{me.email}</span>
-          </div>
-          <button className="ghost icon" onClick={toggleTheme} title={theme === 'dark' ? 'Light mode' : 'Dark mode'}>
-            {theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />}
-          </button>
-          <button className="ghost icon" title="Log out" onClick={async () => { await api.logout(); setTenants([]); setTenantId(''); setMe(null); }}>
-            <LogOut size={15} />
-          </button>
+        <div className="side-foot">
+          <button className={'nav2' + (tab === 'settings' ? ' on' : '')} onClick={() => setTab('settings')}><SettingsIcon size={17} /><span>Settings</span></button>
         </div>
       </aside>
 
-      <main className={tab === 'agents' ? 'full' : ''}>
-        {tab === 'home' && <HomePage me={me} tenant={tenant} go={setTab} openDraft={(d) => { setIncoming(d); setTab('agents'); }} />}
-        {tab === 'insights' && <InsightsPage tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />}
-        {tab === 'agents' && <WorkflowsPage tenant={tenant} goConnections={() => setTab('settings')} incoming={incoming} onIncomingOpened={() => setIncoming(null)} prefill={prefill} onPrefillUsed={() => setPrefill(null)} />}
-        {tab === 'approvals' && <ApprovalsPage tenant={tenant} onChange={refreshWaiting} />}
-        {tab === 'activity' && <RunsPage tenant={tenant} />}
-        {tab === 'settings' && <SettingsHub tenants={tenants} onChange={reload} />}
-      </main>
+      <div className="app-main">
+        <header className="topbar">
+          <button className="search-btn" onClick={() => setCmdk(true)} aria-label="Search"><Search size={15} /><span>Search</span><kbd>⌘K</kbd></button>
+          <div className="top-right">
+            {tenants.length > 0 ? (
+              <Menu align="right" trigger={() => (
+                <button className="org-btn" title="Salesforce org">
+                  <i className={statusDot} /><span className="n">{tenant?.sf_username ?? tenant?.sf_org_id ?? 'Choose an org'}</span><ChevronsUpDown size={14} />
+                </button>
+              )}>
+                {(close) => (
+                  <>
+                    <div className="mh">Salesforce orgs</div>
+                    {tenants.map((t) => (
+                      <button key={t.id} className="mi" onClick={() => { setTenantId(t.id); close(); }}>
+                        <i className={t.setup_status === 'ready' ? 'dot-ok' : t.setup_status === 'error' ? 'dot-bad' : 'dot-warn'} />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.sf_username ?? t.sf_org_id}</span>
+                        {t.id === tenantId && <Check size={15} className="check" />}
+                      </button>
+                    ))}
+                    <div className="msep" />
+                    <button className="mi" onClick={() => { close(); setTab('settings'); }}><Plus size={15} /> Connect another org</button>
+                  </>
+                )}
+              </Menu>
+            ) : (
+              <button className="primary sm" onClick={() => setTab('settings')}>Connect Salesforce</button>
+            )}
+            <button className="ghost icon" onClick={toggleTheme} title={theme === 'dark' ? 'Light mode' : 'Dark mode'}>{theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}</button>
+          </div>
+        </header>
+
+        <main className={tab === 'agents' ? 'full' : ''}>
+          {tab === 'home' && <HomePage me={me} tenant={tenant} go={setTab} newAgent={newAgent} />}
+          {tab === 'insights' && <InsightsPage key="ins" fixedView="overview" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />}
+          {tab === 'dashboards' && <InsightsPage key="dash" fixedView="dashboards" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />}
+          {tab === 'agents' && <WorkflowsPage tenant={tenant} goConnections={() => setTab('settings')} incoming={incoming} onIncomingOpened={() => setIncoming(null)} prefill={prefill} onPrefillUsed={() => setPrefill(null)} />}
+          {tab === 'approvals' && <ApprovalsPage tenant={tenant} onChange={refreshWaiting} />}
+          {tab === 'activity' && <RunsPage tenant={tenant} goSettings={() => setTab('settings')} />}
+          {tab === 'settings' && <SettingsHub tenants={tenants} tenant={tenant} onChange={reload} />}
+        </main>
+      </div>
+      <CommandPalette open={cmdk} onClose={() => setCmdk(false)} commands={commands} />
+      <Toaster />
     </div>
   );
 }

@@ -5,6 +5,9 @@ import { safeSoql } from './ai.js';
 test('AI-written queries are read-only and size-capped', () => {
   assert.equal(safeSoql('SELECT Id FROM Case'), 'SELECT Id FROM Case LIMIT 200');
   assert.equal(safeSoql('SELECT Id FROM Case LIMIT 5000;'), 'SELECT Id FROM Case LIMIT 200');
+  assert.equal(safeSoql('SELECT SUM(Amount) amount FROM Opportunity WHERE IsClosed = false'), 'SELECT SUM(Amount) amount FROM Opportunity WHERE IsClosed = false');
+  assert.equal(safeSoql('SELECT StageName, COUNT(Id) c FROM Opportunity GROUP BY StageName'), 'SELECT StageName, COUNT(Id) c FROM Opportunity GROUP BY StageName LIMIT 200');
+  assert.equal(safeSoql('select count(Id) n from Case group by Status'), 'select count(Id) n from Case group by Status LIMIT 200');
   assert.equal(safeSoql('select Id from Case limit 10'), 'select Id from Case limit 10');
   assert.throws(() => safeSoql('DELETE FROM Case'), /Only SELECT/);
   assert.throws(() => safeSoql("SELECT Id FROM Case WHERE Id IN (SELECT Id FROM Case) update Case set x"), /read-only/);

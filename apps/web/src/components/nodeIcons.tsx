@@ -1,6 +1,6 @@
 import {
   Bot, Braces, CalendarClock, Cloud, Database, FileSearch, FilePlus2, FilePen, Flag, GitBranch, Globe, ListTodo,
-  MessageSquare, Repeat, ScanText, ShieldCheck, Tags, Zap, type LucideIcon,
+  MessageSquare, Repeat, ScanText, ShieldCheck, Tags, Workflow, Zap, type LucideIcon,
 } from 'lucide-react';
 import { CATEGORY_COLORS, NODE_DEF_BY_TYPE, type Category } from '@crmagents/shared';
 
@@ -16,6 +16,7 @@ export const NODE_ICONS: Record<string, LucideIcon> = {
   'sf.createRecord': FilePlus2,
   'sf.updateRecord': FilePen,
   'sf.createTask': ListTodo,
+  'sf.action': Workflow,
   'logic.branch': GitBranch,
   'logic.loop': Repeat,
   'logic.approval': ShieldCheck,

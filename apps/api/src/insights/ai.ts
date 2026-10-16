@@ -132,7 +132,9 @@ export function safeSoql(soql: string): string {
   if (!/^select\s/i.test(s)) throw new Error('Only SELECT queries are allowed');
   if (/\b(insert|update|delete|upsert|merge|undelete)\b\s/i.test(s.replace(/'[^']*'/g, "''"))) throw new Error('Only read-only queries are allowed');
   const m = /\blimit\s+(\d+)\s*$/i.exec(s);
-  if (!m) return `${s} LIMIT ${MAX_ROWS}`;
+  // A total without GROUP BY returns one row, and Salesforce rejects LIMIT on it.
+  const total = /^select\s+(count|sum|avg|min|max|count_distinct)\s*\(/i.test(s) && !/\bgroup\s+by\b/i.test(s);
+  if (!m) return total ? s : `${s} LIMIT ${MAX_ROWS}`;
   return Number(m[1]) > MAX_ROWS ? s.replace(/\blimit\s+\d+\s*$/i, `LIMIT ${MAX_ROWS}`) : s;
 }
 

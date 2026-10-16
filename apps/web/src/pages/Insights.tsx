@@ -4,6 +4,7 @@ import { api, type Answer, type Briefing, type Insights, type Kpi, type Tenant, 
 import { BarChart, ChartCard, DataTable, LineChart } from '../components/viz/Charts';
 import { fmt } from '../components/viz/format';
 import { DashboardsPage } from './Dashboards';
+import { PageHeader } from '../components/ui';
 
 const PERIODS = [7, 30, 90];
 const QUESTIONS = [
@@ -17,13 +18,13 @@ const QUESTIONS = [
 function Delta({ k, currency, period }: { k: Kpi; currency: string; period: number }) {
   if (k.previous === undefined) return k.hint ? <span className="kpi-hint">{k.hint}</span> : null;
   const diff = k.value - k.previous;
-  if (Math.abs(diff) < 1e-9) return <span className="kpi-delta flat"><Minus size={14} /> Same as previous {period} days</span>;
+  if (Math.abs(diff) < 1e-9) return <span className="kpi-delta flat" title={`Same as the previous ${period} days`}><Minus size={14} /> No change</span>;
   const up = diff > 0;
   const good = (up && k.goodWhen === 'up') || (!up && k.goodWhen === 'down');
   const pct = k.previous ? `${Math.abs(Math.round((diff / Math.abs(k.previous)) * 100))}%` : fmt(Math.abs(diff), k.format, currency);
   return (
-    <span className={'kpi-delta ' + (good ? 'good' : 'bad')}>
-      {up ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />} {up ? 'Up' : 'Down'} {pct} vs previous {period} days
+    <span className={'kpi-delta ' + (good ? 'good' : 'bad')} title={`${up ? 'Up' : 'Down'} ${pct} vs the previous ${period} days`}>
+      {up ? <ArrowUpRight size={14} /> : <ArrowDownRight size={14} />} {up ? 'Up' : 'Down'} {pct}
     </span>
   );
 }
@@ -31,7 +32,7 @@ function Delta({ k, currency, period }: { k: Kpi; currency: string; period: numb
 function KpiTile({ k, currency, period }: { k: Kpi; currency: string; period: number }) {
   return (
     <div className="kpi">
-      <span className="kpi-label">{k.label}</span>
+      <span className="kpi-label" title={k.label}>{k.label.replace(/,?\s*last \d+ days$/i, '')}</span>
       <span className="kpi-value" title={fmt(k.value, k.format, currency, false)}>{fmt(k.value, k.format, currency)}</span>
       <Delta k={k} currency={currency} period={period} />
       {k.previous !== undefined && k.hint && <span className="kpi-hint">{k.hint}</span>}
@@ -54,7 +55,7 @@ function AnswerView({ a, currency }: { a: Answer; currency: string }) {
   return a.chart === 'line' ? <LineChart data={data} format={valueFormat} currency={currency} /> : <BarChart data={data} format={valueFormat} currency={currency} />;
 }
 
-export function InsightsPage({ tenant, goSettings, onAutomate }: { tenant?: Tenant; goSettings: () => void; onAutomate: (request: string) => void }) {
+export function InsightsPage({ tenant, goSettings, onAutomate, fixedView }: { tenant?: Tenant; goSettings: () => void; onAutomate: (request: string) => void; fixedView?: 'overview' | 'dashboards' }) {
   const [period, setPeriod] = useState(30);
   const [ins, setIns] = useState<Insights>();
   const [loading, setLoading] = useState(false);
@@ -66,7 +67,8 @@ export function InsightsPage({ tenant, goSettings, onAutomate }: { tenant?: Tena
   const [tiles, setTiles] = useState<Tile[]>([]);
   const [showSoql, setShowSoql] = useState(false);
   const [err, setErr] = useState('');
-  const [view, setView] = useState<'overview' | 'dashboards'>('overview');
+  const [view] = useState<'overview' | 'dashboards'>(() => fixedView ?? (new URLSearchParams(location.search).get('view') === 'dashboards' ? 'dashboards' : 'overview'));
+  const [sec, setSec] = useState(() => new URLSearchParams(location.search).get('sec') ?? '');
 
   const load = async (refresh = false) => {
     if (!tenant) return;
@@ -106,34 +108,29 @@ export function InsightsPage({ tenant, goSettings, onAutomate }: { tenant?: Tena
     return <div className="page"><div className="empty"><b style={{ color: 'var(--text)' }}>Connect Salesforce to see your business at a glance</b><button className="primary" onClick={goSettings}>Connect Salesforce</button></div></div>;
   }
   const cur = ins?.currency ?? 'USD';
+  const current = ins?.sections.find((x) => x.id === sec) ?? ins?.sections[0];
   const TONE = { good: <CheckCircle2 size={16} color="var(--ok)" />, watch: <Eye size={16} color="var(--warn)" />, bad: <AlertTriangle size={16} color="var(--danger)" /> };
   const TONE_LABEL = { good: 'Going well', watch: 'Keep an eye on', bad: 'Needs attention' };
 
+  const updated = ins ? new Date(ins.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
+
   return (
-    <div className="page insights">
-      <div className="page-head">
-        <div>
-          <h2>Insights</h2>
-          <p>Your business in one place: numbers straight from Salesforce, explained in plain English.</p>
-        </div>
-        <div className="row">
-          <div className="seg" role="tablist" aria-label="View">
-            <button className={view === 'overview' ? 'on' : ''} onClick={() => setView('overview')}>Overview</button>
-            <button className={view === 'dashboards' ? 'on' : ''} onClick={() => setView('dashboards')}>Dashboards</button>
-          </div>
-        </div>
-      </div>
+    <div className="pg insights">
+      <PageHeader
+        title={view === 'dashboards' ? 'Dashboards' : 'Insights'}
+        description={view === 'dashboards' ? 'Describe a dashboard in a sentence. Every query is checked against your org, and you choose the charts.' : 'Your Salesforce numbers, explained in plain English.'}
+        actions={view === 'overview' ? (
+          <>
+            <div className="seg" role="radiogroup" aria-label="Period">
+              {PERIODS.map((p) => <button key={p} role="radio" aria-checked={period === p} className={period === p ? 'on' : ''} onClick={() => setPeriod(p)}>{p} days</button>)}
+            </div>
+            <button onClick={() => void load(true)} disabled={loading} title={updated ? `Updated ${updated}` : undefined}>
+              {loading ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />} Refresh
+            </button>
+          </>
+        ) : undefined}
+      />
       {view === 'dashboards' ? <DashboardsPage tenant={tenant} /> : <>
-      <div className="row" style={{ justifyContent: 'flex-end', marginBottom: 12 }}>
-        <div className="row">
-          <div className="seg" role="tablist" aria-label="Period">
-            {PERIODS.map((p) => <button key={p} className={period === p ? 'on' : ''} onClick={() => setPeriod(p)}>{p} days</button>)}
-          </div>
-          <button className="ghost icon" onClick={() => void load(true)} disabled={loading} title="Refresh from Salesforce">
-            {loading ? <Loader2 size={15} className="spin" /> : <RefreshCw size={15} />}
-          </button>
-        </div>
-      </div>
       {err && <div className="card warn">{err}</div>}
 
       {/* AI briefing */}
@@ -166,7 +163,7 @@ export function InsightsPage({ tenant, goSettings, onAutomate }: { tenant?: Tena
                       <li key={i}>
                         <span className="brief-num">{i + 1}</span>
                         <span><b>{a.title}</b><span className="muted">{a.detail}</span></span>
-                        <button className="ghost sm" onClick={() => onAutomate(`${a.title}. ${a.detail}`)} title="Build an agent that does this"><Bot size={13} /> Automate</button>
+                        <button className="ghost sm" onClick={() => onAutomate(`${a.title}. ${a.detail}`)} title="Build an agent that does this" aria-label="Automate"><Bot size={13} /><span className="hide-sm"> Automate</span></button>
                       </li>
                     ))}
                   </ul>
@@ -230,38 +227,48 @@ export function InsightsPage({ tenant, goSettings, onAutomate }: { tenant?: Tena
         </>
       )}
 
-      {/* Standard business sections, computed by code */}
-      {ins?.sections.map((s) => (
-        <section key={s.id} className="ins-section">
-          <h3 className="section-title">{s.title}</h3>
-          <div className="kpi-grid">{s.kpis.map((k) => <KpiTile key={k.id} k={k} currency={cur} period={ins.periodDays} />)}</div>
-          {(s.charts.length > 0 || s.lists.length > 0) && (
-            <div className="chart-grid">
-              {s.charts.map((c) => (
-                <ChartCard key={c.id} title={c.title}
-                  table={<DataTable columns={[c.kind === 'line' ? 'Month' : 'Category', 'Value']} rows={c.data.map((d) => [d.label, fmt(d.value, c.format, cur, false)])} />}>
-                  {c.kind === 'line' ? <LineChart data={c.data} format={c.format} currency={cur} /> : <BarChart data={c.data} format={c.format} currency={cur} />}
-                </ChartCard>
-              ))}
-              {s.lists.map((l) => (
-                <div key={l.id} className={'card chart-card' + (l.id === 'risk_deals' ? ' wide' : '')}>
-                  <div className="row between">
-                    <h3>{l.title}</h3>
-                    {l.fix && l.rows.length > 0 && (
-                      <button className="sm" onClick={() => onAutomate(l.fix!)} title="Build an agent that handles this automatically"><Bot size={13} /> Fix with an agent</button>
-                    )}
-                  </div>
-                  {l.note && <span className="muted small">{l.note}</span>}
-                  {l.columns.length > 0 && (l.rows.length
-                    ? <DataTable columns={l.columns} rows={l.rows.map((r) => r.map((v, j) => (l.columns[j] === 'Why' ? <span className="why">{String(v)}</span> : l.columns[j] === 'Risk' ? <span className="badge err">{String(v)}</span> : cell(v, cur))))} />
-                    : <div className="viz-empty">Nothing here right now.</div>)}
-                </div>
-              ))}
-            </div>
+      {/* Standard business sections, computed by code: one at a time */}
+      {current && (
+        <section className="ins-section">
+          <div className="sec-tabs" role="tablist" aria-label="Section">
+            {ins!.sections.map((x) => (
+              <button key={x.id} role="tab" aria-selected={x.id === current.id} className={x.id === current.id ? 'on' : ''} onClick={() => setSec(x.id)}>{x.title.replace(/\s*\(.*\)$/, '')}</button>
+            ))}
+          </div>
+          {current.kpis.length > 0 && (
+            <div className="kpi-strip">{current.kpis.map((k) => <KpiTile key={k.id} k={k} currency={cur} period={ins!.periodDays} />)}</div>
           )}
+          {(() => {
+            const charts = current.charts.filter((c) => c.data.some((d) => d.value !== 0));
+            const lists = current.lists.filter((l) => l.rows.length > 0);
+            const empty = [...current.charts.filter((c) => !charts.includes(c)), ...current.lists.filter((l) => !lists.includes(l))].map((x) => x.title);
+            return (
+              <>
+                {(charts.length > 0 || lists.length > 0) && (
+                  <div className="chart-grid">
+                    {charts.map((c, i) => (
+                      <ChartCard key={c.id} title={c.title} wide={charts.length % 2 === 1 && i === charts.length - 1 && lists.every((l) => l.columns.length > 4)}
+                        table={<DataTable columns={[c.kind === 'line' ? 'Month' : 'Category', 'Value']} rows={c.data.map((d) => [d.label, fmt(d.value, c.format, cur, false)])} />}>
+                        {c.kind === 'line' ? <LineChart data={c.data} format={c.format} currency={cur} /> : <BarChart data={c.data} format={c.format} currency={cur} />}
+                      </ChartCard>
+                    ))}
+                    {lists.map((l) => (
+                      <div key={l.id} className={'card chart-card' + (l.columns.length > 4 || lists.length % 2 === 1 ? ' wide' : '')}>
+                        <div className="row between">
+                          <div><h3>{l.title}</h3>{l.note && <span className="muted small">{l.note}</span>}</div>
+                          {l.fix && <button className="sm" onClick={() => onAutomate(l.fix!)} title="Build an agent that handles this automatically"><Bot size={13} /> Fix with an agent</button>}
+                        </div>
+                        <DataTable columns={l.columns} rows={l.rows.map((r) => r.map((v, j) => (l.columns[j] === 'Why' ? <span className="why">{String(v)}</span> : l.columns[j] === 'Risk' ? <span className="badge err">{String(v)}</span> : cell(v, cur))))} />
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {empty.length > 0 && <p className="muted small ins-empty">Nothing in the last {ins!.periodDays} days for: {empty.join(' · ')}</p>}
+              </>
+            );
+          })()}
         </section>
-      ))}
-      {ins && <p className="muted small">Numbers from Salesforce, refreshed {new Date(ins.generatedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}. Updated at most every 15 minutes; use refresh for the latest.</p>}
+      )}
       </>}
     </div>
   );

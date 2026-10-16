@@ -12,6 +12,8 @@ export interface Env {
   llm: Llm;
   /** Preview mode: AI and reads run for real; writes, messages and approvals are only described. */
   dryRun?: boolean;
+  /** Workspace rules: throws before a write that breaks one. */
+  guard?: (ctx: { action: 'update' | 'create' | 'task' | 'email' | 'message' | 'action'; object: string; values?: Record<string, unknown>; recordId?: string }) => Promise<void>;
   /** Admin-confirmed examples for a block, most similar first (learning from corrections). */
   examples?: (nodeId: string, text: string) => Promise<Example[]>;
 }
@@ -148,6 +150,7 @@ export const EXECUTORS: Record<string, Executor> = {
     const sobject = cfg(node, 'sobject', scope);
     if (!sobject) throw new Error('Object is required');
     const fields = renderJson(node.config.fields, scope);
+    await env.guard?.({ action: 'create', object: sobject, values: fields });
     if (env.dryRun) return { output: { id: '(preview)', wouldDo: `Create ${sobject}`, fields } };
     const r = await env.sf.createRecord(sobject, fields);
     return { output: { id: r.id } };
@@ -158,6 +161,7 @@ export const EXECUTORS: Record<string, Executor> = {
     const id = cfg(node, 'id', scope);
     if (!sobject || !id) throw new Error('Object and Record Id are required');
     const fields = renderJson(node.config.fields, scope);
+    await env.guard?.({ action: 'update', object: sobject, values: fields, recordId: id });
     if (env.dryRun) return { output: { success: true, wouldDo: `Update ${sobject} ${id}`, fields } };
     await env.sf.updateRecord(sobject, id, fields);
     return { output: { success: true } };
@@ -176,8 +180,21 @@ export const EXECUTORS: Record<string, Executor> = {
     }
     const owner = cfg(node, 'ownerId', scope);
     if (owner) fields.OwnerId = owner;
+    await env.guard?.({ action: 'task', object: 'Task', values: fields });
     if (env.dryRun) return { output: { id: '(preview)', wouldDo: 'Create Task', fields } };
     return { output: { id: (await env.sf.createRecord('Task', fields)).id } };
+  },
+
+  async 'sf.action'(node, scope, env) {
+    const key = cfg(node, 'action', scope);
+    const m = /^(apex|flow|standard):([\w.]+)$/.exec(key);
+    if (!m) throw new Error('Action must look like apex:Name, flow:Name or standard:emailSimple');
+    const inputs = renderJson(node.config.inputs || '{}', scope);
+    await env.guard?.({ action: m[2] === 'emailSimple' ? 'email' : m[2] === 'chatterPost' ? 'message' : 'action', object: m[2], values: inputs, recordId: String(inputs.recordId ?? inputs.relatedRecordId ?? '') || undefined });
+    // Org actions can change data, send email or call out: in preview they are only described.
+    if (env.dryRun) return { output: { success: true, wouldDo: `Run ${m[1] === 'flow' ? 'Flow' : m[1] === 'apex' ? 'Apex action' : 'action'} ${m[2]}`, inputs } };
+    const out = await env.sf.runAction(m[1] as 'apex' | 'flow' | 'standard', m[2], inputs);
+    return { output: { success: true, ...out } };
   },
 
   async 'logic.branch'(node, scope) {
@@ -213,6 +230,7 @@ export const EXECUTORS: Record<string, Executor> = {
   },
 
   async 'notify.slack'(node, scope, env) {
+    await env.guard?.({ action: 'message', object: 'Slack', values: { text: render(node.config.text, scope) } });
     if (env.dryRun) return { output: { ok: true, wouldDo: 'Post to Slack', text: render(node.config.text, scope) } };
     const url = cfg(node, 'webhookUrl', scope);
     if (!/^https:\/\/hooks\.slack\.com\//.test(url)) throw new Error('Use a hooks.slack.com webhook URL');

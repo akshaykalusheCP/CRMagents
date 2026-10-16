@@ -5,11 +5,13 @@ import { dbResultCache } from '../agent/resultCache.js';
 import { config } from '../config.js';
 import { pool } from '../db.js';
 import { SalesforceClient } from '../salesforce/client.js';
+import { actionContext, describeOrgAction, listOrgActions, parseActionKey, rankActions } from '../salesforce/actions.js';
 import { detectObjects, fields as describeFields, objects as listObjects } from '../salesforce/schema.js';
 import { getSetting } from '../settings.js';
 import { spendGuard } from '../spend.js';
 import { accountOf } from '../tenants.js';
 import { compilePlan } from './compile.js';
+import { conflicts, orgAutomation, rulesContext } from '../smart/orgAutomation.js';
 import { PLANNER_SYSTEM, planSchema, type Plan } from './plan.js';
 
 export interface Draft {
@@ -53,6 +55,19 @@ export async function draftWorkflow(tenantId: string, request: string, current?:
   let primary = current?.trigger_object || mentioned[0] || '';
   const objectNames = [...new Set([primary, ...candidates].filter(Boolean))];
 
+  // ---- code: the org's own actions that match the request ($0, cached) ----
+  const orgActions = await listOrgActions(tenantId, sf).catch(() => []);
+  const inUse = new Set((current?.steps ?? []).map((s) => s.org_action).filter(Boolean) as string[]);
+  const picked = [
+    ...orgActions.filter((a) => inUse.has(`${a.kind}:${a.name}`)),
+    ...rankActions(request, orgActions).filter((a) => !inUse.has(`${a.kind}:${a.name}`)),
+  ].slice(0, 8);
+  const actionKeys = picked.map((a) => `${a.kind}:${a.name}`);
+  const actionsText = picked.length ? await actionContext(tenantId, sf, picked) : '';
+  // ---- code: automation already in the org (cached); its validation rules tell the planner what values must satisfy ----
+  const automation = await orgAutomation(tenantId, sf).catch(() => null);
+  const rulesText = automation ? rulesContext(automation, objectNames.slice(0, 3)) : '';
+
   let usage: Usage = emptyUsage();
   let plan: Plan | undefined;
   let errors: string[] = [];
@@ -65,15 +80,18 @@ export async function draftWorkflow(tenantId: string, request: string, current?:
           current ? `Current plan:\n${JSON.stringify(current)}\n\nChange requested: ${request}` : `Request: ${request}`,
           `Objects: ${objectNames.join(', ')}`,
           primary ? `Fields of ${primary} (name:type [picklist values]):\n${fieldContext(fs)}` : 'No object detected; pick trigger_object from Objects if the request is about records.',
-        ].join('\n\n')
+          actionsText ? `Org actions (key (label) inputs, * = required -> outputs):\n${actionsText}` : '',
+          rulesText ? `Validation rules your values must pass (object: error shown when broken):\n${rulesText}` : '',
+        ].filter(Boolean).join('\n\n')
       : [
           `Request: ${request}`,
           `Your previous plan:\n${JSON.stringify(plan)}`,
           `It has these problems; return a corrected plan:\n- ${errors.join('\n- ')}`,
           primary ? `Fields of ${primary}:\n${fieldContext(fs)}` : '',
-        ].join('\n\n');
+          actionsText ? `Org actions:\n${actionsText}` : '',
+        ].filter(Boolean).join('\n\n');
 
-    const r = await llm.complete({ system: PLANNER_SYSTEM, prompt: ask, schema: planSchema(objectNames, fs.map((f) => f.name)), model: config.builderModel });
+    const r = await llm.complete({ system: PLANNER_SYSTEM, prompt: ask, schema: planSchema(objectNames, fs.map((f) => f.name), actionKeys), model: config.builderModel });
     usage = addUsage(usage, r.usage);
     plan = JSON.parse(r.text) as Plan;
     if (plan.questions.length && !plan.steps.length) { errors = []; compiled = compilePlan(plan); break; }
@@ -109,7 +127,7 @@ export async function draftWorkflow(tenantId: string, request: string, current?:
     workflow: { ...c.workflow, meta: { request: current ? request : request, plan: p } },
     summary: c.summary,
     estimateUsd: c.estimateUsd,
-    warnings: c.warnings,
+    warnings: [...c.warnings, ...(automation ? conflicts(c.workflow, automation) : [])],
     errors,
     questions: p.questions,
     sample,
@@ -145,6 +163,19 @@ async function validateAgainstOrg(tenantId: string, sf: SalesforceClient, plan: 
         else if (d.createable === false) errors.push(`${s.object}.${f.field} cannot be set on create`);
       }
     }
+  }
+  // Org actions: they exist, input names are real, required inputs are filled.
+  for (const [i, s] of plan.steps.entries()) {
+    if (s.action !== 'run_action') continue;
+    const a = parseActionKey(s.org_action ?? '');
+    if (!a) continue; // compile already reported it
+    try {
+      const d = await describeOrgAction(tenantId, sf, a.kind, a.name);
+      const names = new Set(d.inputs.map((x) => x.name));
+      for (const f of s.fields) if (!names.has(f.field)) errors.push(`step ${i + 1}: ${s.org_action} has no input ${f.field}; inputs: ${[...names].join(', ') || 'none'}`);
+      const given = new Set(s.fields.filter((f) => f.value.trim()).map((f) => f.field));
+      for (const x of d.inputs) if (x.required && !given.has(x.name)) errors.push(`step ${i + 1}: ${s.org_action} needs input ${x.name} (${x.type})`);
+    } catch { errors.push(`step ${i + 1}: action ${s.org_action} was not found in the org`); }
   }
   // Run every query that has no {{references}} once, with LIMIT 1, to prove it is valid SOQL.
   for (const n of compiled.workflow.nodes.filter((n) => n.type === 'sf.query')) {

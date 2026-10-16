@@ -4,7 +4,7 @@ import type { Plan, PlanStep } from './plan.js';
 // Turns a Plan into a ready-to-run workflow entirely in code: blocks, wiring, {{references}}, approval before
 // writes, cheap models where they were shown to be safe, and a plain-English summary with a cost estimate.
 
-const WRITES = new Set(['create_task', 'update_record', 'create_record']);
+const WRITES = new Set(['create_task', 'update_record', 'create_record', 'run_action']);
 // Rough per-run cost of each AI action (USD), from typical prompt sizes at current prices.
 const COST: Record<string, number> = { classify: 0.0003, extract: 0.004, ai_write: 0.01, research: 0.03 };
 const CLASSIFY_MODEL = 'claude-haiku-5-5'; // matched Opus on real cases at ~2% of the cost (evals/model-eval.mts)
@@ -42,7 +42,7 @@ export function compilePlan(plan: Plan): CompileResult {
 
   let x = 0;
   const add = (type: string, config: Record<string, unknown>, label?: string, y = 120): WFNode => {
-    const prefix = { 'trigger.salesforce': 'trigger', 'trigger.manual': 'trigger', 'sf.getRecord': 'sf_get', 'logic.branch': 'branch', 'logic.approval': 'approval', 'util.output': 'output', 'ai.classify': 'ai_classify', 'ai.extract': 'ai_extract', 'ai.agent': 'ai_agent', 'sf.query': 'sf_query', 'sf.createTask': 'sf_task', 'sf.updateRecord': 'sf_update', 'sf.createRecord': 'sf_create', 'notify.slack': 'slack' }[type] ?? 'node';
+    const prefix = { 'trigger.salesforce': 'trigger', 'trigger.manual': 'trigger', 'sf.getRecord': 'sf_get', 'logic.branch': 'branch', 'logic.approval': 'approval', 'util.output': 'output', 'ai.classify': 'ai_classify', 'ai.extract': 'ai_extract', 'ai.agent': 'ai_agent', 'sf.query': 'sf_query', 'sf.createTask': 'sf_task', 'sf.updateRecord': 'sf_update', 'sf.createRecord': 'sf_create', 'notify.slack': 'slack', 'sf.action': 'sf_action' }[type] ?? 'node';
     const n: WFNode = { id: nextId(prefix), type, position: { x, y }, config, ...(label ? { label } : {}) };
     if (y === 120) x += 280;
     nodes.push(n);
@@ -230,6 +230,15 @@ export function compilePlan(plan: Plan): CompileResult {
         keys = new Set(['id']);
         result = result || `Created ${s.object} {{${node.id}.id}}`;
         break;
+      case 'run_action':
+        if (!/^(apex|flow|standard):[\w.]+$/.test(s.org_action ?? '')) errors.push(`step ${i + 1}: run_action needs org_action from the Org actions list`);
+        node = add('sf.action', {
+          action: s.org_action ?? '',
+          inputs: JSON.stringify(Object.fromEntries(s.fields.map((f) => [f.field, convert(f.value, i)]))),
+        }, actionLabel(s.org_action ?? ''));
+        keys = 'any';
+        result = result || `${actionLabel(s.org_action ?? '')}: done.`;
+        break;
       case 'notify_slack':
         node = add('notify.slack', { webhookUrl: '', text: convert(s.message, i) }, 'Slack');
         warnings.push('Paste your Slack webhook URL into the Slack block.');
@@ -288,6 +297,14 @@ export function compilePlan(plan: Plan): CompileResult {
   };
 }
 
+/** "flow:SvcCopilotTmpl__Close_Case" -> "Runs Flow: Close Case". */
+export function actionLabel(key: string): string {
+  const [kind, name = ''] = key.split(':');
+  const nice = name.replace(/^\w+?__/, '').replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2').trim();
+  if (kind === 'standard') return { emailSimple: 'Sends an email', chatterPost: 'Posts to Chatter', submit: 'Submits for approval' }[name] ?? `Runs ${nice}`;
+  return `Runs ${kind === 'flow' ? 'Flow' : 'Apex action'}: ${nice || 'action'}`;
+}
+
 const cut = (t: string, n = 70) => { const v = pretty(t); return v.length > n ? `${v.slice(0, n - 1)}…` : v; };
 const pretty = (t: string) => t.replace(/\{(?:record|trigger|item|step\d+)\.([\w.]+)\}/g, (_m, p: string) => `[${p.split('.').pop()}]`);
 
@@ -297,6 +314,7 @@ function changeText(s: PlanStep, plan: Plan, conv: (t: string) => string): strin
     case 'update_record': return `Update this ${plan.trigger_object}: ${s.fields.map((f) => `${f.field} = ${conv(f.value)}`).join(', ')}`;
     case 'create_task': return `Create Task "${conv(s.subject || 'Follow up')}"`;
     case 'create_record': return `Create ${s.object}: ${s.fields.map((f) => `${f.field} = ${conv(f.value)}`).join(', ')}`;
+    case 'run_action': return `${actionLabel(s.org_action ?? '')}${s.fields.length ? `: ${s.fields.map((f) => `${f.field} = ${conv(f.value)}`).join(', ')}` : ''}`;
     default: return s.action;
   }
 }
@@ -312,6 +330,7 @@ function describe(s: PlanStep, plan: Plan): string {
     case 'update_record': return `Updates the ${plan.trigger_object}: ${s.fields.map((f) => f.field).join(', ')}`;
     case 'create_record': return `Creates a ${s.object}${s.fields.length ? ` (${s.fields.map((f) => f.field).join(', ')})` : ''}`;
     case 'notify_slack': return 'Posts a Slack message';
+    case 'run_action': return `${actionLabel(s.org_action ?? '')} (your org's own automation)`;
     default: return s.action;
   }
 }

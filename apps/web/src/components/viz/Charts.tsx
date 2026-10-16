@@ -8,10 +8,10 @@ import { fmt } from './format';
 interface Datum { label: string; value: number }
 interface Props { data: Datum[]; format: VizFormat; currency?: string }
 
-export function ChartCard({ title, children, table, sub }: { title: string; children: ReactNode; table: ReactNode; sub?: ReactNode }) {
+export function ChartCard({ title, children, table, sub, wide }: { title: string; children: ReactNode; table: ReactNode; sub?: ReactNode; wide?: boolean }) {
   const [asTable, setAsTable] = useState(false);
   return (
-    <div className="card chart-card viz-root">
+    <div className={'card chart-card viz-root' + (wide ? ' wide' : '')}>
       <div className="row between">
         <div><h3>{title}</h3>{sub && <div className="muted small">{sub}</div>}</div>
         <button className="ghost sm" onClick={() => setAsTable((t) => !t)} aria-pressed={asTable}>{asTable ? 'Chart' : 'Table'}</button>

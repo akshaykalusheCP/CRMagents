@@ -1,65 +1,150 @@
-import { useEffect, useState } from 'react';
-import { api, type Run, type Tenant, type UsageSummary } from '../api';
+import { Loader2, RefreshCw, Wrench } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { api, type Diagnosis, type Run, type Tenant, type UsageSummary } from '../api';
+import { Drawer, Empty, Facts, FilterTabs, Meter, PageHeader, Panel, SkeletonRows, Status, Table, toast, type Column } from '../components/ui';
+import { runLabel, runTone } from './Home';
 
-export function RunsPage({ tenant }: { tenant?: Tenant }) {
+// Every run in the org, newest first. Click a run for its timeline, output and tool calls in a side panel.
+
+type F = 'all' | 'done' | 'error' | 'waiting';
+const money = (v: number) => (v > 0 && v < 0.01 ? `$${v.toFixed(4)}` : `$${v.toFixed(2)}`);
+const tokens = (r: Run) => r.input_tokens + r.cache_read_tokens + r.cache_write_tokens + r.output_tokens;
+const when = (iso: string) => new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+
+export function RunsPage({ tenant, goSettings, workflowId, embedded }: { tenant?: Tenant; goSettings?: () => void; workflowId?: string; embedded?: boolean }) {
   const [runs, setRuns] = useState<Run[]>([]);
+  const [loaded, setLoaded] = useState(false);
   const [err, setErr] = useState('');
   const [usage, setUsage] = useState<UsageSummary>();
+  const [filter, setFilter] = useState<F>('all');
+  const [openId, setOpenId] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const [diag, setDiag] = useState<{ runId: string; d?: Diagnosis; err?: string; loading?: boolean; applied?: boolean }>();
+
   const load = () => {
     api.usage().then(setUsage).catch(() => {});
-    return tenant && api.runs(tenant.id).then(setRuns).catch((e) => setErr(e.message));
+    if (tenant) api.runs(tenant.id).then((r) => { setRuns(workflowId ? r.filter((x) => x.workflow_id === workflowId) : r); setLoaded(true); }).catch((e) => setErr(e.message));
   };
   useEffect(() => { load(); }, [tenant?.id]);
-  if (!tenant) return <div className="page muted">Connect an org to see runs.</div>;
+  const shown = useMemo(() => runs.filter((r) => filter === 'all' || r.status === filter), [runs, filter]);
+  const count = (s: F) => runs.filter((r) => s === 'all' || r.status === s).length;
+  const open = runs.find((r) => r.id === openId);
+
+  if (!tenant) return <div className="pg"><PageHeader title="Activity" /><Panel><Empty title="No org connected" body="Connect a Salesforce org to see agent runs." /></Panel></div>;
 
   const decide = async (id: string, approve: boolean) => {
-    try { await api.decide(tenant.id, id, approve); } catch (e) { setErr((e as Error).message); }
-    load();
+    setBusy(true);
+    try { await api.decide(tenant.id, id, approve); toast(approve ? 'Approved' : 'Rejected', approve ? 'ok' : 'info'); load(); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   };
 
+  const diagnose = async (runId: string) => {
+    setDiag({ runId, loading: true });
+    try { setDiag({ runId, d: await api.diagnose(tenant.id, runId) }); } catch (e) { setDiag({ runId, err: (e as Error).message }); }
+  };
+  const applyFix = async (workflowId: string, fix: NonNullable<Diagnosis['fix']>) => {
+    setBusy(true);
+    try { await api.applyFix(tenant.id, workflowId, fix.nodeId, fix.changes); setDiag((d) => d && { ...d, applied: true }); toast('Fix applied to the agent'); }
+    catch (e) { setDiag((d) => d && { ...d, err: (e as Error).message }); }
+    finally { setBusy(false); }
+  };
+
+  const columns: Column<Run>[] = [
+    { key: 'agent', header: 'Agent', render: (r) => <div className="cell-main"><b>{r.agent_name ?? (r.workflow_id ? 'Deleted agent' : 'Assistant')}</b>{r.steps?.length ? <span className="cell-sub">{r.steps.length} steps</span> : null}</div> },
+    { key: 'status', header: 'Status', render: (r) => <Status tone={runTone(r.status)}>{runLabel(r.status)}</Status> },
+    { key: 'tokens', header: 'Tokens', align: 'right', hideSm: true, render: (r) => <span className="muted">{tokens(r) ? tokens(r).toLocaleString() : '—'}</span> },
+    { key: 'cost', header: 'AI cost', align: 'right', render: (r) => <span className="muted">{r.cost_usd ? money(Number(r.cost_usd)) : '—'}</span> },
+    { key: 'when', header: 'When', align: 'right', render: (r) => <span className="muted">{when(r.created_at)}</span> },
+  ];
+
   return (
-    <div className="page">
-      <div className="row between"><h2>Activity</h2><button onClick={load}>Refresh</button></div>
+    <div className={embedded ? 'smart-col' : 'pg'}>
+      {!embedded && <PageHeader title="Activity" description="Every agent and assistant run in this org, newest first."
+        actions={<button onClick={load}><RefreshCw size={15} /> Refresh</button>} />}
       {err && <div className="card warn">{err}</div>}
-      {usage && (
-        <div className="card">
-          <b>AI usage, last 24 hours (whole workspace)</b>
-          <div className="row" style={{ flexWrap: 'wrap', gap: 16 }}>
-            <span>${usage.costUsd.toFixed(3)}{usage.budgetUsd !== null ? ` of $${usage.budgetUsd.toFixed(2)} budget` : ' (no budget)'}</span>
-            <span className="muted">{usage.runs} runs</span>
-            <span className="muted">cache hit {usage.cacheHitRate === null ? '–' : `${Math.round(usage.cacheHitRate * 100)}%`}</span>
-            <span className="muted small">
-              tokens: {usage.tokens.input.toLocaleString()} input · {usage.tokens.cacheRead.toLocaleString()} cached · {usage.tokens.cacheWrite.toLocaleString()} cache-write · {usage.tokens.output.toLocaleString()} output
-            </span>
+
+      {usage && !embedded && (
+        <Panel flush title="Last 24 hours" action={<span className="muted small">Whole workspace</span>}>
+          <div className="ustrip">
+            <div><span className="metric-label">AI spend</span><span className="v">{money(usage.costUsd)}</span>
+              {usage.budgetUsd !== null ? <><Meter value={usage.costUsd} max={usage.budgetUsd} label="Budget used" /><span className="muted small">of {money(usage.budgetUsd)} daily budget</span></> : <span className="muted small">No daily budget set</span>}
+            </div>
+            <div><span className="metric-label">Runs</span><span className="v">{usage.runs}</span></div>
+            <div><span className="metric-label">Answers reused</span><span className="v">{usage.cacheHitRate === null ? '—' : `${Math.round(usage.cacheHitRate * 100)}%`}</span><span className="muted small">Cached input, no extra cost</span></div>
+            <div><span className="metric-label">Tokens</span><span className="v">{(usage.tokens.input + usage.tokens.cacheRead + usage.tokens.cacheWrite + usage.tokens.output).toLocaleString()}</span><span className="muted small">{usage.tokens.output.toLocaleString()} written by AI</span></div>
           </div>
-        </div>
+        </Panel>
       )}
-      {runs.map((r) => (
-        <details className="card" key={r.id} open={r.status === 'waiting'}>
-          <summary>
-            <span className={'badge ' + (r.status === 'done' ? 'ok' : r.status === 'error' ? 'warn' : '')}>{r.status}</span>{' '}
-            <b>{r.agent_name ?? 'deleted'}</b>{' '}
-            <span className="muted small">{new Date(r.created_at).toLocaleString()} · {(r.input_tokens + r.cache_read_tokens + r.cache_write_tokens + r.output_tokens).toLocaleString()} tokens{r.cache_read_tokens ? ` (${r.cache_read_tokens.toLocaleString()} cached)` : ''} · ${(r.cost_usd ?? 0).toFixed(4)}</span>
-          </summary>
-          {r.status === 'waiting' && (
-            <div className="row">
-              <span>Waiting for approval:</span>
-              <button className="primary" onClick={() => decide(r.id, true)}>Approve</button>
-              <button onClick={() => decide(r.id, false)}>Reject</button>
+
+      <FilterTabs value={filter} onChange={setFilter} options={[
+        { id: 'all', label: 'All', count: count('all') }, { id: 'done', label: 'Succeeded', count: count('done') },
+        { id: 'error', label: 'Failed', count: count('error') }, { id: 'waiting', label: 'Waiting', count: count('waiting') },
+      ]} />
+      <Panel flush>
+        {!loaded ? <SkeletonRows rows={6} cols={4} /> : <Table columns={columns} rows={shown} rowKey={(r) => r.id} onRowClick={(r) => setOpenId(r.id)} selected={openId}
+          empty={<Empty title={runs.length ? 'No runs match this filter' : 'No runs yet'} body={runs.length ? undefined : 'Runs show up here when an agent is tested or turned on.'} />} />}
+      </Panel>
+
+      <Drawer open={!!open} onClose={() => setOpenId(undefined)}
+        title={open?.agent_name ?? 'Run'}
+        sub={open && <><Status tone={runTone(open.status)}>{runLabel(open.status)}</Status><span>{when(open.created_at)}</span></>}
+        footer={open?.status === 'waiting' ? <>
+          <button onClick={() => void decide(open.id, false)} disabled={busy}>Reject</button>
+          <button className="primary" onClick={() => void decide(open.id, true)} disabled={busy}>Approve</button>
+        </> : undefined}>
+        {open && <>
+          <Facts items={[
+            ['AI cost', open.cost_usd ? money(Number(open.cost_usd)) : 'None'],
+            ['Tokens', tokens(open) ? tokens(open).toLocaleString() : 'None'],
+            ['Reused from cache', open.cache_read_tokens ? open.cache_read_tokens.toLocaleString() : 'None'],
+            ['Steps', String(open.steps?.length ?? 0)],
+          ]} />
+          {open.status === 'error' && (
+            <div className="dsec diag">
+              <h3>Why it failed</h3>
+              {diag?.runId !== open.id ? (
+                <button onClick={() => void diagnose(open.id)}><Wrench size={14} /> Explain and suggest a fix</button>
+              ) : diag.loading ? <span className="row muted small"><Loader2 size={14} className="spin" /> Reading the error…</span>
+                : diag.err ? <div className="err">{diag.err}</div>
+                : diag.d && (
+                  <div className="diag-box">
+                    <p>{diag.d.explanation}</p>
+                    {diag.d.fix ? (
+                      <div className="diag-fix">
+                        <b>Suggested fix · {diag.d.fix.label}</b>
+                        <span>{diag.d.fix.summary}</span>
+                        <ul>{Object.entries(diag.d.fix.changes).map(([k, v]) => <li key={k}><code>{k}</code> → {v}</li>)}</ul>
+                        {diag.applied ? <span className="status ok"><i />Applied. The next run uses it.</span>
+                          : <button className="primary sm" disabled={!open.workflow_id || busy} onClick={() => void applyFix(open.workflow_id!, diag.d!.fix!)}>Apply fix to the agent</button>}
+                      </div>
+                    ) : diag.d.action === 'reconnect' || diag.d.action === 'settings'
+                      ? <button className="sm" onClick={goSettings}>Open Settings</button>
+                      : <span className="muted small">No automatic fix: this needs a change in the data or the org.</span>}
+                    {diag.d.costUsd > 0 && <span className="muted small">{money(diag.d.costUsd)} AI</span>}
+                  </div>
+                )}
             </div>
           )}
-          {r.output && <pre className="out">{r.output}</pre>}
-          {r.steps?.length > 0 && (
-            <div className="small">
-              {r.steps.map((s, i) => (
-                <div key={i}><span className={'dot ' + s.status} /> {s.label}{s.iteration !== undefined ? ` #${s.iteration + 1}` : ''} <span className="muted">{s.ms}ms{s.error ? ' · ' + s.error : ''}</span></div>
-              ))}
+          {open.output && <div className="dsec"><h3>Result</h3><pre className="output">{open.output}</pre></div>}
+          {open.steps?.length > 0 && (
+            <div className="dsec"><h3>Steps</h3>
+              <ol className="tl2">
+                {open.steps.map((s, i) => (
+                  <li key={i}>
+                    <span className={'tdot ' + s.status} />
+                    <span className="tl-main"><span>{s.label}{s.iteration !== undefined ? ` · record ${s.iteration + 1}` : ''}{s.reused ? ' · reused' : ''}</span>{s.error && <span className="tl-err">{s.error}</span>}</span>
+                    <span className="tl-ms">{s.ms} ms</span>
+                  </li>
+                ))}
+              </ol>
             </div>
           )}
-          {r.trace?.length > 0 && <div className="small muted">Tool calls: {r.trace.map((t, i) => <div key={i}>{t.ok ? '✓' : '✗'} {t.tool} {t.error ?? ''}</div>)}</div>}
-        </details>
-      ))}
-      {runs.length === 0 && <p className="muted">No runs yet.</p>}
+          {open.trace?.length > 0 && (
+            <div className="dsec"><h3>Salesforce calls by the AI</h3>
+              <ol className="tl2">{open.trace.map((t, i) => <li key={i}><span className={'tdot ' + (t.ok ? 'ok' : 'error')} /><span className="tl-main"><span>{t.tool}</span>{t.error && <span className="tl-err">{t.error}</span>}</span><span /></li>)}</ol>
+            </div>
+          )}
+        </>}
+      </Drawer>
     </div>
   );
 }

@@ -2,7 +2,7 @@
 // so the model only spends tokens on understanding the request, not on wiring blocks together.
 
 export const OPERATORS = ['equals', 'not_equals', 'contains', 'greater_than', 'less_than', 'is_empty', 'not_empty'] as const;
-export const ACTIONS = ['classify', 'extract', 'ai_write', 'research', 'query', 'create_task', 'update_record', 'create_record', 'notify_slack'] as const;
+export const ACTIONS = ['classify', 'extract', 'ai_write', 'research', 'query', 'create_task', 'update_record', 'create_record', 'notify_slack', 'run_action'] as const;
 
 export type Action = (typeof ACTIONS)[number];
 
@@ -31,6 +31,8 @@ export interface PlanStep {
   only_if: { value: string; operator: (typeof OPERATORS)[number]; compare: string };
   /** query only: run all following steps once per found record ({item.Field} references a field of that record). */
   per_record: boolean;
+  /** run_action: which org action ("flow:Name", "apex:Name", "standard:emailSimple"); its inputs go in fields. */
+  org_action?: string;
 }
 
 export interface Plan {
@@ -48,7 +50,7 @@ export interface Plan {
 }
 
 /** JSON schema for structured output; enums keep the model to real objects and fields. */
-export function planSchema(objects: string[], fields: string[]): Record<string, unknown> {
+export function planSchema(objects: string[], fields: string[], actions: string[] = []): Record<string, unknown> {
   const fieldEnum = fields.length ? fields : ['Id'];
   const str = { type: 'string' };
   return {
@@ -75,7 +77,7 @@ export function planSchema(objects: string[], fields: string[]): Record<string, 
         items: {
           type: 'object',
           additionalProperties: false,
-          required: ['action', 'instruction', 'input_fields', 'categories', 'outputs', 'object', 'fields', 'subject', 'message', 'where', 'limit', 'only_if', 'per_record'],
+          required: ['action', 'instruction', 'input_fields', 'categories', 'outputs', 'object', 'fields', 'subject', 'message', 'where', 'limit', 'only_if', 'per_record', 'org_action'],
           properties: {
             action: { type: 'string', enum: [...ACTIONS] },
             instruction: str,
@@ -95,6 +97,7 @@ export function planSchema(objects: string[], fields: string[]): Record<string, 
             where: str,
             limit: { type: 'integer' },
             per_record: { type: 'boolean' },
+            org_action: { type: 'string', enum: [...actions, ''] },
             only_if: {
               type: 'object', additionalProperties: false, required: ['value', 'operator', 'compare'],
               properties: { value: str, operator: { type: 'string', enum: [...OPERATORS] }, compare: str },
@@ -116,6 +119,7 @@ Steps run in order. Actions:
 - ai_write: AI writes text (summary, reply, note) from data you reference. Output: text.
 - research: AI that looks up related Salesforce records itself. Most expensive; only when the data is not on the triggering record. Output: text.
 - create_task: Task on the triggering record (subject, message). update_record: set fields on the triggering record. create_record: new record (object, fields). notify_slack: message.
+- run_action: run one of the org's own automations listed under "Org actions" (org_action = its key; fields = its inputs as field=input name, value; fill every input marked *). Outputs: the action's listed outputs. Prefer an existing org action over rebuilding the same logic from steps.
 References inside text and values: {record.Field} = field of the triggering record, {stepN.key} = output of step N (1-based), {trigger.input} = free text passed in, {item.Field} = field of the current record inside a per_record query.
 Rules:
 - Use AI actions only where judgement or writing is needed; prefer query/create_task/update_record otherwise.

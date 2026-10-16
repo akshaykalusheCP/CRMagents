@@ -1,0 +1,182 @@
+/* ===== Brand themes (data-brand on <html>) =====
+   Shared by all three: Inter only, one accent, hairline borders, 6-10px radii, quiet chrome.
+   Tokens first, then the few component rules that differ from the base (Google-style) theme. */
+
+:root[data-brand] {
+  --font: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'JetBrains Mono', ui-monospace, monospace;
+  --radius: 10px; --radius-sm: 7px;
+}
+:root[data-brand] body { font-family: var(--font); font-size: 14px; letter-spacing: -0.006em; font-feature-settings: 'cv11', 'ss01'; -webkit-font-smoothing: antialiased; }
+:root[data-brand] h2 { font-size: 20px; font-weight: 600; letter-spacing: -0.015em; }
+:root[data-brand] h3 { font-weight: 600; letter-spacing: -0.01em; }
+:root[data-brand] .ins-head h2, :root[data-brand] .page-head h2 { font-weight: 600; }
+:root[data-brand] .kpi-value, :root[data-brand] .kpi.big .kpi-value { font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+:root[data-brand] .kpi-label, :root[data-brand] .brief-label, :root[data-brand] .ab-sec-title { font-weight: 500; }
+
+/* Buttons: rectangles with small radius, not pills */
+:root[data-brand] button, :root[data-brand] .button { height: 32px; padding: 0 12px; border-radius: var(--radius-sm); font-weight: 500; letter-spacing: -0.005em; color: var(--text); border: 1px solid var(--border); background: var(--surface); box-shadow: 0 1px 1px rgba(0,0,0,.03); }
+:root[data-brand] button:hover, :root[data-brand] .button:hover { background: var(--surface-2); border-color: var(--border-strong); }
+:root[data-brand] button.primary, :root[data-brand] .button.primary { background: var(--primary-bg); border-color: var(--primary-bg); color: var(--primary-fg); }
+:root[data-brand] button.primary:hover { background: var(--primary-hover); border-color: var(--primary-hover); box-shadow: none; }
+:root[data-brand] button.primary:disabled { opacity: .45; }
+:root[data-brand] button.ghost, :root[data-brand] button.icon { background: transparent; border-color: transparent; box-shadow: none; color: var(--muted); }
+:root[data-brand] button.ghost:hover, :root[data-brand] button.icon:hover { background: var(--surface-2); color: var(--text); }
+:root[data-brand] button.icon { width: 32px; border-radius: var(--radius-sm); }
+:root[data-brand] button.sm { height: 26px; padding: 0 9px; font-size: 13px; }
+:root[data-brand] .chip, :root[data-brand] .chip.example { border-radius: 999px; border: 1px solid var(--border); background: var(--surface); color: var(--text-2); font-family: var(--font); }
+:root[data-brand] .chip.example:hover { border-color: var(--border-strong); background: var(--surface-2); color: var(--text); }
+:root[data-brand] input:not([type=checkbox]), :root[data-brand] textarea, :root[data-brand] select { border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--surface); font-family: var(--font); }
+:root[data-brand] input:not([type=checkbox]):focus, :root[data-brand] textarea:focus, :root[data-brand] select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+:root[data-brand] .ask-box input, :root[data-brand] .agent-start input { border-radius: var(--radius); }
+:root[data-brand] .seg { border-radius: var(--radius-sm); padding: 2px; background: var(--surface-2); border: 1px solid var(--border); }
+:root[data-brand] .seg button { height: 26px; border-radius: 5px; border: none; background: transparent; box-shadow: none; color: var(--muted); }
+:root[data-brand] .seg button.on { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgba(0,0,0,.08), 0 0 0 1px var(--border); }
+
+/* Cards, badges, modals */
+:root[data-brand] .card, :root[data-brand] .kpi-strip, :root[data-brand] .ab-card, :root[data-brand] .empty { border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--card-shadow); }
+:root[data-brand] .badge { border-radius: 5px; font-weight: 500; font-size: 12px; }
+:root[data-brand] .modal { background: rgba(10,10,12,.45); }
+:root[data-brand] .modal-card { border-radius: 14px; border: 1px solid var(--border); }
+:root[data-brand] .sec-tabs button { border-bottom-width: 2px; font-weight: 500; }
+:root[data-brand] .sec-tabs button.on { color: var(--text); border-bottom-color: var(--text); }
+:root[data-brand] .brief-num { border-radius: 6px; background: var(--surface-2); color: var(--text-2); }
+:root[data-brand] .msg.me .bubble { background: var(--primary-bg); color: var(--primary-fg); }
+
+/* Sidebar: quiet, compact, active item lifted */
+:root[data-brand] .sidebar { background: var(--sidebar); border-right: 1px solid var(--border); padding: 12px 8px; }
+:root[data-brand] .brand { font-size: 15px; font-weight: 600; color: var(--text); padding: 6px 10px 16px; letter-spacing: -0.02em; }
+:root[data-brand] .brand b { font-weight: 600; }
+:root[data-brand] .brand-mark { width: 24px; height: 24px; border-radius: 7px; background: var(--primary-bg); color: var(--primary-fg); }
+:root[data-brand] .nav { height: 30px; border-radius: 6px; padding: 0 10px; gap: 10px; font-weight: 500; color: var(--text-2); }
+:root[data-brand] .nav:hover { background: var(--nav-hover); color: var(--text); }
+:root[data-brand] .nav.active { background: var(--nav-active); color: var(--text); box-shadow: var(--nav-active-shadow); }
+:root[data-brand] .nav.active svg { color: var(--accent); }
+:root[data-brand] .org-switch { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+:root[data-brand] .avatar { background: var(--primary-bg); color: var(--primary-fg); }
+:root[data-brand] .page-head { border-bottom: none; padding-bottom: 0; }
+:root[data-brand] main { background: var(--bg); }
+
+/* ---------- Crisp (Attio / Notion style): white, black primary, cobalt accent ---------- */
+:root[data-brand='crisp'] {
+  --bg: #ffffff; --surface: #ffffff; --surface-2: #f7f7f8; --surface-3: #efeff1; --sidebar: #fbfbfb; --canvas: #fafafa;
+  --border: #ebebee; --border-strong: #d8d8dd; --text: #18181b; --text-2: #3f3f46; --muted: #71717a;
+  --accent: #266df0; --accent-hover: #1f5fd8; --accent-soft: #eaf1fe; --accent-text: #1d5ad0;
+  --primary-bg: #18181b; --primary-hover: #2e2e33; --primary-fg: #ffffff;
+  --nav-hover: #f0f0f2; --nav-active: #ffffff; --nav-active-shadow: 0 1px 2px rgba(16,24,40,.06), 0 0 0 1px #e6e6ea;
+  --card-shadow: 0 1px 2px rgba(16,24,40,.04);
+  --ok: #16a34a; --ok-soft: #ecfdf3; --warn: #b45309; --warn-soft: #fffbeb; --danger: #dc2626; --danger-soft: #fef2f2;
+}
+:root[data-brand='crisp'][data-theme='dark'] {
+  --bg: #0e0e10; --surface: #141416; --surface-2: #1c1c1f; --surface-3: #26262a; --sidebar: #0e0e10; --canvas: #0b0b0c;
+  --border: #26262a; --border-strong: #34343a; --text: #ededef; --text-2: #c4c4cc; --muted: #8b8b94;
+  --accent: #4f8cf7; --accent-hover: #6b9ef8; --accent-soft: rgba(79,140,247,.15); --accent-text: #7aa8fa;
+  --primary-bg: #f4f4f5; --primary-hover: #dcdce0; --primary-fg: #18181b;
+  --nav-hover: #1a1a1d; --nav-active: #1f1f23; --nav-active-shadow: 0 0 0 1px #2a2a2f;
+  --card-shadow: none;
+  --ok: #4ade80; --ok-soft: rgba(74,222,128,.1); --warn: #fbbf24; --warn-soft: rgba(251,191,36,.1); --danger: #f87171; --danger-soft: rgba(248,113,113,.1);
+}
+
+/* ---------- Midnight (Linear style): near-black, indigo, compact ---------- */
+:root[data-brand='midnight'] {
+  --bg: #fcfcfd; --surface: #ffffff; --surface-2: #f4f4f6; --surface-3: #ececf0; --sidebar: #f7f7f9; --canvas: #f7f7f9;
+  --border: #e6e6eb; --border-strong: #d3d3da; --text: #1b1b1f; --text-2: #3c3c44; --muted: #6b6f76;
+  --accent: #5e6ad2; --accent-hover: #4f5bc4; --accent-soft: #eef0fb; --accent-text: #4c57c4;
+  --primary-bg: #5e6ad2; --primary-hover: #4f5bc4; --primary-fg: #ffffff;
+  --nav-hover: #ececf0; --nav-active: #e8e8ee; --nav-active-shadow: none;
+  --card-shadow: none;
+  --ok: #26a65b; --ok-soft: #eaf7ef; --warn: #c27c0e; --warn-soft: #fdf5e6; --danger: #e5484d; --danger-soft: #fdeeee;
+}
+:root[data-brand='midnight'][data-theme='dark'] {
+  --bg: #0b0b0d; --surface: #111114; --surface-2: #18181c; --surface-3: #212126; --sidebar: #0b0b0d; --canvas: #08080a;
+  --border: #1f1f24; --border-strong: #2d2d34; --text: #f4f4f5; --text-2: #c9c9d0; --muted: #8a8f98;
+  --accent: #5e6ad2; --accent-hover: #6f7ae0; --accent-soft: rgba(94,106,210,.18); --accent-text: #9aa3ff;
+  --primary-bg: #5e6ad2; --primary-hover: #6f7ae0; --primary-fg: #ffffff;
+  --nav-hover: #16161a; --nav-active: #1c1c21; --nav-active-shadow: none;
+  --ok: #4cc38a; --ok-soft: rgba(76,195,138,.12); --warn: #f2b84b; --warn-soft: rgba(242,184,75,.12); --danger: #f2555a; --danger-soft: rgba(242,85,90,.12);
+}
+:root[data-brand='midnight'] body { font-size: 13.5px; }
+
+/* ---------- Ledger (Stripe dashboard style): cool grey canvas, navy ink, blurple ---------- */
+:root[data-brand='ledger'] {
+  --bg: #f6f8fb; --surface: #ffffff; --surface-2: #f3f5f9; --surface-3: #e9edf3; --sidebar: #ffffff; --canvas: #f6f8fb;
+  --border: #e3e8ee; --border-strong: #cfd7df; --text: #0a2540; --text-2: #425466; --muted: #64748d;
+  --accent: #533afd; --accent-hover: #4330e0; --accent-soft: #f0eeff; --accent-text: #4330e0;
+  --primary-bg: #533afd; --primary-hover: #4330e0; --primary-fg: #ffffff;
+  --nav-hover: #f3f5f9; --nav-active: #f0eeff; --nav-active-shadow: none;
+  --frame: #e3e8ee; --wash-1: rgba(122,92,255,.16); --wash-2: rgba(255,95,168,.12); --wash-3: rgba(255,154,69,.14);
+  --series-1: #533afd; --c1: #533afd;
+  --card-shadow: 0 2px 5px -1px rgba(50,50,93,.08), 0 1px 3px -1px rgba(0,0,0,.05);
+  --ok: #1a7f37; --ok-soft: #e7f6ec; --warn: #a25a00; --warn-soft: #fff4e0; --danger: #df1b41; --danger-soft: #ffe9ed;
+}
+:root[data-brand='ledger'][data-theme='dark'] {
+  --bg: #0a1628; --surface: #0f2038; --surface-2: #142846; --surface-3: #1b3254; --sidebar: #0a1628; --canvas: #081222;
+  --border: #233050; --border-strong: #31406a; --text: #e6ebf1; --text-2: #c1c9d6; --muted: #8792a2;
+  --accent: #7a6cff; --accent-hover: #8d81ff; --accent-soft: rgba(122,108,255,.16); --accent-text: #a89fff;
+  --primary-bg: #7a6cff; --primary-hover: #8d81ff; --primary-fg: #ffffff;
+  --nav-hover: #141d33; --nav-active: rgba(122,108,255,.16); --nav-active-shadow: none;
+  --frame: #1c2a45; --wash-1: rgba(122,92,255,.22); --wash-2: rgba(255,95,168,.14); --wash-3: rgba(255,154,69,.12);
+  --series-1: #8577ff; --c1: #8577ff;
+  --card-shadow: none;
+  --ok: #3dd68c; --ok-soft: rgba(61,214,140,.12); --warn: #f5b84a; --warn-soft: rgba(245,184,74,.12); --danger: #ff6b81; --danger-soft: rgba(255,107,129,.12);
+}
+:root[data-brand='ledger'] .card, :root[data-brand='ledger'] .kpi-strip, :root[data-brand='ledger'] .ab-card { border-color: transparent; }
+:root[data-brand='ledger'] .nav.active { color: var(--accent-text); }
+:root[data-brand='ledger'] .sec-tabs button.on { color: var(--accent-text); border-bottom-color: var(--accent); }
+
+/* Buttons-that-aren't-buttons: nav links, tabs, menu items, list cards keep their own look */
+:root[data-brand] .nav, :root[data-brand] .sec-tabs button, :root[data-brand] .menu-item, :root[data-brand] .add-step, :root[data-brand] .step-card,
+:root[data-brand] .wf-card, :root[data-brand] .tpl, :root[data-brand] .dash-item { border: none; background: transparent; box-shadow: none; height: auto; }
+:root[data-brand] .nav { height: 30px; }
+:root[data-brand] .nav.active { background: var(--nav-active); box-shadow: var(--nav-active-shadow); }
+:root[data-brand] .sec-tabs button { border-bottom: 2px solid transparent; border-radius: 0; padding: 10px 12px; color: var(--muted); }
+:root[data-brand] .sec-tabs button:hover { background: transparent; color: var(--text); }
+:root[data-brand] .wf-card, :root[data-brand] .dash-item { border: 1px solid var(--border); background: var(--surface); box-shadow: var(--card-shadow); }
+:root[data-brand] .wf-card:hover, :root[data-brand] .dash-item:hover { border-color: var(--border-strong); background: var(--surface); }
+:root[data-brand] button.icon { padding: 0; display: inline-grid; place-items: center; }
+:root[data-brand] button.icon.sm { width: 26px; }
+
+
+/* ---------- Ledger: Stripe design language inside the app ---------- */
+:root[data-brand='ledger'] { --radius: 8px; --radius-sm: 5px; }
+:root[data-brand='ledger'] .insights, :root[data-brand='ledger'] .viz-root { --series-1: var(--c1); }
+/* Guide lines framing the content column */
+:root[data-brand='ledger'] main > .page, :root[data-brand='ledger'] main > div > .page { border-inline: 1px solid var(--frame); min-height: 100%; }
+/* Two-tone titles: the statement in ink, the continuation in slate */
+:root[data-brand='ledger'] .lede { color: var(--muted); font-weight: 400; }
+:root[data-brand='ledger'] .ins-head h2, :root[data-brand='ledger'] .page-head h2, :root[data-brand='ledger'] h1.hello { font-size: 28px; font-weight: 500; letter-spacing: -0.03em; }
+:root[data-brand='ledger'] h1.hello { font-size: 34px; }
+/* Bento cards: hairline border, lift on hover */
+:root[data-brand='ledger'] .card, :root[data-brand='ledger'] .kpi-strip, :root[data-brand='ledger'] .ab-card { border-color: var(--border); box-shadow: none; }
+:root[data-brand='ledger'] .wf-card:hover, :root[data-brand='ledger'] .dash-item:hover, :root[data-brand='ledger'] .stat:hover, :root[data-brand='ledger'] .chart-card:hover { box-shadow: 0 20px 40px -18px rgba(50,50,93,.22); }
+:root[data-brand='ledger'] .card h3 { font-weight: 500; }
+/* Gradient washes on the cards that matter most */
+:root[data-brand='ledger'] .briefing, :root[data-brand='ledger'] .builder-hero {
+  position: relative; overflow: hidden;
+  background: radial-gradient(40% 70% at 100% 0%, var(--wash-1), transparent 70%), radial-gradient(30% 60% at 85% 100%, var(--wash-3), transparent 70%), radial-gradient(25% 50% at 70% 0%, var(--wash-2), transparent 70%), var(--surface);
+}
+:root[data-brand='ledger'] .builder-hero > *:not(.card-ribbon) { position: relative; z-index: 1; }
+.card-ribbon { position: absolute; top: 0; right: 0; width: 46%; height: 100%; pointer-events: none; z-index: 0; opacity: .85; -webkit-mask-image: linear-gradient(90deg, transparent, #000 45%); mask-image: linear-gradient(90deg, transparent, #000 45%); }
+:root:not([data-brand='ledger']) .card-ribbon { display: none; }
+:root[data-brand='ledger'] .ab-preview { background: radial-gradient(50% 40% at 100% 0%, var(--wash-1), transparent 70%), radial-gradient(40% 40% at 0% 100%, var(--wash-3), transparent 70%), var(--canvas); }
+/* Meters and bars: blurple, with the signature gradient on progress */
+:root[data-brand='ledger'] .progress span, :root[data-brand='ledger'] .meter span { background: linear-gradient(90deg, #533afd, #c45cf0 60%, #ff7a45); }
+:root[data-brand='ledger'] .bar-fill, :root[data-brand='ledger'] .col-fill { background: var(--c1); }
+/* Small tinted square for chart-card actions (Table / expand) */
+:root[data-brand='ledger'] .chart-card .row.between > button.ghost.sm { background: var(--surface-2); color: var(--accent-text); border-radius: 5px; }
+/* KPI numbers: big and light */
+:root[data-brand='ledger'] .kpi-value, :root[data-brand='ledger'] .stat-value { font-weight: 500; letter-spacing: -0.03em; }
+:root[data-brand='ledger'] .kpi-strip .kpi-value { font-size: 28px; }
+/* Chevron on primary calls to action */
+:root[data-brand='ledger'] button.primary.cta::after { content: '›'; font-size: 18px; line-height: 1; margin-left: 2px; transform: translateY(-1px); }
+:root[data-brand='ledger'] .sec-tabs { border-bottom-color: var(--frame); }
+:root[data-brand] .stat { height: auto; padding: 16px; display: flex; flex-direction: column; align-items: flex-start; gap: 2px; width: 100%; white-space: normal; text-align: left; border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius); color: var(--text); }
+:root[data-brand] .stat:hover { border-color: var(--border-strong); background: var(--surface); }
+:root[data-brand] .stat.accent { border-color: var(--accent); background: var(--accent-soft); }
+:root[data-brand] .dash-title input { border-color: transparent; background: transparent; font-size: 22px; font-weight: 500; letter-spacing: -0.02em; box-shadow: none; }
+:root[data-brand] .dash-title input:hover, :root[data-brand] .dash-title input:focus { border-color: var(--border); }
+@media (max-width: 640px) {
+  :root[data-brand='ledger'] h1.hello { font-size: 26px; }
+  :root[data-brand='ledger'] .ins-head h2, :root[data-brand='ledger'] .page-head h2 { font-size: 22px; }
+  :root[data-brand='ledger'] main > .page, :root[data-brand='ledger'] main > div > .page { border-inline: none; }
+}

@@ -36,6 +36,20 @@ export interface Draft {
   warnings: string[]; errors: string[]; questions: string[];
   sample?: { recordId: string; objectApiName: string }; builderCostUsd: number;
 }
+export interface Suggestion { key: string; title: string; finding: string; request: string; count: number; value?: number; object: string }
+export interface BacktestResult {
+  kind: 'record' | 'schedule'; object: string; days: number; total: number; sampled: number; acted: number; skipped: number; failed: number;
+  actions: { action: string; count: number }[]; costPerRunUsd: number; estCostUsd: number; examples: PreviewRow[]; errors: string[];
+}
+export interface AgentHealth {
+  workflowId: string; runs: number; succeeded: number; failed: number; waiting: number; approved: number; rejected: number; streak: number;
+  lastError?: string; rejectNotes: string[]; suggestion?: { kind: 'drop_approval' | 'review' | 'fix'; title: string; detail: string };
+}
+export interface Diagnosis { explanation: string; action?: 'reconnect' | 'settings' | 'edit' | 'data'; fix?: { nodeId: string; label: string; changes: Record<string, string>; summary: string }; costUsd: number }
+export interface RuleRow { id: string; text: string; enabled: boolean; created_at: string; rule: { summary: string; actions: string[]; objects: string[]; days: number[]; hours: { from: number; to: number } | null; timezone: string; when: { field: string; operator: string; value: string }[] } }
+export interface RegressionResult { checked: number; same: number; gone: number; changed: { runId: string; label: string; before: string; after: string }[]; costUsd: number }
+export interface ChatMsg { role: 'user' | 'assistant'; text: string; options?: string[]; draft?: Draft }
+export interface ChatReply { reply: string; question?: string; options?: string[]; request?: string; draft?: Draft; costUsd: number }
 export interface PreviewRow {
   recordId: string; label: string; status: 'done' | 'error'; result: string; error?: string;
   wouldDo: { action: string; detail: unknown }[];
@@ -63,7 +77,7 @@ export interface TileData extends TileSpec { columns: string[]; rows: Record<str
 export interface DashDraft { name: string; description: string; questions: string[]; warnings: string[]; costUsd: number; tiles: TileData[] }
 export interface DashSummary { id: string; name: string; description: string; updated_at: string; tiles: number }
 export interface Dashboard { id: string; name: string; description: string; prompt: string; range: DashRange; tiles: TileData[] }
-export interface WorkflowRow { id: string; name: string; graph: Workflow; updated_at: string; sf_flow_name?: string | null; sf_deployed_at?: string | null; live?: boolean; live_since?: string | null; watch_error?: string | null }
+export interface WorkflowRow { id: string; name: string; graph: Workflow; updated_at: string; sf_flow_name?: string | null; sf_deployed_at?: string | null; live?: boolean; live_since?: string | null; watch_error?: string | null; realtime?: boolean }
 export interface Settings {
   callbackUrl: string; sfClientId: string; sfLoginUrl: string;
   sfClientSecret: { set: boolean }; anthropicKey: { set: boolean }; dailyBudgetUsd: string; anthropicWorkspaceId: string; aiCacheHours: string;
@@ -97,6 +111,20 @@ export const api = {
   run: (t: string, id: string, input: string) =>
     req<{ runId: string; output: string }>('POST', `/api/tenants/${t}/agents/${id}/run`, { input }),
   draftWorkflow: (t: string, request: string, plan?: unknown) => req<Draft>('POST', `/api/tenants/${t}/workflows/draft`, { request, plan }),
+  suggestions: (t: string, refresh = false) => req<Suggestion[]>('GET', `/api/tenants/${t}/suggestions${refresh ? '?refresh=1' : ''}`),
+  dismissSuggestion: (t: string, key: string) => req('POST', `/api/tenants/${t}/suggestions/${key}/dismiss`),
+  backtest: (t: string, id: string) => req<BacktestResult>('POST', `/api/tenants/${t}/workflows/${id}/backtest`),
+  agentHealth: (t: string) => req<AgentHealth[]>('GET', `/api/tenants/${t}/agent-health`),
+  dropApproval: (t: string, id: string) => req<{ ok: boolean; graph: Workflow }>('POST', `/api/tenants/${t}/workflows/${id}/autonomy`, { approval: false }),
+  diagnose: (t: string, runId: string) => req<Diagnosis>('POST', `/api/tenants/${t}/runs/${runId}/diagnose`),
+  applyFix: (t: string, id: string, nodeId: string, changes: Record<string, string>) => req('POST', `/api/tenants/${t}/workflows/${id}/apply-fix`, { nodeId, changes }),
+  rules: (t: string) => req<RuleRow[]>('GET', `/api/tenants/${t}/rules`),
+  addRule: (t: string, text: string) => req<RuleRow>('POST', `/api/tenants/${t}/rules`, { text, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone }),
+  toggleRule: (t: string, id: string, enabled: boolean) => req('PATCH', `/api/tenants/${t}/rules/${id}`, { enabled }),
+  deleteRule: (t: string, id: string) => req('DELETE', `/api/tenants/${t}/rules/${id}`),
+  regression: (t: string, id: string, graph: Workflow) => req<RegressionResult>('POST', `/api/tenants/${t}/workflows/${id}/regression`, { graph }),
+  setRealtime: (t: string, id: string, on: boolean) => req<{ realtime: boolean }>('POST', `/api/tenants/${t}/workflows/${id}/realtime`, { on }),
+  builderChat: (t: string, messages: { role: 'user' | 'assistant'; text: string }[], plan?: unknown) => req<ChatReply>('POST', `/api/tenants/${t}/builder/chat`, { messages, plan }),
   previewWorkflow: (t: string, id: string, limit = 10) => req<Preview>('POST', `/api/tenants/${t}/workflows/${id}/preview`, { limit }),
   feedback: (t: string, id: string, b: { nodeId: string; input: string; label: string; source: 'correction' | 'confirmed' }) =>
     req<{ ok: boolean; examples: number }>('POST', `/api/tenants/${t}/workflows/${id}/feedback`, b),
@@ -123,6 +151,6 @@ export const api = {
   saveWorkflow: (t: string, id: string, b: { name: string; graph: Workflow }) => req('PUT', `/api/tenants/${t}/workflows/${id}`, b),
   deleteWorkflow: (t: string, id: string) => req('DELETE', `/api/tenants/${t}/workflows/${id}`),
   runWorkflow: (t: string, id: string, trigger: Record<string, unknown>) => req<RunResult>('POST', `/api/tenants/${t}/workflows/${id}/run`, trigger),
-  decide: (t: string, runId: string, approve: boolean) => req<RunResult>('POST', `/api/tenants/${t}/runs/${runId}/decision`, { approve }),
+  decide: (t: string, runId: string, approve: boolean, note?: string) => req<RunResult>('POST', `/api/tenants/${t}/runs/${runId}/decision`, { approve, note }),
   runs: (t: string, status?: string) => req<Run[]>('GET', `/api/tenants/${t}/runs${status ? `?status=${status}` : ''}`),
 };

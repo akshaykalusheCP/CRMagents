@@ -11,12 +11,21 @@ import { runAgent } from './agent/runner.js';
 import { decideRun, previewWorkflow, startRun } from './engine/service.js';
 import { addExample, exampleCount } from './engine/learn.js';
 import { deployWorkflow, undeployWorkflow } from './salesforce/deploy.js';
-import { setLive, startWatcher } from './engine/watcher.js';
+import { setLive, setRealtime, startWatcher } from './engine/watcher.js';
 import { ask, runSoql, safeSoql, summarize } from './insights/ai.js';
 import { cachedInsights } from './insights/metrics.js';
 import { CHARTS, RANGES, draftDashboard, drill, runTiles, saveTiles, type Range, type TileSpec } from './insights/dashboards.js';
 import { SalesforceClient } from './salesforce/client.js';
 import { draftWorkflow } from './builder/service.js';
+import { suggestAgents, dismissSuggestion } from './smart/suggest.js';
+import { backtest } from './smart/backtest.js';
+import { agentHealth, removeApproval } from './smart/trust.js';
+import { applyFix, diagnoseRun } from './smart/repair.js';
+import { orgAutomation } from './smart/orgAutomation.js';
+import { compileRule, listRules } from './smart/policies.js';
+import { regression } from './smart/regress.js';
+import { builderChat } from './builder/chat.js';
+import { listOrgActions } from './salesforce/actions.js';
 import { config } from './config.js';
 import { migrate, pool } from './db.js';
 import { buildAuthorizeUrl, handleCallback, redirectUri, validateOwnApp } from './salesforce/oauth.js';
@@ -252,6 +261,92 @@ app.get('/api/tenants/:tenantId/dashboards/:id/tiles/:tileId/drill', async (req)
   return drill(await SalesforceClient.forTenant(tenantId), tile, q.label, q.range as Range);
 });
 
+// ---- Smart features ----
+// Suggested agents found in the org's data ($0: count queries only).
+app.get('/api/tenants/:tenantId/suggestions', async (req) => {
+  const { tenantId } = req.params as { tenantId: string };
+  const refresh = (req.query as { refresh?: string }).refresh === '1';
+  return suggestAgents(tenantId, await SalesforceClient.forTenant(tenantId), refresh);
+});
+app.post('/api/tenants/:tenantId/suggestions/:key/dismiss', async (req) => {
+  const { tenantId, key } = req.params as { tenantId: string; key: string };
+  await dismissSuggestion(tenantId, z.string().max(60).parse(key));
+  return { ok: true };
+});
+
+// What the agent would have done over the last 30 days (preview on a sample, scaled up).
+app.post('/api/tenants/:tenantId/workflows/:id/backtest', async (req) => {
+  const { tenantId, id } = req.params as { tenantId: string; id: string };
+  return backtest(tenantId, id);
+});
+
+// Health per agent and earned-autonomy suggestions.
+app.get('/api/tenants/:tenantId/agent-health', async (req) => agentHealth((req.params as { tenantId: string }).tenantId));
+app.post('/api/tenants/:tenantId/workflows/:id/autonomy', async (req) => {
+  const { tenantId, id } = req.params as { tenantId: string; id: string };
+  z.object({ approval: z.literal(false) }).parse(req.body);
+  const { rows } = await pool.query('select graph from workflows where id=$1 and tenant_id=$2', [id, tenantId]);
+  if (!rows[0]) throw Object.assign(new Error('workflow not found'), { statusCode: 404 });
+  const graph = removeApproval(rows[0].graph);
+  validateWorkflow(graph);
+  await pool.query('update workflows set graph=$3, updated_at=now() where id=$1 and tenant_id=$2', [id, tenantId, JSON.stringify(graph)]);
+  return { ok: true, graph };
+});
+
+// Why a run failed, and a fix to the step when one is possible.
+app.post('/api/tenants/:tenantId/runs/:runId/diagnose', async (req) => {
+  const { tenantId, runId } = req.params as { tenantId: string; runId: string };
+  return diagnoseRun(tenantId, runId);
+});
+app.post('/api/tenants/:tenantId/workflows/:id/apply-fix', async (req) => {
+  const { tenantId, id } = req.params as { tenantId: string; id: string };
+  const b = z.object({ nodeId: z.string().max(64), changes: z.record(z.string().max(4000)) }).parse(req.body);
+  return applyFix(tenantId, id, b.nodeId, b.changes);
+});
+
+// Automation already in the org (Flows, Apex triggers, validation rules).
+app.get('/api/tenants/:tenantId/org-automation', async (req) => {
+  const { tenantId } = req.params as { tenantId: string };
+  const a = await orgAutomation(tenantId, await SalesforceClient.forTenant(tenantId), (req.query as { refresh?: string }).refresh === '1');
+  return { flows: a.flows.length, triggers: a.triggers.length, rules: a.rules.length, flowList: a.flows.slice(0, 100) };
+});
+
+// Workspace rules in plain English, enforced by code before every write.
+app.get('/api/tenants/:tenantId/rules', async (req) => listRules((req.params as { tenantId: string }).tenantId));
+app.post('/api/tenants/:tenantId/rules', async (req) => {
+  const { tenantId } = req.params as { tenantId: string };
+  const b = z.object({ text: z.string().trim().min(8).max(500), timezone: z.string().max(64).default('UTC') }).parse(req.body);
+  const rule = await compileRule(tenantId, b.text, b.timezone);
+  const { rows } = await pool.query('insert into policies (tenant_id, text, rule) values ($1,$2,$3) returning id, text, rule, enabled, created_at', [tenantId, b.text, JSON.stringify(rule)]);
+  return rows[0];
+});
+app.patch('/api/tenants/:tenantId/rules/:id', async (req) => {
+  const { tenantId, id } = req.params as { tenantId: string; id: string };
+  const { enabled } = z.object({ enabled: z.boolean() }).parse(req.body);
+  await pool.query('update policies set enabled=$3 where id=$1 and tenant_id=$2', [id, tenantId, enabled]);
+  return { ok: true };
+});
+app.delete('/api/tenants/:tenantId/rules/:id', async (req) => {
+  const { tenantId, id } = req.params as { tenantId: string; id: string };
+  await pool.query('delete from policies where id=$1 and tenant_id=$2', [id, tenantId]);
+  return { ok: true };
+});
+
+// Before saving an edit: what would come out differently on recent real runs (nothing written).
+app.post('/api/tenants/:tenantId/workflows/:id/regression', async (req) => {
+  const { tenantId, id } = req.params as { tenantId: string; id: string };
+  const { graph } = z.object({ graph: z.any() }).parse(req.body);
+  validateWorkflow(graph);
+  return regression(tenantId, id, graph);
+});
+
+// Real-time trigger (Change Data Capture) instead of 1-minute checks.
+app.post('/api/tenants/:tenantId/workflows/:id/realtime', async (req) => {
+  const { tenantId, id } = req.params as { tenantId: string; id: string };
+  const { on } = z.object({ on: z.boolean() }).parse(req.body);
+  return setRealtime(tenantId, id, on);
+});
+
 // ---- AI usage (last 24 hours, whole workspace) ----
 app.get('/api/usage', async (req) => {
   const accountId = req.user!.accountId;
@@ -371,7 +466,7 @@ const wfBody = z.object({
 
 app.get('/api/tenants/:tenantId/workflows', async (req) => {
   const { rows } = await pool.query(
-    'select id, name, graph, updated_at, sf_flow_name, sf_deployed_at, live, live_since, watch_error from workflows where tenant_id=$1 order by updated_at desc',
+    'select id, name, graph, updated_at, sf_flow_name, sf_deployed_at, live, live_since, watch_error, realtime from workflows where tenant_id=$1 order by updated_at desc',
     [(req.params as { tenantId: string }).tenantId],
   );
   return rows;
@@ -409,6 +504,22 @@ app.post('/api/tenants/:tenantId/workflows/draft', async (req) => {
   const { tenantId } = req.params as { tenantId: string };
   const b = z.object({ request: z.string().trim().min(5, 'Describe what the workflow should do').max(2000), plan: z.any().optional() }).parse(req.body);
   return draftWorkflow(tenantId, b.request, b.plan);
+});
+
+// Build an agent by chatting: short clarifying questions, then a validated draft.
+app.post('/api/tenants/:tenantId/builder/chat', async (req) => {
+  const { tenantId } = req.params as { tenantId: string };
+  const b = z.object({
+    messages: z.array(z.object({ role: z.enum(['user', 'assistant']), text: z.string().max(4000) })).min(1).max(30),
+    plan: z.any().optional(),
+  }).parse(req.body);
+  return builderChat(tenantId, b.messages, b.plan);
+});
+
+// The org's own automations an agent can use (invocable Apex, autolaunched Flows, standard actions).
+app.get('/api/tenants/:tenantId/org-actions', async (req) => {
+  const { tenantId } = req.params as { tenantId: string };
+  return listOrgActions(tenantId, await SalesforceClient.forTenant(tenantId));
 });
 
 const triggerBody = z.object({
@@ -471,8 +582,8 @@ app.delete('/api/tenants/:tenantId/workflows/:id/deploy', async (req) => {
 
 app.post('/api/tenants/:tenantId/runs/:runId/decision', async (req) => {
   const { tenantId, runId } = req.params as { tenantId: string; runId: string };
-  const { approve } = z.object({ approve: z.boolean() }).parse(req.body);
-  return decideRun(tenantId, runId, approve);
+  const { approve, note } = z.object({ approve: z.boolean(), note: z.string().max(500).optional() }).parse(req.body);
+  return decideRun(tenantId, runId, approve, note);
 });
 
 app.get('/api/tenants/:tenantId/runs', async (req) => {

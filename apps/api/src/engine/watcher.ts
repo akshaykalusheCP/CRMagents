@@ -1,5 +1,6 @@
 import { NODE_DEF_BY_TYPE, type Workflow } from '@crmagents/shared';
 import { pool } from '../db.js';
+import { enableCdc, LOCK_ID as STREAM_LOCK, streamHealthy, syncStreams } from '../smart/stream.js';
 import { SalesforceClient } from '../salesforce/client.js';
 import { cachedInsights, snapshotDue } from '../insights/metrics.js';
 import { startRunAsync } from './service.js';
@@ -76,7 +77,7 @@ export function pickNew(records: WatchRecord[], field: string, cursor: Date, see
 }
 
 interface LiveRow {
-  id: string; tenant_id: string; graph: Workflow; watch_cursor: Date; watch_seen: string[]; sf_user_id: string | null;
+  id: string; tenant_id: string; graph: Workflow; watch_cursor: Date; watch_seen: string[]; sf_user_id: string | null; realtime?: boolean;
 }
 
 async function tickWorkflow(w: LiveRow) {
@@ -92,6 +93,12 @@ async function tickWorkflow(w: LiveRow) {
   const trig = triggerOf(w.graph);
   if (!trig) {
     await pool.query("update workflows set watch_error='Needs a Salesforce record trigger with an object' where id=$1", [w.id]);
+    return;
+  }
+  // Real-time agents: the change stream starts their runs. Keep the cursor current so polling takes over cleanly
+  // (no backlog, no duplicates) if the stream goes down.
+  if (w.realtime && await streamHealthy(w.tenant_id, trig.object)) {
+    await pool.query("update workflows set watch_cursor=now(), watch_seen='[]', watch_error=null where id=$1", [w.id]);
     return;
   }
   const sf = await SalesforceClient.forTenant(w.tenant_id);
@@ -119,7 +126,7 @@ async function tick() {
     if (!lock[0].ok) return; // another instance is polling
     try {
       const { rows } = await db.query(
-        `select w.id, w.tenant_id, w.graph, w.watch_cursor, w.watch_seen, t.sf_user_id
+        `select w.id, w.tenant_id, w.graph, w.watch_cursor, w.watch_seen, w.realtime, t.sf_user_id
          from workflows w join tenants t on t.id = w.tenant_id
          where w.live and t.setup_status = 'ready'`,
       );
@@ -142,7 +149,29 @@ async function tick() {
 export function startWatcher(log: { error: (o: unknown, m: string) => void }) {
   const run = () => tick().catch((e) => log.error({ err: String(e) }, 'watcher tick failed'));
   setTimeout(run, 5_000);
+  // Real-time streams: one process owns them (a session-level lock held for the life of the process).
+  void (async () => {
+    const db = await pool.connect();
+    const { rows } = await db.query('select pg_try_advisory_lock($1) as ok', [STREAM_LOCK]);
+    if (!rows[0].ok) { db.release(); return; }
+    const sync = () => syncStreams(log).catch((e) => log.error({ err: String(e) }, 'stream sync failed'));
+    setTimeout(sync, 3_000);
+    setInterval(sync, INTERVAL_MS);
+  })().catch((e) => log.error({ err: String(e) }, 'stream startup failed'));
   return setInterval(run, INTERVAL_MS);
+}
+
+/** Real-time on: turn on Change Data Capture for the agent's object; off: back to 1-minute checks. */
+export async function setRealtime(tenantId: string, workflowId: string, on: boolean) {
+  const { rows } = await pool.query('select graph from workflows where id=$1 and tenant_id=$2', [workflowId, tenantId]);
+  if (!rows[0]) throw Object.assign(new Error('workflow not found'), { statusCode: 404 });
+  if (on) {
+    const trig = triggerOf(rows[0].graph);
+    if (!trig) throw new Error('Real-time works for agents started by a Salesforce record.');
+    await enableCdc(await SalesforceClient.forTenant(tenantId), trig.object);
+  }
+  await pool.query('update workflows set realtime=$2 where id=$1', [workflowId, on]);
+  return { realtime: on };
 }
 
 /** Turn a workflow's server-side trigger on (from now, no backfill) or off. */

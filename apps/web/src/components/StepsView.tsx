@@ -13,7 +13,9 @@ interface Props {
   edges: Edge[];
   selectedId?: string;
   onSelect: (id: string) => void;
-  onAdd: (type: string) => void;
+  onAdd?: (type: string) => void;
+  /** Overview mode: no "Add a step". */
+  readOnly?: boolean;
 }
 
 const OP: Record<string, string> = {
@@ -96,6 +98,17 @@ function describe(n: WFRFNode, byId: Map<string, WFRFNode>, exitsElsewhere: bool
     }
     case 'logic.loop': return { title: <>For each record found, do the steps below</>, detail: <>Up to {c.max ?? 20} records from {P(c.items)}</> };
     case 'notify.slack': return { title: 'Post to Slack', detail: P(c.text) };
+    case 'sf.action': {
+      const [kind, name = ''] = String(c.action ?? '').split(':');
+      const nice = name.replace(/^\w+?__/, '').replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2');
+      let inputs: Record<string, unknown> = {};
+      try { inputs = JSON.parse(String(c.inputs || '{}')); } catch { /* shown raw */ }
+      const keys = Object.entries(inputs);
+      return {
+        title: <>Run {kind === 'flow' ? 'Flow' : kind === 'apex' ? 'Apex action' : 'action'} <b>{nice || 'not set'}</b></>,
+        detail: keys.length ? <>{keys.map(([k, v], i) => <span key={k}>{i ? ', ' : ''}{k} → {P(v)}</span>)}</> : "Your org's own automation",
+      };
+    }
     case 'http.request': return { title: <>Call <b>{(() => { try { return new URL(String(c.url)).host; } catch { return 'an API'; } })()}</b></>, detail: `${c.method ?? 'GET'} request` };
     case 'util.set': return { title: 'Prepare values', detail: P(c.values) };
     case 'util.output': return { title: <>Finish with: {P(c.value || 'Done')}</> };
@@ -128,7 +141,7 @@ const STATUS_ICON: Record<string, ReactNode> = {
   waiting: <PauseCircle size={16} color="var(--warn)" />,
 };
 
-export function StepsView({ nodes, edges, selectedId, onSelect, onAdd }: Props) {
+export function StepsView({ nodes, edges, selectedId, onSelect, onAdd, readOnly }: Props) {
   const [adding, setAdding] = useState(false);
   const byId = new Map(nodes.map((n) => [n.id, n]));
   // Outputs reached only from a "false"/"rejected" handle are exits; they show under the step that leads to them.
@@ -174,7 +187,7 @@ export function StepsView({ nodes, edges, selectedId, onSelect, onAdd }: Props) 
           </div>
         );
       })}
-      <div className="step-wrap">
+      {!readOnly && <div className="step-wrap">
         <div className="step-line" />
         {adding ? (
           <div className="add-menu">
@@ -183,7 +196,7 @@ export function StepsView({ nodes, edges, selectedId, onSelect, onAdd }: Props) 
                 <div className="pal-cat"><i style={{ background: CATEGORY_COLORS[c] }} />{c}</div>
                 <div className="add-grid">
                   {NODE_DEFS.filter((d) => d.category === c).map((d) => (
-                    <button key={d.type} className="add-item" onClick={() => { onAdd(d.type); setAdding(false); }} title={d.description}>
+                    <button key={d.type} className="add-item" onClick={() => { onAdd?.(d.type); setAdding(false); }} title={d.description}>
                       <NodeTile type={d.type} /> {d.label}
                     </button>
                   ))}
@@ -195,7 +208,7 @@ export function StepsView({ nodes, edges, selectedId, onSelect, onAdd }: Props) 
         ) : (
           <button className="add-step" onClick={() => setAdding(true)}><Plus size={15} /> Add a step</button>
         )}
-      </div>
+      </div>}
     </div>
   );
 }

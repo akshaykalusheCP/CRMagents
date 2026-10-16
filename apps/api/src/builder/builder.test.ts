@@ -194,3 +194,49 @@ test('scheduled per-record job: one approval for the batch, then a task per reco
   assert.deepEqual(tasks.map((t) => [t.Subject, t.WhatId, t.OwnerId]), [['Update Big deal', '006A', '005X'], ['Update Small deal', '006B', '005Y']]);
   assert.match(String(st.final), /Processed 2 Opportunity record/);
 });
+
+test('org actions: ranking picks matching Flows/Apex, compile wires inputs and approval', async () => {
+  const { rankActions } = await import('../salesforce/actions.js');
+  const { actionLabel } = await import('./compile.js');
+  const actions = [
+    { kind: 'flow' as const, name: 'SvcCopilotTmpl__CloseCase', label: 'Close Case' },
+    { kind: 'flow' as const, name: 'SvcCopilotTmpl__AddCaseComment', label: 'Add Case Comment' },
+    { kind: 'apex' as const, name: 'FSL__ScheduleServiceProcess', label: 'ScheduleServiceAppointments' },
+    { kind: 'standard' as const, name: 'emailSimple', label: 'Send email' },
+  ];
+  const picked = rankActions('When a case is resolved, close the case and email the customer', actions).map((a) => a.name);
+  assert.equal(picked[0], 'SvcCopilotTmpl__CloseCase');
+  assert.ok(picked.includes('emailSimple'));
+  assert.ok(!picked.includes('FSL__ScheduleServiceProcess'));
+  assert.deepEqual(rankActions('summarize the account', actions), []);
+  assert.equal(actionLabel('flow:SvcCopilotTmpl__CloseCase'), 'Runs Flow: Close Case');
+  assert.equal(actionLabel('standard:emailSimple'), 'Sends an email');
+
+  const c = compilePlan(plan({
+    steps: [step({ action: 'run_action', org_action: 'flow:SvcCopilotTmpl__CloseCase', fields: [{ field: 'caseId', value: '{record.Id}' }] })],
+  }));
+  assert.deepEqual(c.errors, []);
+  validateWorkflow(c.workflow);
+  const types = c.workflow.nodes.map((n) => n.type).filter((t) => t !== 'util.output');
+  assert.deepEqual(types, ['trigger.salesforce', 'sf.getRecord', 'logic.approval', 'sf.action']); // writes wait for approval
+  const node = c.workflow.nodes.find((n) => n.type === 'sf.action')!;
+  assert.equal(node.config.action, 'flow:SvcCopilotTmpl__CloseCase');
+  assert.deepEqual(JSON.parse(String(node.config.inputs)), { caseId: '{{sf_get_1.record.Id}}' });
+  assert.ok(compilePlan(plan({ steps: [step({ action: 'run_action', org_action: 'nonsense' })] })).errors.length > 0);
+});
+
+test('sf.action runs the org action with rendered inputs, and only describes it in preview', async () => {
+  const calls: unknown[] = [];
+  const env = {
+    sf: { runAction: async (kind: string, name: string, inputs: unknown) => { calls.push({ kind, name, inputs }); return { done: 'yes' }; } },
+    llm: {},
+  } as unknown as Env;
+  const { EXECUTORS } = await import('../engine/nodes.js');
+  const node = { id: 'a', type: 'sf.action', position: { x: 0, y: 0 }, config: { action: 'flow:Close_Case', inputs: '{"caseId":"{{trigger.recordId}}"}' } };
+  const out = await EXECUTORS['sf.action'](node, { trigger: { recordId: '500X' } }, env);
+  assert.deepEqual(out.output, { success: true, done: 'yes' });
+  assert.deepEqual(calls, [{ kind: 'flow', name: 'Close_Case', inputs: { caseId: '500X' } }]);
+  const dry = await EXECUTORS['sf.action'](node, { trigger: { recordId: '500X' } }, { ...env, dryRun: true });
+  assert.equal(dry.output.wouldDo, 'Run Flow Close_Case');
+  assert.equal(calls.length, 1);
+});

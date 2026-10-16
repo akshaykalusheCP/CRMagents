@@ -146,6 +146,14 @@ export function MultiLine({ p, format, currency, area }: { p: Pivot; format: Viz
   );
 }
 
+/** "Account.Name" → "Account name", "CloseDate" → "Close date", "cnt" stays readable enough. */
+export function humanize(c: string): string {
+  const parts = c.split('.').map((p) => p.replace(/__c$/, '').replace(/_/g, ' ').replace(/([a-z])([A-Z])/g, '$1 $2'));
+  const last = parts.length > 1 && /^name$/i.test(parts[parts.length - 1]) ? parts.slice(0, -1) : parts; // Account.Name → Account
+  const t = last.join(' ').toLowerCase();
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+
 /** Sortable table with CSV export: the accessible view of every tile. */
 export function SortTable({ columns, rows, format, currency, title }: { columns: string[]; rows: Record<string, unknown>[]; format?: (c: string, v: unknown) => string; currency?: string; title: string }) {
   const [sort, setSort] = useState<{ c: string; dir: 1 | -1 } | null>(null);
@@ -172,10 +180,10 @@ export function SortTable({ columns, rows, format, currency, title }: { columns:
         <table className="viz-table">
           <thead><tr>{columns.map((c) => (
             <th key={c} onClick={() => setSort((s) => ({ c, dir: s?.c === c && s.dir === 1 ? -1 : 1 }))} className="sortable">
-              {c}{sort?.c === c ? (sort.dir === 1 ? ' ▲' : ' ▼') : ''}
+              {humanize(c)}{sort?.c === c ? (sort.dir === 1 ? ' ▲' : ' ▼') : ''}
             </th>
           ))}</tr></thead>
-          <tbody>{shown.map((r, i) => <tr key={i}>{columns.map((c) => <td key={c}>{format ? format(c, r[c]) : String(r[c] ?? '')}</td>)}</tr>)}</tbody>
+          <tbody>{shown.map((r, i) => <tr key={i}>{columns.map((c) => <td key={c} className={typeof r[c] === 'number' ? 'num' : undefined}>{format ? format(c, r[c]) : String(r[c] ?? '')}</td>)}</tr>)}</tbody>
         </table>
       </div>
       <button className="ghost sm" onClick={csv} style={{ marginTop: 6 }}>Download CSV</button>
