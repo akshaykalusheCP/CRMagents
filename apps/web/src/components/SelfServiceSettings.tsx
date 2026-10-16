@@ -12,6 +12,8 @@ export function SelfServiceSettings({ value, onSave }: { value: SelfService; onS
   const dirty = JSON.stringify(v) !== JSON.stringify(value);
   const set = (p: Partial<SelfService>) => setV({ ...v, ...p });
   const setRec = (i: number, p: Partial<SelfService['records'][number]>) => set({ records: v.records.map((r, j) => (j === i ? { ...r, ...p } : r)) });
+  const m = v.meetings ?? { enabled: false, with: [], durationMin: 30, days: 10, subject: 'Meeting' };
+  const setM = (p: Partial<SelfService['meetings']>) => set({ meetings: { ...m, ...p } });
   const setAct = (i: number, p: Partial<SelfService['actions'][number]>) => set({ actions: v.actions.map((a, j) => (j === i ? { ...a, ...p } : a)) });
 
   return (
@@ -60,6 +62,26 @@ export function SelfServiceSettings({ value, onSave }: { value: SelfService; onS
         <input type="checkbox" checked={v.handoff} onChange={(e) => set({ handoff: e.target.checked })} />
         <b>Hand over to a person</b> <span className="muted">opens a case with the conversation; your team replies by email</span>
       </label>
+
+      <label className="row small" style={{ gap: 8, marginTop: 12 }}>
+        <input type="checkbox" checked={m.enabled} onChange={(e) => setM({ enabled: e.target.checked })} />
+        <b>Book meetings</b> <span className="muted">visitors pick a free time on your team's Salesforce calendars; no code needed</span>
+      </label>
+      {m.enabled && <div className="ss-body">
+        <div className="ss-h">With whom</div>
+        <input value={m.with.join(', ')} onChange={(e) => setM({ with: list(e.target.value) })} placeholder="sales@acme.com, priya@acme.com" aria-label="People to book with" style={{ width: '100%' }} />
+        <p className="muted small" style={{ margin: '4px 0 0' }}>Salesforce users' emails. With several, each time goes to whoever is free (round-robin). Times are 9:00-17:00 on weekdays in each person's Salesforce time zone, skipping their Events.</p>
+        <div className="ss-row" style={{ marginTop: 10 }}>
+          <input value={m.subject} onChange={(e) => setM({ subject: e.target.value })} placeholder="Demo" aria-label="Meeting name" style={{ width: 160 }} />
+          <select value={m.durationMin} onChange={(e) => setM({ durationMin: Number(e.target.value) })} aria-label="Length">
+            {[15, 20, 30, 45, 60].map((n) => <option key={n} value={n}>{n} minutes</option>)}
+          </select>
+          <select value={m.days} onChange={(e) => setM({ days: Number(e.target.value) })} aria-label="How far ahead">
+            {[3, 5, 7, 10, 14, 21, 30].map((n) => <option key={n} value={n}>next {n} days</option>)}
+          </select>
+        </div>
+        <p className="muted small" style={{ margin: '6px 0 0' }}>The meeting goes on their calendar linked to the visitor (an existing contact or lead, or a new lead), and the visitor gets a confirmation email.</p>
+      </div>}
 
       {dirty && <div className="row" style={{ gap: 8, marginTop: 12 }}>
         <button className="primary sm" disabled={busy} onClick={async () => { setBusy(true); try { await onSave(v); } finally { setBusy(false); } }}>{busy ? <Loader2 size={13} className="spin" /> : null} Save self-service</button>

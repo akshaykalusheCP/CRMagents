@@ -3,6 +3,8 @@ import { config } from '../config.js';
 import { pool } from '../db.js';
 import { parseActionKey } from '../salesforce/actions.js';
 import type { SalesforceClient } from '../salesforce/client.js';
+import { bookMeeting, findOwners, freeTimes } from '../salesforce/meetings.js';
+import { overLimit } from '../ratelimit.js';
 
 // Customer self-service for website chat. A visitor proves their email with a one-time code sent from the org;
 // after that the assistant can show *their* records, update the details the admin allowed and run the actions
@@ -31,7 +33,11 @@ export interface SelfServiceConfig {
   /** Contact fields visitors may change themselves. */
   updatable: string[];
   handoff: boolean;
+  /** Visitors book a meeting (demo, call) on these people's Salesforce calendars, round-robin. */
+  meetings: { enabled: boolean; with: string[]; durationMin: number; days: number; subject: string };
 }
+
+export const DEFAULT_MEETINGS = { enabled: false, with: [] as string[], durationMin: 30, days: 10, subject: 'Meeting' };
 
 export const DEFAULT_CONFIG: SelfServiceConfig = {
   verify: false,
@@ -39,6 +45,7 @@ export const DEFAULT_CONFIG: SelfServiceConfig = {
   actions: [],
   updatable: [],
   handoff: true,
+  meetings: DEFAULT_MEETINGS,
 };
 
 /** Only well-formed names get through; anything odd is dropped. Pure; tested. */
@@ -52,7 +59,15 @@ export function normalizeConfig(raw: unknown): SelfServiceConfig {
   }).slice(0, 8);
   const actions = (Array.isArray(r.actions) ? r.actions : []).flatMap((a) => (a && parseActionKey(String(a.key)) ? [{ key: String(a.key), label: String(a.label || a.key).slice(0, 60), description: a.description ? String(a.description).slice(0, 200) : undefined }] : [])).slice(0, 10);
   const updatable = (Array.isArray(r.updatable) ? r.updatable : []).map(String).filter((f) => NAME.test(f)).slice(0, 15);
-  return { verify: !!r.verify, records, actions, updatable, handoff: r.handoff !== false };
+  const m = (r.meetings && typeof r.meetings === 'object' ? r.meetings : {}) as Partial<SelfServiceConfig['meetings']>;
+  const meetings = {
+    enabled: !!m.enabled,
+    with: (Array.isArray(m.with) ? m.with : []).map((x) => String(x).trim()).filter((x) => EMAIL.test(x) || /^005[a-zA-Z0-9]{12,15}$/.test(x)).slice(0, 10),
+    durationMin: [15, 20, 30, 45, 60].includes(Number(m.durationMin)) ? Number(m.durationMin) : 30,
+    days: Math.min(Math.max(Math.round(Number(m.days) || 10), 1), 30),
+    subject: String(m.subject || 'Meeting').slice(0, 100),
+  };
+  return { verify: !!r.verify, records, actions, updatable, handoff: r.handoff !== false, meetings };
 }
 
 /** The tools a website assistant gets with this configuration. Pure; tested. */
@@ -65,12 +80,16 @@ export function selfServiceTools(c: SelfServiceConfig): string[] {
     if (c.actions.length) t.push('run_customer_action');
   }
   if (c.handoff) t.push('talk_to_person');
+  if (c.meetings?.enabled && c.meetings.with.length) t.push('meeting_times', 'book_meeting_slot');
   return t;
 }
 
 /** What the assistant is told it can do for visitors. Pure; tested. */
 export function selfServicePrompt(c: SelfServiceConfig): string {
-  if (!c.verify && !c.handoff) return '';
+  const meet = c.meetings?.enabled && c.meetings.with.length
+    ? `Visitors can book a ${c.meetings.durationMin}-minute "${c.meetings.subject}" with the team: call meeting_times, offer 3-4 times, ask for their name, email and company, confirm the time, then book_meeting_slot. Give times exactly as meeting_times labels them.`
+    : '';
+  if (!c.verify && !c.handoff) return meet;
   const lines: string[] = [];
   if (c.verify) {
     lines.push('Visitors can see their own information after proving their email: ask for it, call send_code, then ask for the 6-digit code from their inbox and call verify_code. Never show or change anything about a visitor before verify_code succeeds, and never take an email or name the visitor types as proof.');
@@ -79,6 +98,7 @@ export function selfServicePrompt(c: SelfServiceConfig): string {
     if (c.actions.length) lines.push(`run_customer_action can do these for them (confirm first): ${c.actions.map((a) => `${a.key} = ${a.label}${a.description ? ` (${a.description})` : ''}`).join('; ')}.`);
   }
   if (c.handoff) lines.push('If they ask for a person, or you can\'t help, call talk_to_person with a one-line summary: a person from the team will reply by email.');
+  if (meet) lines.push(meet);
   return lines.join('\n');
 }
 
@@ -208,6 +228,49 @@ export function selfServiceExec(ctx: SelfServiceContext) {
       const c = await sf.getRecord('Case', r.id, ['CaseNumber']);
       return `A person will reply to ${maskEmail(contactEmail)} by email. Case number ${(c as { CaseNumber?: string }).CaseNumber}.`;
     },
+  };
+  // Meetings: only times that are free right now can be booked, with the person who is free then.
+  const meetingSlots = async () => {
+    const m = ctx.config.meetings;
+    if (!m?.enabled || !m.with.length) throw new Error('Booking meetings is not available here.');
+    const sf = await ctx.sf();
+    return { sf, m, slots: await freeTimes(sf, await findOwners(sf, m.with), { days: m.days, durationMin: m.durationMin, max: 8 }) };
+  };
+  tools.meeting_times = async () => {
+    const { slots } = await meetingSlots();
+    return slots.length ? slots.map((x) => ({ start: x.start, when: x.label })) : 'No free times in the next days. Offer talk_to_person instead.';
+  };
+  tools.book_meeting_slot = async ({ start, name, email, company, notes }) => {
+    const e = String(email ?? '').trim().toLowerCase();
+    if (!EMAIL.test(e)) throw new Error('Ask for a valid email address.');
+    const fullName = String(name ?? '').trim().slice(0, 120);
+    if (!fullName) throw new Error('Ask for their name.');
+    if (await overLimit(`meet|${e}`, 2, 86_400) || (ctx.sessionId && await overLimit(`meet|s|${ctx.sessionId}`, 2, 86_400))) {
+      throw new Error('This visitor already booked meetings today. Offer talk_to_person for anything else.');
+    }
+    const { sf, m, slots } = await meetingSlots();
+    const slot = slots.find((x) => x.start === new Date(String(start)).toISOString());
+    if (!slot) throw new Error('That time is no longer free. Call meeting_times and offer new times.');
+    // The visitor as a Contact or Lead (a new Lead when we don't know them).
+    const q = (soql: string) => sf.query(soql).then((r) => r.records[0] as { Id: string } | undefined).catch(() => undefined);
+    let whoId = (await q(`SELECT Id FROM Contact WHERE Email = '${e}' LIMIT 1`))?.Id
+      ?? (await q(`SELECT Id FROM Lead WHERE Email = '${e}' AND IsConverted = false LIMIT 1`))?.Id;
+    if (!whoId) {
+      const parts = fullName.split(/\s+/);
+      const last = parts.length > 1 ? parts.pop()! : parts[0];
+      whoId = (await sf.createRecord('Lead', { FirstName: parts.length ? parts.join(' ').slice(0, 40) : undefined, LastName: last.slice(0, 80), Email: e, Company: String(company || 'Not given').slice(0, 255), LeadSource: 'Web' })).id;
+    }
+    const booked = await bookMeeting(sf, {
+      ownerId: slot.ownerId, start: slot.start, durationMin: m.durationMin, whoId,
+      subject: `${m.subject}: ${fullName}${company ? ` (${String(company).slice(0, 80)})` : ''}`,
+      description: `Booked by ${fullName} <${e}> in website chat.${notes ? `\n\nWants to talk about: ${String(notes).slice(0, 2000)}` : ''}`,
+    });
+    await sf.runAction('standard', 'emailSimple', {
+      emailAddresses: e,
+      emailSubject: `Confirmed: ${m.subject} with ${ctx.companyName}, ${slot.label}`,
+      emailBody: `Hi ${fullName.split(' ')[0]},\n\nYour ${m.durationMin}-minute ${m.subject.toLowerCase()} with ${slot.ownerName} at ${ctx.companyName} is booked for ${slot.label}.\n\n${slot.ownerName} will send the meeting link before then. To change the time, reply to this email.`,
+    }).catch(() => undefined);
+    return `Booked for ${slot.label} with ${slot.ownerName}. A confirmation is on its way to ${maskEmail(e)}. (Event ${booked.eventId})`;
   };
   return (name: string, input: unknown): Promise<unknown> | undefined => tools[name]?.(input ?? {});
 }

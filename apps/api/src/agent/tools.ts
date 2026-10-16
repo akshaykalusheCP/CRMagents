@@ -1,6 +1,7 @@
 import type Anthropic from '@anthropic-ai/sdk';
 import type { DescribeField, SalesforceClient } from '../salesforce/client.js';
 import { recordsToTable } from '../salesforce/table.js';
+import { bookMeeting, findOwners, freeTimes } from '../salesforce/meetings.js';
 import { fileText } from '../salesforce/files.js';
 import { hitsToText, searchKnowledge } from '../knowledge/store.js';
 import { actionContext, actionKey, listOrgActions, parseActionKey, rankActions } from '../salesforce/actions.js';
@@ -324,5 +325,70 @@ export const TOOLS: Record<string, Tool> = {
       await sf.updateRecord(sobject, id, fields);
       return { success: true };
     },
+  },
+  find_meeting_times: {
+    write: false,
+    def: {
+      name: 'find_meeting_times',
+      description: "Free times on Salesforce users' calendars (their Events), in working hours (9:00-17:00, weekdays) of each user's own time zone. Give one or more users by email or user Id; with several, the earliest free person is offered for each time. Returns start times (ISO) and readable labels.",
+      input_schema: {
+        type: 'object',
+        properties: {
+          users: { type: 'array', items: { type: 'string' }, description: 'Emails or 005 user Ids of the people to meet' },
+          days: { type: 'number', description: 'How many days ahead to look (default 7)' },
+          duration_minutes: { type: 'number', description: 'Meeting length (default 30)' },
+        },
+        required: ['users'],
+      },
+    },
+    async run(sf, { users, days, duration_minutes }) {
+      const owners = await findOwners(sf, (Array.isArray(users) ? users : [users]).map(String));
+      const slots = await freeTimes(sf, owners, { days: Number(days) || 7, durationMin: Number(duration_minutes) || 30 });
+      return slots.length ? slots.map((x) => ({ start: x.start, when: x.label, with: x.ownerName, ownerId: x.ownerId })) : 'No free times in that period. Try more days.';
+    },
+  },
+  book_meeting: {
+    write: true,
+    def: {
+      name: 'book_meeting',
+      description: 'Book a meeting on a Salesforce user\'s calendar (creates an Event they own), linked to a lead or contact and optionally an account, opportunity or case. Use a start time from find_meeting_times, and confirm with the person first.',
+      input_schema: {
+        type: 'object',
+        properties: {
+          owner_id: { type: 'string', description: 'User Id (005…) from find_meeting_times' },
+          start: { type: 'string', description: 'ISO start time from find_meeting_times' },
+          duration_minutes: { type: 'number' },
+          subject: { type: 'string' },
+          who_id: { type: 'string', description: 'Lead or Contact Id' },
+          what_id: { type: 'string', description: 'Account, Opportunity or Case Id' },
+          description: { type: 'string' },
+        },
+        required: ['owner_id', 'start', 'subject'],
+      },
+    },
+    async run(sf, i) {
+      const r = await bookMeeting(sf, { ownerId: String(i.owner_id), start: String(i.start), durationMin: Number(i.duration_minutes) || 30, subject: String(i.subject), whoId: i.who_id, whatId: i.what_id, description: i.description });
+      return { booked: true, ...r };
+    },
+  },
+  meeting_times: {
+    write: false,
+    publicOnly: true,
+    def: { name: 'meeting_times', description: 'Free times the visitor can book a meeting (for example a demo or a call) with the team. Offer 3-4 of them in the visitor\'s words.', input_schema: { type: 'object', properties: {} } },
+    async run() { throw new Error('Only in website chat'); },
+  },
+  book_meeting_slot: {
+    write: true,
+    publicOnly: true,
+    def: {
+      name: 'book_meeting_slot',
+      description: 'Book one of the times from meeting_times for the visitor. Ask for their name, email and company first, and confirm the time. They get a confirmation email.',
+      input_schema: {
+        type: 'object',
+        properties: { start: { type: 'string', description: 'The ISO start from meeting_times' }, name: { type: 'string' }, email: { type: 'string' }, company: { type: 'string' }, notes: { type: 'string', description: 'What they want to talk about' } },
+        required: ['start', 'name', 'email'],
+      },
+    },
+    async run() { throw new Error('Only in website chat'); },
   },
 };

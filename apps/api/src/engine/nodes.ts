@@ -1,3 +1,4 @@
+import { findOwners, freeTimes } from '../salesforce/meetings.js';
 import { parseJsonLoose, type CallOptions, type Effort, type Llm } from '../agent/llm.js';
 import { addUsage, type Usage } from '../agent/pricing.js';
 import type { Example } from './learn.js';
@@ -235,6 +236,15 @@ export const EXECUTORS: Record<string, Executor> = {
     const recordId = cfg(node, 'recordId', scope) || String(scope.trigger?.recordId ?? '');
     if (!recordId) throw new Error('Which case?');
     return { output: await emailThread(env.sf, recordId, Number(node.config.max) || 15) };
+  },
+
+  // Free times on Salesforce users' calendars, to offer in an email ("Would one of these work?"). Reads only.
+  async 'sf.meetingTimes'(node, scope, env) {
+    const who = cfg(node, 'users', scope).split(/[\s,;]+/).filter(Boolean);
+    if (!who.length) throw new Error('Whose calendar? Give an email or user Id, e.g. {{trigger.record.OwnerId}}');
+    const owners = await findOwners(env.sf, who);
+    const slots = await freeTimes(env.sf, owners, { days: Number(node.config.days) || 7, durationMin: Number(node.config.duration) || 30, max: Number(node.config.count) || 3 });
+    return { output: { slots, count: slots.length, text: slots.length ? slots.map((x) => `- ${x.label}`).join('\n') : 'No free times in the next days.' } };
   },
 
   // Reply to the customer's email on a case. "suggest": a person checks it and clicks Send on the case;

@@ -50,6 +50,7 @@ export interface SelfService {
   actions: { key: string; label: string; description?: string }[];
   updatable: string[];
   handoff: boolean;
+  meetings: { enabled: boolean; with: string[]; durationMin: number; days: number; subject: string };
 }
 export interface PublicChat { enabled: boolean; origins: string; cases: boolean; greeting: string; snippet: string; selfService: SelfService }
 export interface Agent { id: string; name: string; systemPrompt: string; tools: string[] }

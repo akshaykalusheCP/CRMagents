@@ -205,11 +205,14 @@ export function compilePlan(plan: Plan): CompileResult {
         const lastEmails = [...stepNodes.slice(0, i)].reverse().find((x) => x?.action === 'read_emails');
         const emailsIdx = lastEmails ? stepNodes.indexOf(lastEmails) + 1 : 0;
         const emailsFeed = lastEmails && !new RegExp(`\\{step${emailsIdx}\\.`).test(s.instruction) ? `\n\nEmail conversation (newest last):\n{{${lastEmails.id}.text}}` : '';
+        const lastTimes = [...stepNodes.slice(0, i)].reverse().find((x) => x?.action === 'meeting_times');
+        const timesIdx = lastTimes ? stepNodes.indexOf(lastTimes) + 1 : 0;
+        const timesFeed = lastTimes && !new RegExp(`\\{step${timesIdx}\\.`).test(s.instruction) ? `\n\nFree meeting times to offer (use them exactly as written):\n{{${lastTimes.id}.text}}` : '';
         const filesFeed = lastFiles && !new RegExp(`\\{step${filesIdx}\\.`).test(s.instruction) ? `\n\nFiles on the record:\n{{${lastFiles.id}.text}}` : '';
         const kb = lastKb && !new RegExp(`\\{step${kbIdx}\\.`).test(s.instruction) ? `\n\nFrom our knowledge base:\n{{${lastKb.id}.text}}` : '';
         node = add('ai.agent', {
           instructions: lastKb ? `Do exactly what the task asks. ${KNOWLEDGE_RULES}` : 'Do exactly what the task asks. Be concise.',
-          prompt: convert(s.instruction, i) + data + feed + emailsFeed + filesFeed + kb + where,
+          prompt: convert(s.instruction, i) + data + feed + emailsFeed + timesFeed + filesFeed + kb + where,
           tools: s.action === 'research' ? READ_TOOLS : [],
         }, s.action === 'research' ? 'AI research' : 'AI write');
         keys = new Set(['text']);
@@ -305,6 +308,13 @@ export function compilePlan(plan: Plan): CompileResult {
         keys = new Set(['text']);
         result = `{{${node.id}.text}}`;
         break;
+      case 'meeting_times': {
+        const who = convert(s.message || '', i) || (inLoop ? '{{item.OwnerId}}' : isRecord ? '{{trigger.record.OwnerId}}' : '');
+        if (!who) errors.push(`step ${i + 1}: meeting_times needs whose calendar (a record trigger, or emails in message)`);
+        node = add('sf.meetingTimes', { users: who, days: 7, duration: 30, count: 3 }, 'Find meeting times');
+        keys = new Set(['text', 'slots', 'count']);
+        break;
+      }
       case 'read_emails':
         if (!isRecord && !inLoop) errors.push(`step ${i + 1}: read_emails needs a record trigger or a per-record query before it`);
         node = add('sf.emailThread', { recordId: inLoop ? '{{item.Id}}' : '{{trigger.recordId}}', max: 15 }, 'Read emails');
@@ -444,6 +454,7 @@ function describe(s: PlanStep, plan: Plan): string {
     case 'delete_record': return `Deletes the ${plan.trigger_object} (Recycle Bin)`;
     case 'read_files': return 'Reads the files attached to the record (no AI)';
     case 'web_research': return `AI researches on the web: ${cut(s.instruction)}`;
+    case 'meeting_times': return 'Finds 3 free meeting times on the owner\'s calendar';
     case 'read_emails': return 'Reads the email conversation on the case (no AI)';
     case 'reply_email': return s.send_now ? 'Emails the reply to the customer' : 'Puts the reply on the case for a person to check and send';
     case 'attach_file': return `Attaches "${cut(s.subject || 'CRMagents note', 40)}" as a file on the record`;
