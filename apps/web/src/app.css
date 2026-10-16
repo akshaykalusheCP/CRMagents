@@ -406,3 +406,9 @@
 :root .limits-row .input-affix { max-width: 130px; }
 :root .step-ask { display: inline-flex; align-self: flex-start; margin-top: 4px; font-size: 12px; font-weight: 500; color: var(--warn); background: var(--warn-soft); padding: 2px 8px; border-radius: 5px; }
 :root .thread { display: flex; flex-direction: column; gap: 10px; max-height: 420px; overflow-y: auto; padding: 4px 2px; }
+:root .guide { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 18px; }
+:root .guide li { display: flex; flex-direction: column; gap: 6px; padding-left: 4px; }
+:root .guide li::marker { color: var(--accent); font-weight: 600; }
+:root .guide b { font-weight: 600; }
+:root .guide span { color: var(--text-2); font-size: 14px; line-height: 1.5; }
+:root .guide a { align-self: flex-start; }

@@ -11,6 +11,7 @@ import { execute, newState, type RunState } from './executor.js';
 import { examplesFor } from './learn.js';
 import { makeGuard } from '../smart/policies.js';
 import { runTrust } from '../trust/policy.js';
+import { notifySalesforce } from '../salesforce/notify.js';
 
 export interface TriggerPayload {
   input?: string;
@@ -96,6 +97,8 @@ async function drive(runId: string, tenantId: string, graph: Workflow, st: RunSt
       const who = await resolveApprover(tenantId, env.sf, node?.config ?? {}, st.scope.trigger ?? {}).catch(() => ({ email: null, label: 'Anyone in the workspace' }));
       await pool.query('update runs set assigned_to=$2, assigned_label=$3 where id=$1', [runId, who.email, who.label]);
     }
+    // Live update for the Salesforce panel, and a bell notification when someone needs to approve.
+    void notifySalesforce(tenantId, runId);
     return saved;
   } catch (e) {
     return await persist(runId, st, graph, 'error', e instanceof Error ? e.message : String(e));
@@ -193,8 +196,8 @@ export async function startRun(tenantId: string, workflowId: string, trigger: Tr
 }
 
 /** Start in the background; optionally wait up to `waitMs` for it to settle. */
-export async function startRunAsync(tenantId: string, workflowId: string, trigger: TriggerPayload, waitMs = 0): Promise<RunSnapshot> {
-  const { runId, graph } = await createRun(tenantId, workflowId, trigger);
+export async function startRunAsync(tenantId: string, workflowId: string, trigger: TriggerPayload, waitMs = 0, startedBy?: string): Promise<RunSnapshot> {
+  const { runId, graph } = await createRun(tenantId, workflowId, trigger, startedBy);
   const job = drive(runId, tenantId, graph, newState({ ...trigger }), workflowId).catch(() => undefined);
   if (waitMs > 0) await Promise.race([job, new Promise((r) => setTimeout(r, waitMs))]);
   return getRun(tenantId, runId);

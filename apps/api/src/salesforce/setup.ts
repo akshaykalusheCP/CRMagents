@@ -2,6 +2,7 @@ import { config } from '../config.js';
 import { pool } from '../db.js';
 import { provisionOrg } from '../sfbridge.js';
 import { RECONNECT_MESSAGE, SalesforceClient } from './client.js';
+import { ensureNotificationType } from './notify.js';
 
 // After a user connects an org we finish everything ourselves, so the customer only clicks "Connect":
 // 1. install/upgrade the CRMagents package, 2. allow callouts to us, 3. write the signed-connection
@@ -101,15 +102,17 @@ export async function setupOrg(tenantId: string): Promise<void> {
     const sf = await SalesforceClient.forTenant(tenantId);
     // Login is all CRMagents needs: data, writes and triggers work over the API. Prove access with one query.
     await sf.query('SELECT Id FROM User LIMIT 1');
+    // Bell notifications for approvals work in every org, with or without the package.
+    await ensureNotificationType(tenantId, sf).catch(() => undefined);
     const { rows } = await pool.query('select use_package from tenants where id=$1', [tenantId]);
     if (rows[0]?.use_package) {
       // Optional add-on: the record-page panel and Flow action live in the package.
       await ensurePackage(tenantId, sf);
-      await status(tenantId, 'configuring', 'Connecting the record-page panel to CRMagents…');
+      await status(tenantId, 'configuring', 'Connecting the Agent Panel to CRMagents…');
       await ensureRemoteSite(sf);
       await provisionOrg(tenantId);
       await ensurePermission(tenantId, sf);
-      await status(tenantId, 'ready', 'Ready, with the record-page panel installed.');
+      await status(tenantId, 'ready', 'Ready. CRMagents is installed in Salesforce: add the Agent Panel to pages and the Ask CRMagents button to layouts.');
     } else {
       await status(tenantId, 'ready', 'Ready. Nothing was installed in your org.');
     }
@@ -118,4 +121,21 @@ export async function setupOrg(tenantId: string): Promise<void> {
   } finally {
     running.delete(tenantId);
   }
+}
+
+
+/** Give every active Salesforce user the CRMagents User permission set (explicit admin action). */
+export async function grantAccessToAll(tenantId: string): Promise<{ granted: number; total: number }> {
+  const sf = await SalesforceClient.forTenant(tenantId);
+  const ps = await sf.query("SELECT Id FROM PermissionSet WHERE Name = 'CRMagents_User' LIMIT 1");
+  const psId = (ps.records[0] as { Id?: string } | undefined)?.Id;
+  if (!psId) throw new Error('Install CRMagents in Salesforce first.');
+  const users = (await sf.query("SELECT Id FROM User WHERE IsActive = true AND UserType = 'Standard' LIMIT 2000")).records as { Id: string }[];
+  const has = new Set(((await sf.query(`SELECT AssigneeId FROM PermissionSetAssignment WHERE PermissionSetId = '${psId}' LIMIT 5000`)).records as { AssigneeId: string }[]).map((r) => r.AssigneeId));
+  let granted = 0;
+  for (const u of users) {
+    if (has.has(u.Id)) continue;
+    try { await sf.createRecord('PermissionSetAssignment', { AssigneeId: u.Id, PermissionSetId: psId }); granted++; } catch { /* e.g. license without Apex access */ }
+  }
+  return { granted, total: users.length };
 }

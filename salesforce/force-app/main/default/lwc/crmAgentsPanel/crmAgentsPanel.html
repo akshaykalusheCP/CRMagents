@@ -1,67 +1,121 @@
 <template>
     <lightning-card title="CRMagents" icon-name="standard:bot">
+        <lightning-button-icon slot="actions" icon-name="utility:refresh" variant="border-filled" alternative-text="Refresh" onclick={refresh}></lightning-button-icon>
         <div class="slds-var-p-horizontal_medium">
-            <template lwc:if={error}>
-                <div class="slds-text-color_error slds-var-m-bottom_small">{error}</div>
-            </template>
-
-            <template lwc:if={noWorkflows}>
-                <p class="slds-text-color_weak">
-                    No workflows are set up for {objectApiName}. Create one in CRMagents with a Salesforce record trigger.
-                </p>
-            </template>
-
-            <template lwc:if={hasWorkflows}>
-                <lightning-combobox
-                    label="Workflow"
-                    value={selected}
-                    options={options}
-                    onchange={handleSelect}
-                    disabled={isBusy}
-                ></lightning-combobox>
-                <lightning-textarea
-                    label="Extra instructions (optional)"
-                    value={input}
-                    onchange={handleInput}
-                    disabled={isBusy}
-                ></lightning-textarea>
-                <div class="slds-var-m-top_small">
-                    <lightning-button
-                        variant="brand"
-                        label="Run"
-                        onclick={handleRun}
-                        disabled={cannotRun}
-                    ></lightning-button>
+            <template lwc:if={notConnected}>
+                <div class="empty">
+                    <p class="slds-text-heading_small">CRMagents isn't connected yet</p>
+                    <p class="slds-text-color_weak">An admin can connect this org in CRMagents with "Install in Salesforce". It takes a minute.</p>
                 </div>
             </template>
-
-            <template lwc:if={loading}>
-                <lightning-spinner alternative-text="Working" size="small"></lightning-spinner>
+            <template lwc:elseif={error}>
+                <div class="slds-notify slds-notify_alert slds-alert_error" role="alert"><span>{error}</span></div>
             </template>
 
-            <template lwc:if={run}>
-                <div class="slds-var-m-top_medium">
-                    <lightning-badge label={statusLabel}></lightning-badge>
-                </div>
+            <template lwc:if={loading}><lightning-spinner alternative-text="Loading" size="small"></lightning-spinner></template>
 
-                <template lwc:if={isWaiting}>
-                    <div class="slds-box slds-var-m-top_small">
-                        <p class="slds-text-title_caps">Needs your approval</p>
-                        <p class="slds-var-m-vertical_x-small slds-text-longform">{run.approval}</p>
-                        <lightning-button variant="brand" label="Approve" onclick={handleApprove}></lightning-button>
-                        <lightning-button class="slds-var-m-left_x-small" label="Reject" onclick={handleReject}></lightning-button>
-                    </div>
-                </template>
+            <template lwc:if={ready}>
+                <lightning-tabset variant="scoped">
+                    <!-- Agents -->
+                    <lightning-tab label="Agents">
+                        <template lwc:if={run}>
+                            <div class="run">
+                                <div class="run-head">
+                                    <b>{runAgent}</b>
+                                    <span class={runTone}>{runLabel}</span>
+                                    <lightning-button-icon icon-name="utility:close" variant="bare" alternative-text="Close" onclick={closeRun} class="slds-col_bump-left"></lightning-button-icon>
+                                </div>
+                                <template lwc:if={runBusy}><lightning-progress-bar size="small" value="60" variant="circular"></lightning-progress-bar></template>
+                                <ul class="steps">
+                                    <template for:each={runSteps} for:item="s">
+                                        <li key={s.key}><lightning-icon icon-name={s.icon} size="xx-small"></lightning-icon> {s.label}</li>
+                                    </template>
+                                </ul>
+                                <template lwc:if={runWaiting}>
+                                    <div class="approve-box">
+                                        <p class="slds-text-title_caps">Needs approval</p>
+                                        <p class="slds-text-longform pre">{run.approval}</p>
+                                        <lightning-button-group>
+                                            <lightning-button variant="brand" label="Approve" onclick={approveRun}></lightning-button>
+                                            <lightning-button label="Reject" onclick={rejectRun}></lightning-button>
+                                        </lightning-button-group>
+                                    </div>
+                                </template>
+                                <template lwc:if={run.output}><div class="output pre">{run.output}</div></template>
+                            </div>
+                        </template>
 
-                <template lwc:if={run.output}>
-                    <div class="slds-box slds-box_x-small slds-var-m-top_small slds-text-longform output">{run.output}</div>
-                </template>
+                        <template lwc:if={hasAgents}>
+                            <ul class="agent-list">
+                                <template for:each={agents} for:item="a">
+                                    <li key={a.id} class="agent">
+                                        <div class="agent-text"><b>{a.name}</b><span class="slds-text-color_weak">{a.trigger}</span></div>
+                                        <lightning-button label="Run" data-id={a.id} onclick={handleRun} disabled={runBusy}></lightning-button>
+                                    </li>
+                                </template>
+                            </ul>
+                            <lightning-button variant="base" label="Add instructions for the run" onclick={toggleInstructions}></lightning-button>
+                            <template lwc:if={showInstructions}>
+                                <lightning-textarea label="Instructions (optional)" value={instructions} onchange={handleInstructions} placeholder="e.g. Keep the reply short and mention the refund policy"></lightning-textarea>
+                            </template>
+                        </template>
+                        <template lwc:else>
+                            <p class="slds-text-color_weak empty">No agents for this kind of record yet. Build one in CRMagents.</p>
+                        </template>
 
-                <ul class="slds-var-m-top_small slds-text-body_small">
-                    <template for:each={steps} for:item="s">
-                        <li key={s.key}>{s.icon} {s.label}</li>
-                    </template>
-                </ul>
+                        <template lwc:if={hasRecent}>
+                            <p class="slds-text-title_caps section">Recent on this record</p>
+                            <ul class="recent">
+                                <template for:each={recent} for:item="r">
+                                    <li key={r.runId}><b>{r.agent}</b> · {r.label} <span class="slds-text-color_weak">· {r.when}</span></li>
+                                </template>
+                            </ul>
+                        </template>
+                    </lightning-tab>
+
+                    <!-- Ask -->
+                    <lightning-tab label="Ask">
+                        <template lwc:if={hasAssistants}>
+                            <lightning-combobox label="Assistant" value={assistantId} options={assistants} onchange={handleAssistant}></lightning-combobox>
+                            <div class="thread">
+                                <template for:each={messages} for:item="m">
+                                    <div key={m.key} class={m.css}>{m.text}</div>
+                                </template>
+                                <template lwc:if={asking}><div class="bubble ai weak">Looking it up…</div></template>
+                            </div>
+                            <lightning-textarea label="Question" variant="label-hidden" value={question} onchange={handleQuestion} onkeydown={handleQuestionKey} placeholder="Ask about this record, e.g. What's the history with this customer?"></lightning-textarea>
+                            <div class="ask-actions">
+                                <lightning-button variant="base" label="New conversation" onclick={newConversation}></lightning-button>
+                                <lightning-button variant="brand" label="Ask" onclick={send} disabled={cannotAsk}></lightning-button>
+                            </div>
+                        </template>
+                        <template lwc:else>
+                            <p class="slds-text-color_weak empty">No assistants yet. Create one in CRMagents under Agents → Assistants.</p>
+                        </template>
+                    </lightning-tab>
+
+                    <!-- Approvals -->
+                    <lightning-tab label={approvalsLabel}>
+                        <template lwc:if={hasApprovals}>
+                            <template for:each={approvals} for:item="a">
+                                <div key={a.runId} class="approve-box">
+                                    <div class="run-head"><b>{a.agent}</b><span class="slds-text-color_weak">· for {a.assignedLabel}</span></div>
+                                    <ul class="changes">
+                                        <template for:each={a.lines} for:item="l"><li key={l.key}>{l.text}</li></template>
+                                    </ul>
+                                    <lightning-input label="Note (optional)" value={a.note} data-id={a.runId} onchange={handleNote}></lightning-input>
+                                    <div class="ask-actions">
+                                        <lightning-button label="Reject" data-id={a.runId} onclick={handleReject} disabled={a.busy}></lightning-button>
+                                        <lightning-button variant="brand" label="Approve" data-id={a.runId} onclick={handleApprove} disabled={a.busy}></lightning-button>
+                                    </div>
+                                </div>
+                            </template>
+                        </template>
+                        <template lwc:else>
+                            <p class="slds-text-color_weak empty">Nothing waiting. Agents ask here before changing anything.</p>
+                        </template>
+                    </lightning-tab>
+                </lightning-tabset>
             </template>
         </div>
     </lightning-card>

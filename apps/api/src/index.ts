@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { loadUser, registerAuth } from './auth.js';
 import { provisionOrg, registerSfBridge } from './sfbridge.js';
 import { dailyBudgetUsd } from './spend.js';
-import { setupOrg } from './salesforce/setup.js';
+import { grantAccessToAll, setupOrg } from './salesforce/setup.js';
 import { TOOLS } from './agent/tools.js';
 import { validateWorkflow, type Workflow } from '@crmagents/shared';
 import { runAgent } from './agent/runner.js';
@@ -354,6 +354,9 @@ app.put('/api/tenants/:tenantId/workflows/:id/allowed-fields', async (req) => {
   await pool.query('update workflows set allowed_fields=$3 where id=$1 and tenant_id=$2', [id, tenantId, JSON.stringify(clean)]);
   return { allowed: clean };
 });
+
+// Give every active Salesforce user access to the CRMagents panel, button and Flow actions.
+app.post('/api/tenants/:tenantId/grant-access', async (req) => grantAccessToAll((req.params as { tenantId: string }).tenantId));
 
 // Real-time trigger (Change Data Capture) instead of 1-minute checks.
 app.post('/api/tenants/:tenantId/workflows/:id/realtime', async (req) => {

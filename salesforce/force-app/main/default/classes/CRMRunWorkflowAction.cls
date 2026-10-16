@@ -4,7 +4,9 @@
  */
 public with sharing class CRMRunWorkflowAction {
     public class Request {
-        @InvocableVariable(label='Workflow Id' required=true description='Id shown in the CRMagents app')
+        @InvocableVariable(label='Agent name' description='The agent\'s name in CRMagents (or use Agent Id)')
+        public String workflowName;
+        @InvocableVariable(label='Agent Id' description='Id shown in the CRMagents app (or use Agent name)')
         public String workflowId;
         @InvocableVariable(label='Record Id')
         public String recordId;
@@ -22,13 +24,13 @@ public with sharing class CRMRunWorkflowAction {
         @InvocableVariable(label='Error') public String error;
     }
 
-    @InvocableMethod(label='Run CRMagents workflow' description='Starts a CRMagents workflow and optionally waits for its result' category='CRMagents')
+    @InvocableMethod(label='Run CRMagents agent' description='Starts a CRMagents agent on a record and optionally waits for its result' category='CRMagents')
     public static List<Result> run(List<Request> requests) {
         List<Result> out = new List<Result>();
         for (Request r : requests) {
             Result res = new Result();
             try {
-                CRMAgentsController.RunInfo info = CRMAgentsController.run(r.workflowId, r.recordId, r.objectApiName, r.input, r.waitSeconds);
+                CRMAgentsController.RunInfo info = CRMAgentsController.run(r.workflowId, r.workflowName, r.recordId, r.objectApiName, r.input, r.waitSeconds);
                 res.runId = info.runId;
                 res.status = info.status;
                 res.output = info.output;

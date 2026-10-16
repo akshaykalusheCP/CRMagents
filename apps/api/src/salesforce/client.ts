@@ -117,6 +117,11 @@ export class SalesforceClient {
     return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
   }
 
+  /** Any REST call under /services/data/vXX (e.g. /actions/standard/customNotificationAction). */
+  rest<T = any>(method: string, path: string, body?: unknown) {
+    return this.call<T>(method, path, body);
+  }
+
   /** Tooling API (package installs, remote sites). `path` starts after /tooling, e.g. /sobjects/X. */
   tooling<T = any>(method: string, path: string, body?: unknown) {
     return this.call<T>(method, `/tooling${path}`, body);

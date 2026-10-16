@@ -6,6 +6,7 @@ import { config } from './config.js';
 import { decrypt, encrypt } from './crypto.js';
 import { pool } from './db.js';
 import { decideRun, getRun, startRunAsync } from './engine/service.js';
+import { runAgent } from './agent/runner.js';
 import { SalesforceClient } from './salesforce/client.js';
 
 declare module 'fastify' {
@@ -77,6 +78,52 @@ export function registerSfBridge(app: FastifyInstance) {
     return reply.code(401).send({ error: 'unauthorized' });
   });
 
+  const forObject = (w: { graph: Workflow }, object: string) => {
+    const t = w.graph.nodes.find((n) => n.type.startsWith('trigger.'));
+    if (!t) return false;
+    if (t.type === 'trigger.manual') return true; // on-demand agents can run on any record
+    if (t.type !== 'trigger.salesforce') return false;
+    return !object || !t.config.objectApiName || String(t.config.objectApiName).toLowerCase() === object;
+  };
+  const describeTrigger = (g: Workflow) => {
+    const t = g.nodes.find((n) => n.type.startsWith('trigger.'));
+    if (t?.type === 'trigger.salesforce') return `Runs on ${t.config.objectApiName ?? 'records'}`;
+    if (t?.type === 'trigger.schedule') return `Every ${t.config.every ?? 'day'}`;
+    return 'On demand';
+  };
+  const waitingMessage = (steps: { status: string; output?: { message?: string } }[] | null) =>
+    String((steps ?? []).find((x) => x.status === 'waiting')?.output?.message ?? 'Approve this change?');
+
+  // Everything the Salesforce panel needs for one record, in one callout.
+  app.get('/sf/v1/home', async (req) => {
+    const q = req.query as { object?: string; recordId?: string; user?: string };
+    const tenantId = req.sfTenant!.tenantId;
+    const object = String(q.object ?? '').toLowerCase();
+    const recordId = /^[a-zA-Z0-9]{15,18}$/.test(String(q.recordId ?? '')) ? String(q.recordId) : null;
+    const user = String(q.user ?? '').toLowerCase() || null;
+    const [flows, assistants, approvals, recent] = await Promise.all([
+      pool.query('select id, name, graph, live from workflows where tenant_id=$1 order by name', [tenantId]),
+      pool.query('select id, name from agents where tenant_id=$1 order by name', [tenantId]),
+      pool.query(
+        `select r.id, r.steps, r.assigned_to, r.assigned_label, r.created_at, coalesce(w.name, 'Agent') as name, r.input->>'recordId' as record_id
+         from runs r left join workflows w on w.id = r.workflow_id
+         where r.tenant_id=$1 and r.status='waiting' and ((r.input->>'recordId') = $2 or (r.assigned_to is not null and r.assigned_to = $3))
+         order by r.created_at desc limit 20`, [tenantId, recordId, user]),
+      recordId
+        ? pool.query(
+          `select r.id, r.status, r.created_at, left(r.output, 300) as output, coalesce(w.name, a.name, 'Agent') as name
+           from runs r left join workflows w on w.id = r.workflow_id left join agents a on a.id = r.agent_id
+           where r.tenant_id=$1 and (r.input->>'recordId') = $2 order by r.created_at desc limit 5`, [tenantId, recordId])
+        : Promise.resolve({ rows: [] as any[] }),
+    ]);
+    return {
+      agents: flows.rows.filter((w) => forObject(w, object)).map((w) => ({ id: w.id, name: w.name, live: !!w.live, trigger: describeTrigger(w.graph) })),
+      assistants: assistants.rows,
+      approvals: approvals.rows.map((r) => ({ runId: r.id, agent: r.name, message: waitingMessage(r.steps), assignedLabel: r.assigned_label ?? 'Anyone', forMe: !!user && r.assigned_to === user, createdAt: r.created_at, recordId: r.record_id })),
+      recent: recent.rows.map((r) => ({ runId: r.id, agent: r.name, status: r.status, createdAt: r.created_at, output: r.output ?? '' })),
+    };
+  });
+
   app.get('/sf/v1/workflows', async (req) => {
     const object = String((req.query as { object?: string }).object ?? '').toLowerCase();
     const { rows } = await pool.query('select id, name, graph from workflows where tenant_id=$1 order by name', [req.sfTenant!.tenantId]);
@@ -91,7 +138,9 @@ export function registerSfBridge(app: FastifyInstance) {
   });
 
   const runBody = z.object({
-    workflowId: z.string().uuid(),
+    workflowId: z.string().uuid().optional(),
+    workflowName: z.string().max(200).optional(),
+    userEmail: z.string().max(200).optional(),
     recordId: z.string().max(18).optional(),
     objectApiName: z.string().max(80).optional(),
     input: z.string().max(20_000).optional(),
@@ -101,16 +150,49 @@ export function registerSfBridge(app: FastifyInstance) {
 
   app.post('/sf/v1/run', async (req) => {
     const b = runBody.parse(req.body);
-    return startRunAsync(req.sfTenant!.tenantId, b.workflowId, {
+    const tenantId = req.sfTenant!.tenantId;
+    // Flows can name the agent instead of pasting its id.
+    let id = b.workflowId;
+    if (!id && b.workflowName) {
+      const { rows } = await pool.query('select id from workflows where tenant_id=$1 and lower(name)=lower($2) limit 1', [tenantId, b.workflowName.trim()]);
+      id = rows[0]?.id;
+    }
+    if (!id) throw Object.assign(new Error(b.workflowName ? `No agent named "${b.workflowName}"` : 'Give an agent id or name'), { statusCode: 404 });
+    return startRunAsync(tenantId, id, {
       input: b.input, recordId: b.recordId, objectApiName: b.objectApiName, context: b.context,
-    }, (b.waitSeconds ?? 0) * 1000);
+    }, (b.waitSeconds ?? 0) * 1000, b.userEmail);
+  });
+
+  // Ask an assistant, optionally about a record (its fields go along as context, masked like everything else).
+  const askBody = z.object({
+    assistantId: z.string().uuid().optional(), assistantName: z.string().max(200).optional(),
+    question: z.string().min(1).max(20_000), recordId: z.string().max(18).optional(), objectApiName: z.string().max(80).optional(),
+    history: z.array(z.object({ role: z.enum(['user', 'assistant']), text: z.string().max(20_000) })).max(40).optional(),
+  });
+  app.post('/sf/v1/ask', async (req) => {
+    const b = askBody.parse(req.body);
+    const tenantId = req.sfTenant!.tenantId;
+    const { rows } = await pool.query(
+      b.assistantId ? 'select id, system_prompt, tools from agents where tenant_id=$1 and id=$2' : 'select id, system_prompt, tools from agents where tenant_id=$1 and lower(name)=lower($2) limit 1',
+      [tenantId, b.assistantId ?? b.assistantName ?? ''],
+    );
+    if (!rows[0]) throw Object.assign(new Error('Assistant not found'), { statusCode: 404 });
+    let context: unknown;
+    if (b.recordId && b.objectApiName && /^\w+$/.test(b.objectApiName)) {
+      const sf = await SalesforceClient.forTenant(tenantId);
+      const rec = await sf.getRecord(b.objectApiName, b.recordId).catch(() => null) as Record<string, unknown> | null;
+      // Enough of the record to answer about it, without sending every system field.
+      if (rec) context = { record: { object: b.objectApiName, id: b.recordId, fields: Object.fromEntries(Object.entries(rec).filter(([k]) => !/^(SystemModstamp|LastViewedDate|LastReferencedDate|IsDeleted|PhotoUrl)$/.test(k)).slice(0, 60)) } };
+    }
+    const r = await runAgent(tenantId, { id: rows[0].id, systemPrompt: rows[0].system_prompt, tools: rows[0].tools }, b.question, context, b.history);
+    return { answer: r.output, runId: r.runId };
   });
 
   app.get('/sf/v1/runs/:id', async (req) => getRun(req.sfTenant!.tenantId, (req.params as { id: string }).id));
 
   app.post('/sf/v1/runs/:id/decision', async (req) => {
-    const { approve } = z.object({ approve: z.boolean() }).parse(req.body);
-    await decideRun(req.sfTenant!.tenantId, (req.params as { id: string }).id, approve);
+    const { approve, note, userEmail } = z.object({ approve: z.boolean(), note: z.string().max(500).optional(), userEmail: z.string().max(200).optional() }).parse(req.body);
+    await decideRun(req.sfTenant!.tenantId, (req.params as { id: string }).id, approve, note, userEmail?.toLowerCase());
     return getRun(req.sfTenant!.tenantId, (req.params as { id: string }).id);
   });
 }

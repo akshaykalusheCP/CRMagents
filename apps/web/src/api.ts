@@ -150,6 +150,7 @@ export const api = {
   drillTile: (t: string, tile: TileSpec, label: string, range: DashRange) => req<{ columns: string[]; rows: Record<string, unknown>[] }>('POST', `/api/tenants/${t}/dashboards/drill`, { tile, label, range }),
   setLive: (t: string, id: string, on: boolean) => req<{ live: boolean; object?: string; event?: string }>('POST', `/api/tenants/${t}/workflows/${id}/live`, { on }),
   setPackage: (t: string, on: boolean) => req('POST', `/api/tenants/${t}/package`, { on }),
+  grantAccess: (t: string) => req<{ granted: number; total: number }>('POST', `/api/tenants/${t}/grant-access`),
   workflows: (t: string) => req<WorkflowRow[]>('GET', `/api/tenants/${t}/workflows`),
   createWorkflow: (t: string, b: { name: string; graph: Workflow }) => req<{ id: string }>('POST', `/api/tenants/${t}/workflows`, b),
   saveWorkflow: (t: string, id: string, b: { name: string; graph: Workflow }) => req('PUT', `/api/tenants/${t}/workflows/${id}`, b),

@@ -66,9 +66,71 @@ public with sharing class CRMAgentsController {
         }
     }
 
+    /** Everything the panel shows for one record: agents, assistants, approvals and recent runs (one callout). */
+    @AuraEnabled
+    public static String home(String recordId, String objectApiName) {
+        try {
+            String path = '/sf/v1/home?user=' + System.EncodingUtil.urlEncode(System.UserInfo.getUserEmail(), 'UTF-8');
+            if (String.isNotBlank(objectApiName)) {
+                path += '&object=' + System.EncodingUtil.urlEncode(objectApiName, 'UTF-8');
+            }
+            if (String.isNotBlank(recordId)) {
+                path += '&recordId=' + System.EncodingUtil.urlEncode(recordId, 'UTF-8');
+            }
+            return CRMClient.okBody(CRMClient.call('GET', path, null));
+        } catch (Exception e) {
+            throw fail(e);
+        }
+    }
+
+    /** Ask an assistant, optionally about this record. historyJson: [{"role":"user|assistant","text":"..."}]. */
+    @AuraEnabled
+    public static String ask(String assistantId, String question, String recordId, String objectApiName, String historyJson) {
+        try {
+            Map<String, Object> body = new Map<String, Object>{ 'assistantId' => assistantId, 'question' => question };
+            if (String.isNotBlank(recordId)) {
+                body.put('recordId', recordId);
+            }
+            if (String.isNotBlank(objectApiName)) {
+                body.put('objectApiName', objectApiName);
+            }
+            if (String.isNotBlank(historyJson)) {
+                body.put('history', System.JSON.deserializeUntyped(historyJson));
+            }
+            return CRMClient.okBody(CRMClient.call('POST', '/sf/v1/ask', System.JSON.serialize(body)));
+        } catch (Exception e) {
+            throw fail(e);
+        }
+    }
+
+    /** Approve or reject, as the signed-in Salesforce user, with an optional note. */
+    @AuraEnabled
+    public static RunInfo decideWithNote(String runId, Boolean approve, String note) {
+        try {
+            Map<String, Object> body = new Map<String, Object>{ 'approve' => approve == true, 'userEmail' => System.UserInfo.getUserEmail() };
+            if (String.isNotBlank(note)) {
+                body.put('note', note);
+            }
+            return parse(CRMClient.okBody(CRMClient.call('POST', '/sf/v1/runs/' + System.EncodingUtil.urlEncode(runId, 'UTF-8') + '/decision', System.JSON.serialize(body))));
+        } catch (Exception e) {
+            throw fail(e);
+        }
+    }
+
     /** Shared by the LWC and the Flow action. waitSeconds > 0 makes the platform wait for the result. */
     public static RunInfo run(String workflowId, String recordId, String objectApiName, String input, Integer waitSeconds) {
-        Map<String, Object> body = new Map<String, Object>{ 'workflowId' => workflowId };
+        return run(workflowId, null, recordId, objectApiName, input, waitSeconds);
+    }
+
+    /** By agent id, or by its name (easier to use in Flow Builder). */
+    public static RunInfo run(String workflowId, String workflowName, String recordId, String objectApiName, String input, Integer waitSeconds) {
+        Map<String, Object> body = new Map<String, Object>{ 'userEmail' => System.UserInfo.getUserEmail() };
+        if (String.isNotBlank(workflowId)) {
+            body.put('workflowId', workflowId);
+        }
+        if (String.isNotBlank(workflowName)) {
+            body.put('workflowName', workflowName);
+        }
         if (String.isNotBlank(recordId)) {
             body.put('recordId', recordId);
         }

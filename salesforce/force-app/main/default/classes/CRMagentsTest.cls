@@ -2,7 +2,7 @@
 private class CRMagentsTest {
     private class Mock implements System.HttpCalloutMock {
         Integer status;
-        String body;
+        public String body;
         System.HttpRequest last;
         Mock(Integer status, String body) {
             this.status = status;
@@ -77,5 +77,53 @@ private class CRMagentsTest {
         } catch (System.AuraHandledException e) {
             System.assert(e.getMessage().contains('not connected'));
         }
+    }
+
+    @IsTest
+    static void homeAskAndDecideWithNote() {
+        configure();
+        Mock m = new Mock(200, '{"agents":[],"assistants":[],"approvals":[],"recent":[]}');
+        System.Test.setMock(System.HttpCalloutMock.class, m);
+        System.Test.startTest();
+        String h = CRMAgentsController.home('500000000000001', 'Case');
+        System.assert(h.contains('agents'));
+        System.assert(m.last.getEndpoint().contains('/sf/v1/home?user='));
+        System.assert(m.last.getEndpoint().contains('&object=Case&recordId=500000000000001'));
+        m.body = '{"answer":"4 open cases","runId":"r9"}';
+        String a = CRMAgentsController.ask('a1', 'How many?', '500000000000001', 'Case', '[{"role":"user","text":"hi"}]');
+        System.assert(a.contains('4 open cases'));
+        System.assert(m.last.getBody().contains('"history"'));
+        m.body = '{"runId":"r1","status":"done","output":"ok","steps":[]}';
+        CRMAgentsController.RunInfo d = CRMAgentsController.decideWithNote('r1', false, 'wrong category');
+        System.Test.stopTest();
+        System.assertEquals('done', d.status);
+        System.assert(m.last.getBody().contains('wrong category'));
+        System.assert(m.last.getBody().contains('userEmail'));
+    }
+
+    @IsTest
+    static void runsByNameAndAsksFromFlow() {
+        configure();
+        Mock m = new Mock(200, '{"runId":"r3","status":"done","output":"ok","steps":[]}');
+        System.Test.setMock(System.HttpCalloutMock.class, m);
+        CRMRunWorkflowAction.Request req = new CRMRunWorkflowAction.Request();
+        req.workflowName = 'Case triage';
+        req.recordId = '500000000000001';
+        System.Test.startTest();
+        List<CRMRunWorkflowAction.Result> ran = CRMRunWorkflowAction.run(new List<CRMRunWorkflowAction.Request>{ req });
+        System.assert(m.last.getBody().contains('"workflowName":"Case triage"'));
+        m.body = '{"answer":"Customer is upset about a late refund."}';
+        CRMAskAssistantAction.Request q = new CRMAskAssistantAction.Request();
+        q.assistantName = 'Support analyst';
+        q.question = 'Summarise this case';
+        q.recordId = '500000000000001';
+        q.objectApiName = 'Case';
+        List<CRMAskAssistantAction.Result> ans = CRMAskAssistantAction.ask(new List<CRMAskAssistantAction.Request>{ q });
+        System.Test.setMock(System.HttpCalloutMock.class, new Mock(404, '{"error":"Assistant not found"}'));
+        List<CRMAskAssistantAction.Result> bad = CRMAskAssistantAction.ask(new List<CRMAskAssistantAction.Request>{ q });
+        System.Test.stopTest();
+        System.assertEquals('ok', ran[0].output);
+        System.assertEquals('Customer is upset about a late refund.', ans[0].answer);
+        System.assertEquals('Assistant not found', bad[0].error);
     }
 }

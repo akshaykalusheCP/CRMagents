@@ -1,7 +1,7 @@
-import { MoreHorizontal, Plug } from 'lucide-react';
+import { ExternalLink, Loader2, MoreHorizontal, Plug } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, type Settings, type Tenant } from '../api';
-import { Menu, Panel, Status, Table, type Column } from '../components/ui';
+import { Drawer, Menu, Panel, Status, Table, toast, type Column } from '../components/ui';
 
 // Salesforce orgs: who is connected and in what state, how to connect another, and (rarely) your own login app.
 
@@ -16,6 +16,8 @@ export function ConnectionsPage({ tenants, onChange, goSettings }: { tenants: Te
   const [own, setOwn] = useState({ clientId: '', clientSecret: '' });
   const [ownErr, setOwnErr] = useState('');
   const [confirm, setConfirm] = useState<{ id: string; kind: 'disconnect' | 'panel' } | null>(null);
+  const [guide, setGuide] = useState<Tenant | null>(null);
+  const [granting, setGranting] = useState(false);
   const error = new URLSearchParams(location.search).get('error');
 
   useEffect(() => { api.settings().then(setS).catch(() => {}); }, []);
@@ -45,12 +47,17 @@ export function ConnectionsPage({ tenants, onChange, goSettings }: { tenants: Te
         {t.setup_message && st !== 'ready' && <span className="cell-sub">{t.setup_message}</span>}
       </div>;
     } },
-    { key: 'panel', header: 'Record-page panel', hideSm: true, render: (t) => <span className="muted">{t.use_package ? 'Installed' : 'Not installed'}</span> },
+    { key: 'panel', header: 'In Salesforce', render: (t) => {
+      const st = t.setup_status ?? 'pending';
+      if (t.use_package && BUSY.has(st)) return <span className="row muted small" style={{ gap: 6 }}><Loader2 size={14} className="spin" /> Installing…</span>;
+      if (t.use_package && st === 'ready') return <button className="link-btn" onClick={() => setGuide(t)}>Installed · set up <ExternalLink size={13} /></button>;
+      return <button className="sm primary" onClick={() => setConfirm({ id: t.id, kind: 'panel' })}>Install in Salesforce</button>;
+    } },
     { key: 'x', header: '', align: 'right', render: (t) => (
       <div className="row" style={{ gap: 6, justifyContent: 'flex-end' }}>
         {confirm?.id === t.id ? (
           <>
-            <span className="muted small">{confirm.kind === 'disconnect' ? 'Disconnect and delete its agents?' : 'Install the optional panel? Needs a Salesforce admin.'}</span>
+            <span className="muted small">{confirm.kind === 'disconnect' ? 'Disconnect and delete its agents?' : 'Install CRMagents in this org? Takes 2–4 minutes; needs a Salesforce admin.'}</span>
             <button className="sm" onClick={() => setConfirm(null)}>Cancel</button>
             <button className={'sm ' + (confirm.kind === 'disconnect' ? 'danger-solid' : 'primary')} onClick={async () => {
               setConfirm(null);
@@ -63,7 +70,7 @@ export function ConnectionsPage({ tenants, onChange, goSettings }: { tenants: Te
           <Menu align="right" trigger={() => <button className="ghost icon sm" aria-label="Org actions"><MoreHorizontal size={16} /></button>}>
             {(close) => <>
               <button className="mi" disabled={BUSY.has(t.setup_status ?? '')} onClick={async () => { close(); await api.setup(t.id); onChange(); }}>{t.setup_status === 'error' ? 'Retry setup' : 'Re-run setup'}</button>
-              {!t.use_package && <button className="mi" onClick={() => { close(); setConfirm({ id: t.id, kind: 'panel' }); }}>Add record-page panel</button>}
+              {t.use_package && <button className="mi" onClick={() => { close(); setGuide(t); }}>Set up in Salesforce</button>}
               <div className="msep" />
               <button className="mi danger" onClick={() => { close(); setConfirm({ id: t.id, kind: 'disconnect' }); }}>Disconnect</button>
             </>}
@@ -92,6 +99,27 @@ export function ConnectionsPage({ tenants, onChange, goSettings }: { tenants: Te
           </div>
         </div>
       </Panel>
+
+      <Drawer open={!!guide} onClose={() => setGuide(null)} title="Use CRMagents inside Salesforce" sub={guide && <span>{guide.sf_username} · installed</span>}>
+        {guide && (() => {
+          const base = guide.sf_instance_url.replace(/\/$/, '');
+          const link = (path: string, label: string) => <a className="link-btn" href={`${base}${path}`} target="_blank" rel="noreferrer">{label} <ExternalLink size={13} /></a>;
+          return (
+            <ol className="guide">
+              <li><b>Give people access</b><span>Everyone who should use agents in Salesforce needs the "CRMagents User" permission set.</span>
+                <div className="row" style={{ gap: 10 }}>
+                  <button className="sm primary" disabled={granting} onClick={async () => { setGranting(true); try { const r = await api.grantAccess(guide.id); toast(`Access given to ${r.granted} more user${r.granted === 1 ? '' : 's'} (${r.total} active)`); } catch (e) { toast((e as Error).message, 'bad'); } finally { setGranting(false); } }}>{granting ? <Loader2 size={14} className="spin" /> : null} Give everyone access</button>
+                  {link('/lightning/setup/PermSets/home', 'Or choose people')}
+                </div></li>
+              <li><b>Add the Agent Panel to record pages</b><span>Open a record page in Lightning App Builder, drag <i>CRMagents Agent Panel</i> onto it, then Save and Activate. It shows the agents for that kind of record, an assistant to ask, and approvals.</span>{link('/lightning/setup/FlexiPageList/home', 'Open Lightning pages')}</li>
+              <li><b>Put the assistant in the utility bar</b><span>In App Manager, edit your app → Utility Items → Add <i>CRMagents Agent Panel</i>. It's then one click away on every page.</span>{link('/lightning/setup/NavigationMenus/home', 'Open App Manager')}</li>
+              <li><b>Add the "Ask CRMagents" button</b><span>Ready for Accounts, Cases, Contacts, Leads and Opportunities. In Object Manager → the object → Page Layouts → Mobile &amp; Lightning Actions, drag in <i>Ask CRMagents</i>.</span>{link('/lightning/setup/ObjectManager/Case/PageLayouts/view', 'Open Case page layouts')}</li>
+              <li><b>Use agents in your Flows</b><span>In Flow Builder add an Action and search "CRMagents": <i>Run CRMagents agent</i> (by name) and <i>Ask CRMagents assistant</i> (returns the answer, e.g. to save a case summary).</span>{link('/builder_platform_interaction/flowBuilder.app', 'Open Flow Builder')}</li>
+              <li><b>Approvals come to Salesforce</b><span>When an agent waits for approval, the approver gets a Salesforce notification (the bell) that opens the record. Nothing to set up.</span></li>
+            </ol>
+          );
+        })()}
+      </Drawer>
 
       <details className="panel adv">
         <summary>Advanced: use your own Salesforce login app</summary>
