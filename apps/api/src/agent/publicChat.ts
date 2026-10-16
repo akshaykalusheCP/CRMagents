@@ -117,23 +117,24 @@ export function websiteSpec(a: { id: string; system_prompt: string; public_cases
 }
 
 /** Turn website chat on/off for an assistant; the key is created on first use. */
-export async function setPublicChat(tenantId: string, agentId: string, b: { enabled: boolean; origins: string; cases: boolean; greeting: string; selfService?: unknown }) {
+export async function setPublicChat(tenantId: string, agentId: string, b: { enabled: boolean; origins: string; cases: boolean; greeting: string; selfService?: unknown; sms?: boolean }) {
   const { rows } = await pool.query('select public_key from agents where id=$1 and tenant_id=$2', [agentId, tenantId]);
   if (!rows[0]) throw Object.assign(new Error('assistant not found'), { statusCode: 404 });
   const key = rows[0].public_key ?? `pc_${randomBytes(18).toString('base64url')}`;
-  await pool.query('update agents set public_key=$2, public_enabled=$3, public_origins=$4, public_cases=$5, public_greeting=$6, public_config=coalesce($7, public_config) where id=$1',
-    [agentId, key, b.enabled, b.origins.slice(0, 2000), b.cases, b.greeting.slice(0, 300), b.selfService === undefined ? null : JSON.stringify(normalizeConfig(b.selfService))]);
+  await pool.query('update agents set public_key=$2, public_enabled=$3, public_origins=$4, public_cases=$5, public_greeting=$6, public_config=coalesce($7, public_config), sms_enabled=coalesce($8, sms_enabled) where id=$1',
+    [agentId, key, b.enabled, b.origins.slice(0, 2000), b.cases, b.greeting.slice(0, 300), b.selfService === undefined ? null : JSON.stringify(normalizeConfig(b.selfService)), b.sms ?? null]);
   return publicChatInfo(tenantId, agentId);
 }
 
 export async function publicChatInfo(tenantId: string, agentId: string) {
-  const { rows } = await pool.query('select public_key, public_enabled, public_origins, public_cases, public_greeting, public_config from agents where id=$1 and tenant_id=$2', [agentId, tenantId]);
+  const { rows } = await pool.query('select public_key, public_enabled, public_origins, public_cases, public_greeting, public_config, sms_enabled from agents where id=$1 and tenant_id=$2', [agentId, tenantId]);
   const a = rows[0];
   if (!a) throw Object.assign(new Error('assistant not found'), { statusCode: 404 });
   const base = config.bridgeUrl.replace(/\/$/, '');
   return {
     enabled: a.public_enabled, origins: a.public_origins, cases: a.public_cases, greeting: a.public_greeting,
     selfService: { ...DEFAULT_CONFIG, ...normalizeConfig(Object.keys(a.public_config ?? {}).length ? a.public_config : DEFAULT_CONFIG) },
+    sms: { enabled: !!a.sms_enabled, webhookUrl: a.public_key ? `${base}/public/twilio/${a.public_key}` : '' },
     snippet: a.public_key ? `<script src="${base}/public/widget.js" data-crmagents-key="${a.public_key}" async></script>` : '',
   };
 }

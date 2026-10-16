@@ -23,7 +23,7 @@ function route(method: string, url: URL, body: any): Response {
   if (p === '/t/agents' && method === 'GET') return json(DEMO_ASSISTANTS);
   if (/^\/t\/agents\/[^/]+\/run$/.test(p)) return json({ runId: 'x', output: body.history?.length ? 'Of those 9, 4 are High priority: 00001042, 00001039, 00001031 and 00001027.' : '**9 open cases**, mostly high priority.\n\n- **High:** 4 (oldest is 00001042, 12 days)\n- **Medium:** 3\n- **Low:** 2\n- Two are **past their SLA**: 00001042 and 00001039' });
   if (p === '/api/tools') return json(DEMO_TOOLS);
-  if (/^\/t\/agents\/[^/]+\/public$/.test(p)) return json({ enabled: true, origins: 'https://www.demo-company.com', cases: true, greeting: 'Hi! Ask me about our products, or check on your order.', snippet: '<script src="https://app.crmagents.example/public/widget.js" data-crmagents-key="pc_demo" async></script>',
+  if (/^\/t\/agents\/[^/]+\/public$/.test(p)) return json({ enabled: true, origins: 'https://www.demo-company.com', cases: true, greeting: 'Hi! Ask me about our products, or check on your order.', sms: { enabled: true, webhookUrl: 'https://app.crmagents.example/public/twilio/pc_demo' }, snippet: '<script src="https://app.crmagents.example/public/widget.js" data-crmagents-key="pc_demo" async></script>',
     selfService: { verify: true, handoff: true, updatable: ['Phone', 'MailingStreet', 'MailingCity'],
       records: [{ object: 'Case', label: 'Your cases', match: 'contact', fields: ['CaseNumber', 'Subject', 'Status'] }, { object: 'Order', label: 'Your orders', match: 'account', fields: ['OrderNumber', 'Status', 'TotalAmount', 'EffectiveDate'] }],
       actions: [{ key: 'flow:Start_Return', label: 'Start a return', description: 'For delivered orders under 30 days old' }] } });

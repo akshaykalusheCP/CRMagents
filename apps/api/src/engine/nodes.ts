@@ -1,4 +1,6 @@
 import { findOwners, freeTimes } from '../salesforce/meetings.js';
+import { sendText } from '../channels/twilio.js';
+import { accountOf } from '../tenants.js';
 import { parseJsonLoose, type CallOptions, type Effort, type Llm } from '../agent/llm.js';
 import { addUsage, type Usage } from '../agent/pricing.js';
 import type { Example } from './learn.js';
@@ -371,6 +373,21 @@ export const EXECUTORS: Record<string, Executor> = {
       body: JSON.stringify({ text: render(node.config.text, scope) }),
     });
     return { output: { ok: res.ok } };
+  },
+
+  // A text message (SMS or WhatsApp) from the workspace's Twilio number.
+  async 'notify.sms'(node, scope, env) {
+    const to = cfg(node, 'to', scope);
+    let body = render(node.config.text, scope).trim();
+    const channel = node.config.channel === 'whatsapp' ? 'whatsapp' : 'sms';
+    if (!to || !body) throw new Error('A phone number and the message are needed');
+    if (env.unmask) body = env.unmask(body);
+    await env.guard?.({ approved: env.approved, action: 'message', object: channel === 'whatsapp' ? 'WhatsApp' : 'SMS', values: { to, text: body } });
+    if (env.dryRun) return { output: { sent: false, wouldDo: `Text ${to} (${channel})`, text: body } };
+    const tenantId = env.run?.tenantId;
+    if (!tenantId) throw new Error('No workspace for this run');
+    const r = await sendText(await accountOf(tenantId), { to, body, channel });
+    return { output: { sent: true, to, sid: r.sid } };
   },
 
   async 'knowledge.search'(node, scope, env) {

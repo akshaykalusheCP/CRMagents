@@ -2,7 +2,7 @@
 // so the model only spends tokens on understanding the request, not on wiring blocks together.
 
 export const OPERATORS = ['equals', 'not_equals', 'contains', 'greater_than', 'less_than', 'is_empty', 'not_empty'] as const;
-export const ACTIONS = ['classify', 'extract', 'ai_write', 'research', 'query', 'create_task', 'update_record', 'create_record', 'notify_slack', 'run_action', 'wait', 'search_knowledge', 'suggest', 'delete_record', 'read_files', 'attach_file', 'web_research', 'read_emails', 'reply_email', 'meeting_times'] as const;
+export const ACTIONS = ['classify', 'extract', 'ai_write', 'research', 'query', 'create_task', 'update_record', 'create_record', 'notify_slack', 'run_action', 'wait', 'search_knowledge', 'suggest', 'delete_record', 'read_files', 'attach_file', 'web_research', 'read_emails', 'reply_email', 'meeting_times', 'send_text'] as const;
 
 export type Action = (typeof ACTIONS)[number];
 
@@ -140,6 +140,7 @@ Steps run in order. Actions:
 - suggest: show advice on the record's page in Salesforce (subject = short title, message = the text, usually {stepN.text} of an ai_write). Changes nothing in Salesforce, so it needs no approval. Prefer it over update_record when the admin wants a recommendation, suggested reply or next steps "on the case/record".
 - web_research: AI searches the internet (company or person background, news, funding, competitors) and writes what it found with sources. instruction = what to find out, e.g. "What does {record.Company} do, how big is it and any recent news?". Output: text. Costs about $0.05 per run.
 - read_emails: the email conversation on the case (Email-to-Case). No AI. A later ai_write automatically gets it.
+- send_text: SMS or WhatsApp from the company's Twilio number. subject = the phone number (usually {record.MobilePhone} or {record.Phone}), message = the text (often {stepN.text} of an ai_write), object = "whatsapp" for WhatsApp, else SMS. Keep texts short.
 - meeting_times: free times on the record owner's Salesforce calendar (or the people in message, emails separated by commas), to offer in an email written by a later ai_write (it gets the list automatically). Output: text (a list of times).
 - reply_email: answer the customer by email in the case's thread (message = the reply, usually {stepN.text} of an ai_write). send_now false (default) = a person checks, edits and sends it from the case; true only when the admin clearly wants replies sent automatically.
 - read_files: the text of the files attached to the triggering record (PDF, Word, text). No AI. A later ai_write automatically gets it.

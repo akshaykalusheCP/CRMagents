@@ -6,7 +6,7 @@ import type { Plan, PlanStep } from './plan.js';
 
 /** Steps that change data or contact people (an email reply only when it is sent without a person). */
 const isWrite = (t: PlanStep) => WRITES.has(t.action) || (t.action === 'reply_email' && !!t.send_now);
-const WRITES = new Set(['create_task', 'update_record', 'create_record', 'run_action', 'delete_record', 'attach_file']);
+const WRITES = new Set(['create_task', 'update_record', 'create_record', 'run_action', 'delete_record', 'attach_file', 'send_text']);
 // Rough per-run cost of each AI action (USD), from typical prompt sizes at current prices.
 const COST: Record<string, number> = { classify: 0.0003, extract: 0.004, ai_write: 0.01, research: 0.03, web_research: 0.05 };
 const KNOWLEDGE_RULES = 'Base the steps on the knowledge sections given and cite them like [1]. If they do not cover the problem, say so in one line and give general guidance. Be concise.';
@@ -354,6 +354,17 @@ export function compilePlan(plan: Plan): CompileResult {
         node = add('logic.wait', { mode: 'For a while', amount: Math.max(1, s.wait_amount ?? 1), unit: s.wait_unit ?? 'days' }, 'Wait');
         keys = new Set(['waitedUntil']);
         break;
+      case 'send_text': {
+        const to = convert(s.subject, i);
+        const lastAi = [...stepNodes.slice(0, i)].reverse().find((x) => x?.action === 'ai_write' || x?.action === 'research');
+        const text = convert(s.message, i) || (lastAi ? `{{${lastAi.id}.text}}` : '');
+        if (!to) errors.push(`step ${i + 1}: send_text needs the phone number (subject), e.g. {record.MobilePhone}`);
+        if (!text) errors.push(`step ${i + 1}: send_text needs the message`);
+        node = add('notify.sms', { to, channel: /whatsapp/i.test(s.object) ? 'whatsapp' : 'sms', text }, /whatsapp/i.test(s.object) ? 'WhatsApp message' : 'Text message');
+        warnings.push('Connect Twilio in Settings → AI & spending → Text messages.');
+        keys = new Set(['sent', 'to']);
+        break;
+      }
       case 'notify_slack':
         node = add('notify.slack', { webhookUrl: '', text: convert(s.message, i) }, 'Slack');
         warnings.push('Paste your Slack webhook URL into the Slack block.');
@@ -448,6 +459,7 @@ function describe(s: PlanStep, plan: Plan): string {
     case 'update_record': return `Updates the ${plan.trigger_object}: ${s.fields.map((f) => f.field).join(', ')}`;
     case 'create_record': return `Creates a ${s.object}${s.fields.length ? ` (${s.fields.map((f) => f.field).join(', ')})` : ''}`;
     case 'notify_slack': return 'Posts a Slack message';
+    case 'send_text': return /whatsapp/i.test(s.object) ? 'Sends a WhatsApp message' : 'Sends a text message';
     case 'run_action': return `${actionLabel(s.org_action ?? '')} (your org's own automation)`;
     case 'wait': return `Waits ${s.wait_amount ?? 1} ${s.wait_unit ?? 'days'}`;
     case 'search_knowledge': return 'Looks up your uploaded guides (no AI)';

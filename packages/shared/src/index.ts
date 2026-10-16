@@ -400,6 +400,18 @@ export const NODE_DEFS: NodeDef[] = [
     outputs: ['ok'],
   },
   {
+    type: 'notify.sms',
+    label: 'Text message (SMS / WhatsApp)',
+    category: 'Integration',
+    description: "Send an SMS or WhatsApp message from your Twilio number (Settings → AI & spending → Text messages). WhatsApp only reaches people who messaged you in the last 24 hours, unless you use an approved template.",
+    fields: [
+      { key: 'to', label: 'To', kind: 'text', placeholder: '{{trigger.record.MobilePhone}}', help: 'International format, like +14155550100.' },
+      { key: 'channel', label: 'Send as', kind: 'select', options: ['sms', 'whatsapp'], default: 'sms' },
+      { key: 'text', label: 'Message', kind: 'textarea', placeholder: 'Hi {{trigger.record.FirstName}}, …' },
+    ],
+    outputs: ['sent', 'to', 'sid'],
+  },
+  {
     type: 'util.set',
     label: 'Set values',
     category: 'Utility',
@@ -418,7 +430,7 @@ export const NODE_DEFS: NodeDef[] = [
 ];
 
 /** Steps that change data or send it out; each can ask a person first. */
-export const WRITE_NODE_TYPES = ['sf.createRecord', 'sf.updateRecord', 'sf.deleteRecord', 'sf.upsertRecord', 'sf.createTask', 'sf.action', 'notify.slack', 'http.request', 'sf.attachFile', 'sf.emailReply'];
+export const WRITE_NODE_TYPES = ['sf.createRecord', 'sf.updateRecord', 'sf.deleteRecord', 'sf.upsertRecord', 'sf.createTask', 'sf.action', 'notify.slack', 'http.request', 'sf.attachFile', 'sf.emailReply', 'notify.sms'];
 for (const d of NODE_DEFS) {
   if (!WRITE_NODE_TYPES.includes(d.type)) continue;
   d.fields.push(
@@ -712,6 +724,9 @@ export const USE_CASES: UseCase[] = [
   { id: 'lead-research', area: 'Sales', title: 'Research new leads on the web', cost: '~ $0.05',
     problem: 'Reps go into first calls knowing nothing about the company.',
     request: 'When a new Lead is created, research the lead\'s company on the web: what they do, size, recent news and funding. Create a task for the lead owner with a short briefing and two talking points.' },
+  { id: 'case-solved-text', area: 'Service', title: 'Text customers when their case is solved', cost: 'free',
+    problem: 'Customers keep calling to ask if their issue is fixed.',
+    request: 'When a Case is closed, send the case contact a short SMS on their mobile phone saying it is solved, with the case number, and that they can reply to this text if they still need help. Ask before sending.' },
   { id: 'offer-meeting', area: 'Sales', title: 'Offer meeting times to new leads', cost: '~ $0.01',
     problem: 'Inbound leads wait days for a reply, and back-and-forth over times loses them.',
     request: 'When a new Lead is created from the website, find 3 free times on the lead owner\'s calendar, write a short friendly email to the lead offering them, and send it to the lead with the Send Email action. Ask the owner before sending.' },

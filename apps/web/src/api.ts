@@ -52,7 +52,7 @@ export interface SelfService {
   handoff: boolean;
   meetings: { enabled: boolean; with: string[]; durationMin: number; days: number; subject: string };
 }
-export interface PublicChat { enabled: boolean; origins: string; cases: boolean; greeting: string; snippet: string; selfService: SelfService }
+export interface PublicChat { enabled: boolean; origins: string; cases: boolean; greeting: string; snippet: string; selfService: SelfService; sms?: { enabled: boolean; webhookUrl: string } }
 export interface Agent { id: string; name: string; systemPrompt: string; tools: string[] }
 export interface AssistantTest { id: string; question: string; expect: string; mustInclude: string[]; mustNot: string[] }
 export interface TestResult { testId: string; question: string; answer: string; pass: boolean; reasons: string[]; tools: string[]; costUsd: number; ms: number; error?: string }
@@ -126,6 +126,7 @@ export interface Settings {
   maskPii?: string; maskFields?: string; maxAiCalls?: string; maxToolCalls?: string; maxTokens?: string; retentionDays?: string;
   aiProvider?: string; providerKey?: { set: boolean }; aiBaseUrl?: string; aiModel?: string; aiFastModel?: string; aiPriceIn?: string; aiPriceOut?: string;
   auditInSalesforce?: string; alertEmails?: string; autoPauseAfter?: string;
+  twilioSid?: string; twilioToken?: { set: boolean }; twilioSms?: string; twilioWhatsapp?: string;
 }
 
 export interface Me { id: string; email: string; accountName: string; role: string }
@@ -178,7 +179,7 @@ export const api = {
   run: (t: string, id: string, input: string, history?: { role: 'user' | 'assistant'; text: string }[]) =>
     req<{ runId: string; output: string }>('POST', `/api/tenants/${t}/agents/${id}/run`, { input, history }),
   publicChat: (t: string, agentId: string) => req<PublicChat>('GET', `/api/tenants/${t}/agents/${agentId}/public`),
-  setPublicChat: (t: string, agentId: string, b: Omit<PublicChat, 'snippet'>) => req<PublicChat>('PUT', `/api/tenants/${t}/agents/${agentId}/public`, b),
+  setPublicChat: (t: string, agentId: string, b: Omit<PublicChat, 'snippet' | 'sms'> & { sms?: boolean }) => req<PublicChat>('PUT', `/api/tenants/${t}/agents/${agentId}/public`, b),
   sfPages: (t: string, object?: string) => req<{ utilityBars: SfPage[]; recordPages: SfPage[] }>('GET', `/api/tenants/${t}/salesforce/pages${object ? `?object=${encodeURIComponent(object)}` : ''}`),
   addToUtilityBar: (t: string, pageId: string) => req<{ changed: boolean; label: string }>('POST', `/api/tenants/${t}/salesforce/pages/utility`, { pageId }),
   addToRecordPage: (t: string, object: string, pageId?: string) => req<{ changed: boolean; id: string; label: string; activateUrl: string | null }>('POST', `/api/tenants/${t}/salesforce/pages/record`, { object, pageId }),

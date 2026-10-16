@@ -741,3 +741,5 @@ select.sm { height: 30px; padding: 0 28px 0 8px; font-size: 13px; width: auto; }
 :root .at .at-pick span { font-size: 12.5px; color: var(--muted); }
 @media (max-width: 640px) { :root .at .at-why { display: none; } :root .at .at-detail { padding-left: 12px; } }
 :root .msg.ai .save-test { align-self: flex-start; margin: 4px 0 0 2px; font-size: 12.5px; }
+:root .tm { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
+:root .tm h3 { margin: 0; font-size: 15px; font-weight: 600; }

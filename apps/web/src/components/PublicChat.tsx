@@ -1,4 +1,4 @@
-import { Copy, Globe, Loader2 } from 'lucide-react';
+import { Copy, Globe, Loader2, MessageSquare } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, type PublicChat } from '../api';
 import { toast } from './ui';
@@ -12,11 +12,12 @@ export function PublicChatSettings({ tenantId, agentId }: { tenantId: string; ag
   const [busy, setBusy] = useState(false);
   useEffect(() => { setC(null); api.publicChat(tenantId, agentId).then(setC).catch(() => {}); }, [tenantId, agentId]);
   if (!c) return null;
-  const save = async (next: Partial<PublicChat>) => {
+  const save = async (next: Partial<Omit<PublicChat, 'sms'>>, sms?: boolean) => {
     const b = { ...c, ...next };
     setBusy(true);
     try {
-      setC(await api.setPublicChat(tenantId, agentId, { enabled: b.enabled, origins: b.origins, cases: b.cases, greeting: b.greeting, selfService: b.selfService }));
+      setC(await api.setPublicChat(tenantId, agentId, { enabled: b.enabled, origins: b.origins, cases: b.cases, greeting: b.greeting, selfService: b.selfService, sms }));
+      if (sms !== undefined) toast(sms ? 'Text messages on' : 'Text messages off');
       if ('enabled' in next) toast(b.enabled ? 'Website chat on' : 'Website chat off');
       if ('selfService' in next) toast('Self-service saved');
     }
@@ -55,6 +56,28 @@ export function PublicChatSettings({ tenantId, agentId }: { tenantId: string; ag
           </div>
         </>
       )}
+
+      <div className="tm">
+        <div className="row between">
+          <h3 className="row" style={{ gap: 6 }}><MessageSquare size={16} /> Text messages</h3>
+          <label className="row small" style={{ gap: 6 }}>
+            <input type="checkbox" checked={!!c.sms?.enabled} onChange={(e) => void save({}, e.target.checked)} disabled={busy} /> {c.sms?.enabled ? 'On' : 'Off'}
+          </label>
+        </div>
+        <p className="muted small" style={{ margin: '4px 0 0' }}>
+          Customers text your Twilio number by SMS or WhatsApp and this assistant answers, with the same rules and self-service as on the website.
+          It remembers each conversation for 24 hours. Connect Twilio in Settings → AI &amp; spending first.
+        </p>
+        {c.sms?.enabled && c.sms.webhookUrl && (
+          <>
+            <p className="small" style={{ margin: '10px 0 6px' }}><b>In Twilio</b> <span className="muted">(Phone Numbers → your number → Messaging → "A message comes in": Webhook, HTTP POST; for WhatsApp, the same URL on your sender)</span></p>
+            <div className="row" style={{ gap: 6 }}>
+              <pre className="code-sample" style={{ margin: 0, flex: 1 }}>{c.sms.webhookUrl}</pre>
+              <button onClick={() => { void navigator.clipboard.writeText(c.sms!.webhookUrl).then(() => toast('URL copied')); }} aria-label="Copy URL"><Copy size={14} /></button>
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

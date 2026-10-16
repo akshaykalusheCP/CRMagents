@@ -31,10 +31,14 @@ export const SETTING_KEYS = {
   impactMinutes: 'IMPACT_MINUTES',
   alertEmails: 'ALERT_EMAILS',
   autoPauseAfter: 'AUTO_PAUSE_AFTER',
+  twilioSid: 'TWILIO_ACCOUNT_SID',
+  twilioToken: 'TWILIO_AUTH_TOKEN',
+  twilioSms: 'TWILIO_SMS_FROM',
+  twilioWhatsapp: 'TWILIO_WHATSAPP_FROM',
 } as const;
 
 /** Settings shown as plain values in the UI (not secrets). */
-export const PLAIN_SETTINGS: SettingName[] = ['sfClientId', 'sfLoginUrl', 'dailyBudgetUsd', 'anthropicWorkspaceId', 'aiCacheHours', 'maskPii', 'maskFields', 'maxAiCalls', 'maxToolCalls', 'maxTokens', 'retentionDays', 'aiProvider', 'aiBaseUrl', 'aiModel', 'aiFastModel', 'aiPriceIn', 'aiPriceOut', 'auditInSalesforce', 'impactHourlyRate', 'impactMinutes', 'alertEmails', 'autoPauseAfter'];
+export const PLAIN_SETTINGS: SettingName[] = ['sfClientId', 'sfLoginUrl', 'dailyBudgetUsd', 'anthropicWorkspaceId', 'aiCacheHours', 'maskPii', 'maskFields', 'maxAiCalls', 'maxToolCalls', 'maxTokens', 'retentionDays', 'aiProvider', 'aiBaseUrl', 'aiModel', 'aiFastModel', 'aiPriceIn', 'aiPriceOut', 'auditInSalesforce', 'impactHourlyRate', 'impactMinutes', 'alertEmails', 'autoPauseAfter', 'twilioSid', 'twilioSms', 'twilioWhatsapp'];
 export type SettingName = keyof typeof SETTING_KEYS;
 
 export async function getSetting(accountId: string, name: SettingName): Promise<string | undefined> {

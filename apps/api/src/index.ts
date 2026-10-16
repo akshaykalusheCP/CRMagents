@@ -38,6 +38,7 @@ import { impact, setAssumptions } from './insights/impact.js';
 import { config } from './config.js';
 import { deleteTest, listTestRuns, listTests, recentQuestions, saveTest, startTestRun } from './agent/tests.js';
 import { registerTeam } from './team.js';
+import { registerTwilio } from './channels/twilio.js';
 import { listAlerts, markAlertsRead } from './alerts.js';
 import { migrate, pool } from './db.js';
 import { buildAuthorizeUrl, handleCallback, redirectUri, validateOwnApp } from './salesforce/oauth.js';
@@ -52,6 +53,7 @@ registerWebhooks(app);
 registerPublicChat(app);
 registerAuth(app);
 registerTeam(app);
+registerTwilio(app);
 
 app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
   const code = err instanceof z.ZodError ? 400 : (err.statusCode ?? 500);
@@ -143,6 +145,10 @@ const settingsBody = z.object({
   aiFastModel: z.string().max(100).regex(/^[\w.:/-]*$/, 'Model name').optional(),
   aiPriceIn: z.string().regex(/^(\d+(\.\d+)?)?$/, 'USD per million tokens').optional(),
   alertEmails: z.enum(['on', 'off', '']).optional(),
+  twilioSid: z.string().regex(/^(AC[0-9a-fA-F]{32})?$/, 'Twilio Account SID starts with AC').optional(),
+  twilioToken: z.string().max(100).optional(),
+  twilioSms: z.string().regex(/^(\+\d{7,15})?$/, 'SMS number in international format, like +14155550100').optional(),
+  twilioWhatsapp: z.string().regex(/^((whatsapp:)?\+\d{7,15})?$/, 'WhatsApp sender like +14155238886').optional(),
   autoPauseAfter: z.string().regex(/^(\d{1,2})?$/, 'A whole number of failures in a row (0 never pauses)').optional(),
   aiPriceOut: z.string().regex(/^(\d+(\.\d+)?)?$/, 'USD per million tokens').optional(),
   auditInSalesforce: z.enum(['on', 'off', '']).optional(),
@@ -604,7 +610,7 @@ app.get('/api/tenants/:tenantId/agents/:agentId/public', async (req) => {
 });
 app.put('/api/tenants/:tenantId/agents/:agentId/public', async (req) => {
   const { tenantId, agentId } = req.params as { tenantId: string; agentId: string };
-  const b = z.object({ enabled: z.boolean(), origins: z.string().max(2000).default(''), cases: z.boolean().default(true), greeting: z.string().max(300).default(''), selfService: z.unknown().optional() }).parse(req.body);
+  const b = z.object({ enabled: z.boolean(), origins: z.string().max(2000).default(''), cases: z.boolean().default(true), greeting: z.string().max(300).default(''), selfService: z.unknown().optional(), sms: z.boolean().optional() }).parse(req.body);
   return setPublicChat(tenantId, agentId, b);
 });
 

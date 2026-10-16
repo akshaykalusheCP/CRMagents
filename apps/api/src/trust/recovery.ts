@@ -62,6 +62,8 @@ export async function recoverRuns(log: { error: (o: unknown, m: string) => void 
 
 /** Clear inputs, AI replies and tool results from runs older than each workspace's retention (default 30 days). */
 export async function purgeOldRuns(): Promise<number> {
+  // Text conversations are only remembered for a day; keep a month for support, then let them go.
+  await pool.query("delete from channel_messages where created_at < now() - interval '30 days'").catch(() => undefined);
   const { rows } = await pool.query('select id as tenant_id, account_id from tenants');
   const { getSetting } = await import('../settings.js');
   let n = 0;

@@ -82,7 +82,7 @@ async function window(tenantId: string, from: Date, to: Date, a: Assumptions) {
   const decisionMinutes: number[] = [];
 
   for (const r of rows as RunRow[]) {
-    const kind = r.workflow_id ? 'agent' : r.agent_id ? (r.started_by === 'website' ? 'website' : 'assistant') : 'other';
+    const kind = r.workflow_id ? 'agent' : r.agent_id ? (['website', 'sms', 'whatsapp'].includes(r.started_by ?? '') ? 'website' : 'assistant') : 'other';
     if (kind === 'other') { t.otherCost += r.cost; continue; }
     t.runs++; t.agentCost += r.cost;
     if (r.status === 'done') t.ok++; else if (r.status === 'error') t.failed++; else if (r.status === 'waiting' || r.status === 'sleeping') t.waiting++;
