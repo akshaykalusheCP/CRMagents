@@ -1,12 +1,12 @@
 {
   "packageDirectories": [
     {
-      "versionName": "ver 0.7",
-      "versionNumber": "0.7.0.NEXT",
+      "versionName": "ver 0.8",
+      "versionNumber": "0.8.0.NEXT",
       "path": "force-app",
       "default": true,
       "package": "CRMagents",
-      "versionDescription": "Assistants act as the user, agent activity record, files, one-click page setup"
+      "versionDescription": "Email replies on cases: threaded sending, suggested replies people edit and send"
     }
   ],
   "name": "crmagents",
@@ -24,6 +24,8 @@
     "CRMagents@0.4.0-1": "04tQy000000aB8DIAU",
     "CRMagents@0.5.0-1": "04tQy000000aB9pIAE",
     "CRMagents@0.6.0-1": "04tQy000000aBHtIAM",
-    "CRMagents@0.7.0-1": "04tQy000000aBkvIAE"
+    "CRMagents@0.7.0-1": "04tQy000000aBkvIAE",
+    "CRMagents@0.8.0-1": "04tQy000000aBxpIAE",
+    "CRMagents@0.8.0-2": "04tQy000000aBzRIAU"
   }
 }

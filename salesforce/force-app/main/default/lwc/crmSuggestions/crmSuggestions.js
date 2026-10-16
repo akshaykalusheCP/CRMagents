@@ -4,6 +4,8 @@ import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import suggestions from '@salesforce/apex/CRMAgentsController.suggestions';
 import rateSuggestion from '@salesforce/apex/CRMAgentsController.rateSuggestion';
 import activity from '@salesforce/apex/CRMAgentsController.activity';
+import sendSuggestedReply from '@salesforce/apex/CRMAgentsController.sendSuggestedReply';
+import markSuggestionSent from '@salesforce/apex/CRMAgentsController.markSuggestionSent';
 import { markdownToHtml } from 'c/crmMarkdown';
 
 const CHANNEL = '/event/CRMagents_Run_Event__e';
@@ -64,7 +66,12 @@ export default class CrmSuggestions extends LightningElement {
                     by: s.agentName ? s.agentName + ' · ' + ago(s.createdAt) : ago(s.createdAt),
                     sourceText: (s.sources || []).map((x) => x.title + (x.section ? ' (' + x.section + ')' : '')).join('; '),
                     helpful: s.status === 'helpful',
-                    notHelpful: s.status === 'not_helpful'
+                    notHelpful: s.status === 'not_helpful',
+                    isReply: s.kind === 'email_reply' && s.status !== 'sent',
+                    wasSent: s.status === 'sent',
+                    to: (s.meta && s.meta.to) || '',
+                    subject: (s.meta && s.meta.subject) || '',
+                    draft: (s.body || '').replace(/\*\*(.+?)\*\*/g, '$1')
                 }));
                 this.error = undefined;
             })
@@ -102,6 +109,27 @@ export default class CrmSuggestions extends LightningElement {
     helpful() { this.rate('helpful'); }
     notHelpful() { this.rate('not_helpful'); }
     dismiss() { this.rate('dismissed'); }
+
+    sending = false;
+    editDraft(e) {
+        const s = this.latest;
+        if (s) this.items = [{ ...s, draft: e.target.value }, ...this.items.slice(1)];
+    }
+
+    // The person sends the agent's reply (as edited), from Salesforce, in the case's email thread.
+    sendReply() {
+        const s = this.latest;
+        if (!s || !s.draft || !s.draft.trim() || this.sending) return;
+        this.sending = true;
+        sendSuggestedReply({ suggestionId: s.id, caseId: this.recordId, toAddress: s.to, subject: s.subject, body: s.draft, inReplyToId: s.meta && s.meta.inReplyToId })
+            .then(() => markSuggestionSent({ suggestionId: s.id }).catch(() => {}))
+            .then(() => {
+                this.items = [{ ...s, isReply: false, wasSent: true, status: 'sent' }, ...this.items.slice(1)];
+                this.toast('Reply sent to ' + (s.to || 'the customer'), 'success');
+            })
+            .catch((e) => this.toast((e && e.body && e.body.message) || 'Could not send', 'error'))
+            .finally(() => { this.sending = false; });
+    }
 
     copy() {
         const s = this.latest;

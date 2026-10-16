@@ -243,6 +243,30 @@ public with sharing class CRMAgentsController {
         }
     }
 
+    /**
+     * Sends an agent's suggested email reply as the signed-in user (they may have edited it), then marks the
+     * suggestion as used. Email first (no callout before it), the CRMagents update after.
+     */
+    @AuraEnabled
+    public static void sendSuggestedReply(String suggestionId, String caseId, String toAddress, String subject, String body, String inReplyToId) {
+        try {
+            String html = body == null ? '' : body.escapeHtml4().replace('\n', '<br/>');
+            CRMCaseEmail.send(caseId, toAddress, subject, html, inReplyToId);
+        } catch (Exception e) {
+            throw fail(e);
+        }
+    }
+
+    @AuraEnabled
+    public static void markSuggestionSent(String suggestionId) {
+        try {
+            String body = System.JSON.serialize(new Map<String, Object>{ 'status' => 'sent', 'userEmail' => System.UserInfo.getUserEmail() });
+            CRMClient.okBody(CRMClient.call('POST', '/sf/v1/suggestions/' + System.EncodingUtil.urlEncode(suggestionId, 'UTF-8'), body));
+        } catch (Exception e) {
+            throw fail(e);
+        }
+    }
+
     /** What agents changed on this record (read inside Salesforce: no callout, no API use). */
     @AuraEnabled
     public static List<CRMagents_Agent_Activity__c> activity(String recordId) {

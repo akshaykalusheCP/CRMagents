@@ -214,6 +214,31 @@ export const NODE_DEFS: NodeDef[] = [
     outputs: ['id', 'created'],
   },
   {
+    type: 'sf.emailThread',
+    label: 'Read email conversation',
+    category: 'Salesforce',
+    description: "The emails on a case (Email-to-Case), oldest first, with quoted earlier messages cut off. Works from a case or one of its emails.",
+    fields: [
+      { key: 'recordId', label: 'Case or email Id', kind: 'text', placeholder: '{{trigger.recordId}}' },
+      { key: 'max', label: 'At most this many emails', kind: 'number', default: 15 },
+    ],
+    outputs: ['text', 'lastFrom', 'lastSubject', 'caseId', 'count'],
+  },
+  {
+    type: 'sf.emailReply',
+    label: 'Reply by email',
+    category: 'Salesforce',
+    description: 'Answer the customer on the case, in the same email thread. "A person sends it" puts the reply on the case for an agent to check, edit and send; "Send now" sends it right away.',
+    fields: [
+      { key: 'recordId', label: 'Case or email Id', kind: 'text', placeholder: '{{trigger.recordId}}' },
+      { key: 'body', label: 'Reply', kind: 'textarea', placeholder: '{{ai_agent_1.text}}' },
+      { key: 'mode', label: 'How it goes out', kind: 'select', options: ['suggest', 'send'], default: 'suggest', help: 'suggest = a person checks and sends it from the case (recommended); send = it goes out now.' },
+      { key: 'to', label: 'To (optional)', kind: 'text', placeholder: 'The customer who wrote last' },
+      { key: 'subject', label: 'Subject (optional)', kind: 'text', placeholder: 'Re: their subject' },
+    ],
+    outputs: ['sent', 'to', 'subject', 'text'],
+  },
+  {
     type: 'sf.readFiles',
     label: 'Read files',
     category: 'Salesforce',
@@ -380,7 +405,7 @@ export const NODE_DEFS: NodeDef[] = [
 ];
 
 /** Steps that change data or send it out; each can ask a person first. */
-export const WRITE_NODE_TYPES = ['sf.createRecord', 'sf.updateRecord', 'sf.deleteRecord', 'sf.upsertRecord', 'sf.createTask', 'sf.action', 'notify.slack', 'http.request', 'sf.attachFile'];
+export const WRITE_NODE_TYPES = ['sf.createRecord', 'sf.updateRecord', 'sf.deleteRecord', 'sf.upsertRecord', 'sf.createTask', 'sf.action', 'notify.slack', 'http.request', 'sf.attachFile', 'sf.emailReply'];
 for (const d of NODE_DEFS) {
   if (!WRITE_NODE_TYPES.includes(d.type)) continue;
   d.fields.push(

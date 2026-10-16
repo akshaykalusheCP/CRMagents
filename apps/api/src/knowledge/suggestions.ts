@@ -10,17 +10,20 @@ export interface Suggestion {
   title: string;
   body: string;
   sources: { title: string; section: string }[];
-  status: 'new' | 'helpful' | 'not_helpful' | 'dismissed';
+  status: 'new' | 'helpful' | 'not_helpful' | 'dismissed' | 'sent';
+  /** 'note' or 'email_reply' (a reply a person can edit and send from the case). */
+  kind: string;
+  meta: { to?: string; subject?: string; inReplyToId?: string };
   agentName: string | null;
   decidedBy: string | null;
   createdAt: string;
 }
 
-export async function saveSuggestion(tenantId: string, s: { recordId: string; objectName?: string; title?: string; body: string; sources?: unknown[]; workflowId?: string; runId?: string }) {
+export async function saveSuggestion(tenantId: string, s: { recordId: string; objectName?: string; title?: string; body: string; sources?: unknown[]; workflowId?: string; runId?: string; kind?: string; meta?: Record<string, unknown> }) {
   const { rows } = await pool.query(
-    `insert into suggestions (tenant_id, record_id, object_name, title, body, sources, workflow_id, run_id)
-     values ($1,$2,$3,$4,$5,$6,$7,$8) returning id`,
-    [tenantId, s.recordId, s.objectName ?? '', (s.title ?? '').slice(0, 200), s.body.slice(0, 20_000), JSON.stringify(s.sources ?? []), s.workflowId ?? null, s.runId ?? null],
+    `insert into suggestions (tenant_id, record_id, object_name, title, body, sources, workflow_id, run_id, kind, meta)
+     values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id`,
+    [tenantId, s.recordId, s.objectName ?? '', (s.title ?? '').slice(0, 200), s.body.slice(0, 20_000), JSON.stringify(s.sources ?? []), s.workflowId ?? null, s.runId ?? null, s.kind ?? 'note', JSON.stringify(s.meta ?? {})],
   );
   return rows[0].id as string;
 }
@@ -30,7 +33,7 @@ export async function recordSuggestions(tenantId: string, recordId: string, limi
   // Salesforce shows 18-character Ids in some places and 15 in others: match both.
   const short = recordId.slice(0, 15);
   const { rows } = await pool.query(
-    `select s.id, s.record_id as "recordId", s.object_name as "objectName", s.title, s.body, s.sources, s.status,
+    `select s.id, s.record_id as "recordId", s.object_name as "objectName", s.title, s.body, s.sources, s.status, s.kind, s.meta,
             w.name as "agentName", s.decided_by as "decidedBy", s.created_at as "createdAt"
      from suggestions s left join workflows w on w.id = s.workflow_id
      where s.tenant_id=$1 and left(s.record_id, 15)=$2 and s.status <> 'dismissed'
@@ -42,7 +45,7 @@ export async function recordSuggestions(tenantId: string, recordId: string, limi
 
 export async function listSuggestions(tenantId: string, limit = 50): Promise<Suggestion[]> {
   const { rows } = await pool.query(
-    `select s.id, s.record_id as "recordId", s.object_name as "objectName", s.title, s.body, s.sources, s.status,
+    `select s.id, s.record_id as "recordId", s.object_name as "objectName", s.title, s.body, s.sources, s.status, s.kind, s.meta,
             w.name as "agentName", s.decided_by as "decidedBy", s.created_at as "createdAt"
      from suggestions s left join workflows w on w.id = s.workflow_id
      where s.tenant_id=$1 order by s.created_at desc limit $2`,
@@ -51,7 +54,7 @@ export async function listSuggestions(tenantId: string, limit = 50): Promise<Sug
   return rows;
 }
 
-export async function markSuggestion(tenantId: string, id: string, status: 'helpful' | 'not_helpful' | 'dismissed', who?: string) {
+export async function markSuggestion(tenantId: string, id: string, status: 'helpful' | 'not_helpful' | 'dismissed' | 'sent', who?: string) {
   const r = await pool.query(
     'update suggestions set status=$3, decided_by=$4, decided_at=now() where id=$2 and tenant_id=$1',
     [tenantId, id, status, who?.toLowerCase() ?? null],

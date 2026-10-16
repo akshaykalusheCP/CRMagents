@@ -10,6 +10,7 @@ import { hitSources, hitsToText, searchKnowledge } from '../knowledge/store.js';
 import { saveSuggestion } from '../knowledge/suggestions.js';
 import { usePrefetched } from './prefetch.js';
 import { fileNameFor, recordFilesText } from '../salesforce/files.js';
+import { emailThread, sendCaseReply } from '../salesforce/email.js';
 
 export interface Env {
   sf: SalesforceClient;
@@ -228,6 +229,37 @@ export const EXECUTORS: Record<string, Executor> = {
     await env.guard?.({ approved: env.approved, action: 'update', object: sobject, values: fields });
     if (env.dryRun) return { output: { id: '(preview)', created: false, wouldDo: `Create or update ${sobject} where ${field} = ${value}`, fields } };
     return { output: await env.sf.upsertRecord(sobject, field, value, fields) };
+  },
+
+  async 'sf.emailThread'(node, scope, env) {
+    const recordId = cfg(node, 'recordId', scope) || String(scope.trigger?.recordId ?? '');
+    if (!recordId) throw new Error('Which case?');
+    return { output: await emailThread(env.sf, recordId, Number(node.config.max) || 15) };
+  },
+
+  // Reply to the customer's email on a case. "suggest": a person checks it and clicks Send on the case;
+  // "send": it goes out now (an approval step or "ask first" can stand in front of it).
+  async 'sf.emailReply'(node, scope, env) {
+    const recordId = cfg(node, 'recordId', scope) || String(scope.trigger?.recordId ?? '');
+    let body = render(node.config.body, scope).trim();
+    if (!recordId || !body) throw new Error('A case and the reply text are needed');
+    if (env.unmask) body = env.unmask(body);
+    const t = await emailThread(env.sf, recordId, 3);
+    const to = cfg(node, 'to', scope) || t.lastFrom;
+    const subject = cfg(node, 'subject', scope) || (t.lastSubject ? (/^re:/i.test(t.lastSubject) ? t.lastSubject : `Re: ${t.lastSubject}`) : '');
+    const mode = node.config.mode === 'send' ? 'send' : 'suggest';
+    if (mode === 'send') {
+      await env.guard?.({ approved: env.approved, action: 'email', object: 'Case', values: { to, subject }, recordId: t.caseId });
+      if (env.dryRun) return { output: { sent: false, wouldDo: `Email ${to || 'the customer'}: ${subject}`, text: body } };
+      await sendCaseReply(env.sf, { caseId: t.caseId, to, subject, body, inReplyToId: t.lastEmailId });
+      return { output: { sent: true, to, subject, text: body } };
+    }
+    if (env.dryRun || !env.run) return { output: { sent: false, wouldDo: `Suggest a reply to ${to || 'the customer'} on the case`, text: body } };
+    const id = await saveSuggestion(env.run.tenantId, {
+      recordId: t.caseId, objectName: 'Case', title: cfg(node, 'title', scope) || 'Suggested reply', body,
+      workflowId: env.run.workflowId, runId: env.run.runId, kind: 'email_reply', meta: { to, subject, inReplyToId: t.lastEmailId },
+    });
+    return { output: { sent: false, suggestionId: id, to, subject, text: body } };
   },
 
   async 'sf.readFiles'(node, scope, env) {

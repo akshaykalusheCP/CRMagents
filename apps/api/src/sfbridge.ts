@@ -267,7 +267,7 @@ FORMAT (mandatory, overrides any other style instruction): you are answering in 
   });
 
   app.post('/sf/v1/suggestions/:id', async (req) => {
-    const b = z.object({ status: z.enum(['helpful', 'not_helpful', 'dismissed']), userEmail: z.string().max(200).optional() }).parse(req.body);
+    const b = z.object({ status: z.enum(['helpful', 'not_helpful', 'dismissed', 'sent']), userEmail: z.string().max(200).optional() }).parse(req.body);
     await markSuggestion(req.sfTenant!.tenantId, (req.params as { id: string }).id, b.status, b.userEmail);
     return { ok: true };
   });

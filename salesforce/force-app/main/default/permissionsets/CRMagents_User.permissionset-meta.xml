@@ -16,6 +16,10 @@
         <apexClass>CRMToolRunner</apexClass>
         <enabled>true</enabled>
     </classAccesses>
+    <classAccesses>
+        <apexClass>CRMCaseEmail</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
     <description>Lets users run CRMagents agents, ask assistants and approve changes from Salesforce.</description>
     <fieldPermissions>
         <editable>false</editable>

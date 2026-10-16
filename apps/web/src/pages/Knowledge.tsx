@@ -108,10 +108,10 @@ export function KnowledgePage({ tenant, onAutomate }: { tenant?: Tenant; onAutom
   ];
 
   const sugCols: Column<RecordSuggestion>[] = [
-    { key: 't', header: 'Suggestion', render: (s) => <div className="cell-main"><b>{s.title || 'Suggestion'}</b><span className="cell-sub kb-snip">{s.body.replace(/[*#>`_]/g, '').slice(0, 140)}</span></div> },
+    { key: 't', header: 'Suggestion', render: (s) => <div className="cell-main"><b>{s.title || 'Suggestion'}{s.kind === 'email_reply' && s.meta?.to ? <span className="cell-sub"> · reply to {s.meta.to}</span> : null}</b><span className="cell-sub kb-snip">{s.body.replace(/[*#>`_]/g, '').slice(0, 140)}</span></div> },
     { key: 'r', header: 'Record', hideSm: true, render: (s) => tenant ? <a href={`${tenant.sf_instance_url}/${s.recordId}`} target="_blank" rel="noreferrer" className="kb-rec">{s.objectName || 'Record'} {s.recordId.slice(-6)}</a> : s.recordId },
     { key: 'a', header: 'Agent', hideSm: true, render: (s) => s.agentName ?? '—' },
-    { key: 's', header: 'Feedback', render: (s) => s.status === 'helpful' ? <Status tone="ok">Helpful</Status> : s.status === 'not_helpful' ? <Status tone="bad">Not helpful</Status> : s.status === 'dismissed' ? <Status tone="neutral">Dismissed</Status> : <Status tone="info">New</Status> },
+    { key: 's', header: 'Feedback', render: (s) => s.status === 'sent' ? <Status tone="ok">Sent by email</Status> : s.status === 'helpful' ? <Status tone="ok">Helpful</Status> : s.status === 'not_helpful' ? <Status tone="bad">Not helpful</Status> : s.status === 'dismissed' ? <Status tone="neutral">Dismissed</Status> : <Status tone="info">New</Status> },
     { key: 'w', header: '', hideSm: true, render: (s) => <span className="cell-sub">{ago(s.createdAt)}</span> },
   ];
 

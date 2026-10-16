@@ -4,6 +4,8 @@ import type { Plan, PlanStep } from './plan.js';
 // Turns a Plan into a ready-to-run workflow entirely in code: blocks, wiring, {{references}}, approval before
 // writes, cheap models where they were shown to be safe, and a plain-English summary with a cost estimate.
 
+/** Steps that change data or contact people (an email reply only when it is sent without a person). */
+const isWrite = (t: PlanStep) => WRITES.has(t.action) || (t.action === 'reply_email' && !!t.send_now);
 const WRITES = new Set(['create_task', 'update_record', 'create_record', 'run_action', 'delete_record', 'attach_file']);
 // Rough per-run cost of each AI action (USD), from typical prompt sizes at current prices.
 const COST: Record<string, number> = { classify: 0.0003, extract: 0.004, ai_write: 0.01, research: 0.03, web_research: 0.05 };
@@ -43,7 +45,7 @@ export function compilePlan(plan: Plan): CompileResult {
 
   let x = 0;
   const add = (type: string, config: Record<string, unknown>, label?: string, y = 120): WFNode => {
-    const prefix = { 'trigger.salesforce': 'trigger', 'trigger.manual': 'trigger', 'sf.getRecord': 'sf_get', 'logic.branch': 'branch', 'logic.approval': 'approval', 'util.output': 'output', 'ai.classify': 'ai_classify', 'ai.extract': 'ai_extract', 'ai.agent': 'ai_agent', 'sf.query': 'sf_query', 'sf.createTask': 'sf_task', 'sf.updateRecord': 'sf_update', 'sf.createRecord': 'sf_create', 'notify.slack': 'slack', 'sf.action': 'sf_action', 'logic.wait': 'wait', 'knowledge.search': 'kb', 'crm.suggest': 'suggest', 'trigger.webhook': 'trigger', 'trigger.schedule': 'trigger', 'sf.deleteRecord': 'sf_delete', 'sf.readFiles': 'files', 'sf.attachFile': 'attach' }[type] ?? 'node';
+    const prefix = { 'trigger.salesforce': 'trigger', 'trigger.manual': 'trigger', 'sf.getRecord': 'sf_get', 'logic.branch': 'branch', 'logic.approval': 'approval', 'util.output': 'output', 'ai.classify': 'ai_classify', 'ai.extract': 'ai_extract', 'ai.agent': 'ai_agent', 'sf.query': 'sf_query', 'sf.createTask': 'sf_task', 'sf.updateRecord': 'sf_update', 'sf.createRecord': 'sf_create', 'notify.slack': 'slack', 'sf.action': 'sf_action', 'logic.wait': 'wait', 'knowledge.search': 'kb', 'crm.suggest': 'suggest', 'trigger.webhook': 'trigger', 'trigger.schedule': 'trigger', 'sf.deleteRecord': 'sf_delete', 'sf.readFiles': 'files', 'sf.attachFile': 'attach', 'sf.emailThread': 'emails', 'sf.emailReply': 'reply' }[type] ?? 'node';
     const n: WFNode = { id: nextId(prefix), type, position: { x, y }, config, ...(label ? { label } : {}) };
     if (y === 120) x += 280;
     nodes.push(n);
@@ -136,10 +138,10 @@ export function compilePlan(plan: Plan): CompileResult {
   let loopObject = '';
   let result = '';
   plan.steps.forEach((s, i) => {
-    if (WRITES.has(s.action) && plan.require_approval && !approvalAdded) {
+    if (isWrite(s) && plan.require_approval && !approvalAdded) {
       approvalAdded = true;
       // The approval message shows real values (case number, category, field values), not placeholders.
-      const changes = plan.steps.map((t, j) => (WRITES.has(t.action) ? `- ${changeText(t, plan, (x) => convertQuiet(x, j))}` : '')).filter(Boolean).join('\n');
+      const changes = plan.steps.map((t, j) => (isWrite(t) ? `- ${changeText(t, plan, (x) => convertQuiet(x, j))}` : '')).filter(Boolean).join('\n');
       const a = add('logic.approval', { message: `Approve these changes?\n${changes}` }, 'Approve changes');
       link(a);
       prev = { id: a.id, handle: 'approved' };
@@ -196,11 +198,14 @@ export function compilePlan(plan: Plan): CompileResult {
         const kbIdx = lastKb ? stepNodes.indexOf(lastKb) + 1 : 0;
         const lastFiles = [...stepNodes.slice(0, i)].reverse().find((x) => x?.action === 'read_files');
         const filesIdx = lastFiles ? stepNodes.indexOf(lastFiles) + 1 : 0;
+        const lastEmails = [...stepNodes.slice(0, i)].reverse().find((x) => x?.action === 'read_emails');
+        const emailsIdx = lastEmails ? stepNodes.indexOf(lastEmails) + 1 : 0;
+        const emailsFeed = lastEmails && !new RegExp(`\\{step${emailsIdx}\\.`).test(s.instruction) ? `\n\nEmail conversation (newest last):\n{{${lastEmails.id}.text}}` : '';
         const filesFeed = lastFiles && !new RegExp(`\\{step${filesIdx}\\.`).test(s.instruction) ? `\n\nFiles on the record:\n{{${lastFiles.id}.text}}` : '';
         const kb = lastKb && !new RegExp(`\\{step${kbIdx}\\.`).test(s.instruction) ? `\n\nFrom our knowledge base:\n{{${lastKb.id}.text}}` : '';
         node = add('ai.agent', {
           instructions: lastKb ? `Do exactly what the task asks. ${KNOWLEDGE_RULES}` : 'Do exactly what the task asks. Be concise.',
-          prompt: convert(s.instruction, i) + data + feed + filesFeed + kb + where,
+          prompt: convert(s.instruction, i) + data + feed + emailsFeed + filesFeed + kb + where,
           tools: s.action === 'research' ? READ_TOOLS : [],
         }, s.action === 'research' ? 'AI research' : 'AI write');
         keys = new Set(['text']);
@@ -296,6 +301,21 @@ export function compilePlan(plan: Plan): CompileResult {
         keys = new Set(['text']);
         result = `{{${node.id}.text}}`;
         break;
+      case 'read_emails':
+        if (!isRecord && !inLoop) errors.push(`step ${i + 1}: read_emails needs a record trigger or a per-record query before it`);
+        node = add('sf.emailThread', { recordId: inLoop ? '{{item.Id}}' : '{{trigger.recordId}}', max: 15 }, 'Read emails');
+        keys = new Set(['text', 'lastFrom', 'lastSubject', 'caseId', 'count']);
+        break;
+      case 'reply_email': {
+        if (!isRecord && !inLoop) errors.push(`step ${i + 1}: reply_email needs a record trigger or a per-record query before it`);
+        const lastAi = [...stepNodes.slice(0, i)].reverse().find((x) => x?.action === 'ai_write' || x?.action === 'research');
+        const body = convert(s.message || '', i) || (lastAi ? `{{${lastAi.id}.text}}` : '');
+        if (!body) errors.push(`step ${i + 1}: reply_email needs the reply text (usually {stepN.text} of an ai_write)`);
+        node = add('sf.emailReply', { recordId: inLoop ? '{{item.Id}}' : '{{trigger.recordId}}', body, mode: s.send_now ? 'send' : 'suggest', to: '', subject: '' }, s.send_now ? 'Send email reply' : 'Suggest email reply');
+        keys = new Set(['sent', 'to', 'subject', 'text']);
+        result = result || body;
+        break;
+      }
       case 'read_files':
         if (!isRecord && !inLoop) errors.push(`step ${i + 1}: read_files needs a record trigger or a per-record query before it`);
         node = add('sf.readFiles', { recordId: inLoop ? '{{item.Id}}' : '{{trigger.recordId}}', maxFiles: 5 }, 'Read files');
@@ -338,10 +358,10 @@ export function compilePlan(plan: Plan): CompileResult {
 
     if (s.action === 'query' && s.per_record && !inLoop) {
       const later = plan.steps.slice(i + 1);
-      if (plan.require_approval && later.some((t) => WRITES.has(t.action)) && !approvalAdded) {
+      if (plan.require_approval && later.some((t) => isWrite(t)) && !approvalAdded) {
         // One approval for the whole batch, before the loop (approvals can't pause inside a loop).
         approvalAdded = true;
-        const changes = later.filter((t) => WRITES.has(t.action)).map((t) => `- ${changeText(t, plan, (x) => x.replace(/\{(?:item|record|step\d+)\.([\w.]+)\}/g, '[$1]'))}`).join('\n');
+        const changes = later.filter((t) => isWrite(t)).map((t) => `- ${changeText(t, plan, (x) => x.replace(/\{(?:item|record|step\d+)\.([\w.]+)\}/g, '[$1]'))}`).join('\n');
         const a = add('logic.approval', { message: `For each of the {{${node.id}.totalSize}} ${s.object} records found:\n${changes}\n\nRecords:\n{{${node.id}.table}}` }, 'Approve batch');
         link(a);
         prev = { id: a.id, handle: 'approved' };
@@ -397,6 +417,7 @@ function changeText(s: PlanStep, plan: Plan, conv: (t: string) => string): strin
     case 'create_record': return `Create ${s.object}: ${s.fields.map((f) => `${f.field} = ${conv(f.value)}`).join(', ')}`;
     case 'run_action': return `${actionLabel(s.org_action ?? '')}${s.fields.length ? `: ${s.fields.map((f) => `${f.field} = ${conv(f.value)}`).join(', ')}` : ''}`;
     case 'delete_record': return `Delete this ${plan.trigger_object}`;
+    case 'reply_email': return `Email the customer: ${cut(conv(s.message || 'the drafted reply'), 60)}`;
     case 'attach_file': return `Attach file "${conv(s.subject || 'CRMagents note')}" to this ${plan.trigger_object}`;
     default: return s.action;
   }
@@ -419,6 +440,8 @@ function describe(s: PlanStep, plan: Plan): string {
     case 'delete_record': return `Deletes the ${plan.trigger_object} (Recycle Bin)`;
     case 'read_files': return 'Reads the files attached to the record (no AI)';
     case 'web_research': return `AI researches on the web: ${cut(s.instruction)}`;
+    case 'read_emails': return 'Reads the email conversation on the case (no AI)';
+    case 'reply_email': return s.send_now ? 'Emails the reply to the customer' : 'Puts the reply on the case for a person to check and send';
     case 'attach_file': return `Attaches "${cut(s.subject || 'CRMagents note', 40)}" as a file on the record`;
     case 'suggest': return `Shows "${cut(s.subject || 'Suggestion', 40)}" on the record in Salesforce (changes nothing)`;
     default: return s.action;

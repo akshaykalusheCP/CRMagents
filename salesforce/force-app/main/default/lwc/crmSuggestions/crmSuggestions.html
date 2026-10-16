@@ -25,9 +25,19 @@
                         </div>
                         <span class="badge">AI generated</span>
                     </div>
-                    <div class="sug-body md"><lightning-formatted-rich-text value={latest.html}></lightning-formatted-rich-text></div>
+                    <template lwc:if={latest.isReply}>
+                        <p class="reply-meta">To <b>{latest.to}</b><template lwc:if={latest.subject}> · {latest.subject}</template></p>
+                        <lightning-textarea class="reply-box" label="Reply" variant="label-hidden" value={latest.draft} onchange={editDraft}></lightning-textarea>
+                    </template>
+                    <template lwc:else>
+                        <div class="sug-body md"><lightning-formatted-rich-text value={latest.html}></lightning-formatted-rich-text></div>
+                    </template>
+                    <template lwc:if={latest.wasSent}><p class="reply-meta">Sent to {latest.to}</p></template>
                     <template lwc:if={latest.sourceText}><p class="sources"><lightning-icon icon-name="utility:knowledge_base" size="xx-small"></lightning-icon> {latest.sourceText}</p></template>
                     <div class="sug-actions">
+                        <template lwc:if={latest.isReply}>
+                            <lightning-button variant="brand" label="Send reply" icon-name="utility:email" onclick={sendReply} disabled={sending}></lightning-button>
+                        </template>
                         <lightning-button label="Copy" icon-name="utility:copy" onclick={copy}></lightning-button>
                         <lightning-button-icon icon-name="utility:like" variant={helpfulVariant} alternative-text="Helpful" title="Helpful" onclick={helpful}></lightning-button-icon>
                         <lightning-button-icon icon-name="utility:dislike" variant={notHelpfulVariant} alternative-text="Not helpful" title="Not helpful" onclick={notHelpful}></lightning-button-icon>

@@ -26,7 +26,8 @@ export interface KnowledgeSource { id: string; kind: 'articles' | 'library'; lib
 export interface KnowledgeHit { docId: string; title: string; heading: string; body: string; rank: number }
 export interface RecordSuggestion {
   id: string; recordId: string; objectName: string; title: string; body: string; sources: { title: string; section: string }[];
-  status: 'new' | 'helpful' | 'not_helpful' | 'dismissed'; agentName: string | null; decidedBy: string | null; createdAt: string;
+  status: 'new' | 'helpful' | 'not_helpful' | 'dismissed' | 'sent'; agentName: string | null; decidedBy: string | null; createdAt: string;
+  kind?: string; meta?: { to?: string; subject?: string };
 }
 export interface SfPage { id: string; label: string; managed: boolean }
 export interface SelfService {
