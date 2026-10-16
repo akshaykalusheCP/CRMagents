@@ -565,3 +565,23 @@
 :root .app .tnav-right .org-btn .n { max-width: 150px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @media (max-width: 1280px) { :root .app .tnav-right .org-btn .n { max-width: 90px; } :root .app .tnav-links { gap: 16px; } }
 @media (max-width: 1000px) { :root .app .tnav-links { overflow-x: auto; flex: 1 1 auto; } }
+
+/* Navbar: smaller items, more room between them. */
+:root .app-top .tnav-link, :root .app-top .tnav-link:not(.on) { font-size: 13px; font-weight: 500; letter-spacing: 0; }
+:root .app .tnav-links { gap: 28px; }
+:root .app .tnav-inner { gap: 40px; }
+:root .app .tnav-brand { font-size: 17px; }
+:root .app .tnav-brand .brand-mark { width: 18px; height: 18px; }
+:root .app .tnav-brand .brand-mark svg { width: 11px; height: 11px; }
+:root .app .tnav-link .count { min-width: 15px; height: 15px; font-size: 10px; }
+:root .app .tnav-right { gap: 8px; }
+:root .app .tnav-right .ghost.icon { width: 28px; height: 28px; }
+:root .app .tnav-right .ghost.icon svg { width: 15px; height: 15px; }
+:root .app .tnav-right .org-btn { height: 30px; font-size: 12px; }
+:root .app .tnav-cta { height: 30px; padding: 0 12px; font-size: 12.5px; }
+:root .app .acct, :root .app .acct .ws-mark { width: 26px; height: 26px; }
+@media (max-width: 1280px) { :root .app .tnav-links { gap: 20px; } :root .app .tnav-inner { gap: 28px; } }
+:root .app .tnav-links { gap: 24px; }
+:root .app .tnav-inner { gap: 32px; }
+:root .app .tnav-right .org-btn .n { max-width: 120px; }
+@media (max-width: 1400px) { :root .app .tnav-links { gap: 18px; } :root .app .tnav-inner { gap: 24px; } :root .app .tnav-right .org-btn .n { max-width: 90px; } }
