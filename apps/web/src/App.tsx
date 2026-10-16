@@ -54,6 +54,8 @@ export function App() {
   const [tenantId, setTenantId] = useState<string>(() => { try { return localStorage.getItem('tenantId') ?? ''; } catch { return ''; } });
   const [theme, toggleTheme] = useTheme();
   const [cmdk, setCmdk] = useState(false);
+  const [settingsAt, setSettingsAt] = useState<{ section: 'orgs' | 'ai' | 'rules'; connect?: boolean; n: number }>({ section: 'orgs', n: 0 });
+  const openSettings = (section: 'orgs' | 'ai' | 'rules' = 'orgs', connect = false) => { setSettingsAt((s) => ({ section, connect, n: s.n + 1 })); setTab('settings'); };
   const [agentList, setAgentList] = useState<WorkflowRow[]>([]);
 
   const reload = () =>
@@ -111,6 +113,7 @@ export function App() {
   const commands: Command[] = [
     ...(Object.keys(LABEL) as Tab[]).map((t) => ({ id: `go-${t}`, label: LABEL[t], group: 'Pages', run: () => setTab(t) })),
     { id: 'new-agent', label: 'New agent', hint: 'Build by chatting', group: 'Actions', run: () => newAgent() },
+    { id: 'connect-org', label: 'Connect a Salesforce org', group: 'Actions', run: () => openSettings('orgs', true) },
     { id: 'theme', label: theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode', group: 'Actions', run: toggleTheme },
     ...agentList.map((w) => ({ id: `a-${w.id}`, label: w.name, hint: w.live ? 'On' : 'Off', group: 'Agents', run: () => setTab('agents') })),
   ];
@@ -176,12 +179,12 @@ export function App() {
                       </button>
                     ))}
                     <div className="msep" />
-                    <button className="mi" onClick={() => { close(); setTab('settings'); }}><Plus size={15} /> Connect another org</button>
+                    <button className="mi" onClick={() => { close(); openSettings('orgs', true); }}><Plus size={15} /> Connect another org</button>
                   </>
                 )}
               </Menu>
             ) : (
-              <button className="primary sm" onClick={() => setTab('settings')}>Connect Salesforce</button>
+              <button className="primary sm" onClick={() => openSettings('orgs', true)}>Connect Salesforce</button>
             )}
             <button className="ghost icon" onClick={toggleTheme} title={theme === 'dark' ? 'Light mode' : 'Dark mode'}>{theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}</button>
           </div>
@@ -194,7 +197,7 @@ export function App() {
           {tab === 'agents' && <WorkflowsPage tenant={tenant} goConnections={() => setTab('settings')} incoming={incoming} onIncomingOpened={() => setIncoming(null)} prefill={prefill} onPrefillUsed={() => setPrefill(null)} />}
           {tab === 'approvals' && <ApprovalsPage tenant={tenant} onChange={refreshWaiting} me={me.email} />}
           {tab === 'activity' && <RunsPage tenant={tenant} goSettings={() => setTab('settings')} />}
-          {tab === 'settings' && <SettingsHub tenants={tenants} tenant={tenant} onChange={reload} />}
+          {tab === 'settings' && <SettingsHub key={settingsAt.n} section={settingsAt.section} focusConnect={settingsAt.connect} tenants={tenants} tenant={tenant} onChange={reload} />}
         </main>
       </div>
       <CommandPalette open={cmdk} onClose={() => setCmdk(false)} commands={commands} />

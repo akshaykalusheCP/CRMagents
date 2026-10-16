@@ -412,3 +412,4 @@
 :root .guide b { font-weight: 600; }
 :root .guide span { color: var(--text-2); font-size: 14px; line-height: 1.5; }
 :root .guide a { align-self: flex-start; }
+:root .panel.flash { box-shadow: 0 0 0 3px var(--accent-soft), 0 0 0 1px var(--accent); transition: box-shadow .3s; }

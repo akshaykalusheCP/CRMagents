@@ -19,9 +19,9 @@ export function PageHeader({ title, description, actions, children }: { title: R
   );
 }
 
-export function Panel({ title, action, children, flush, className = '' }: { title?: ReactNode; action?: ReactNode; children: ReactNode; flush?: boolean; className?: string }) {
+export function Panel({ title, action, children, flush, className = '', id }: { title?: ReactNode; action?: ReactNode; children: ReactNode; flush?: boolean; className?: string; id?: string }) {
   return (
-    <section className={`panel ${flush ? 'flush' : ''} ${className}`}>
+    <section id={id} className={`panel ${flush ? 'flush' : ''} ${className}`}>
       {(title || action) && <div className="panel-head"><h2>{title}</h2>{action}</div>}
       <div className="panel-body">{children}</div>
     </section>

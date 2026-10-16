@@ -9,7 +9,7 @@ const needsReconnect = (t: Tenant) => t.setup_status === 'error' && /reconnect/i
 const BUSY = new Set(['pending', 'installing', 'configuring']);
 const LABEL: Record<string, string> = { pending: 'Setting up', installing: 'Installing', configuring: 'Configuring', ready: 'Ready', error: 'Needs attention' };
 
-export function ConnectionsPage({ tenants, onChange, goSettings }: { tenants: Tenant[]; onChange: () => void; goSettings: () => void }) {
+export function ConnectionsPage({ tenants, onChange, goSettings, focusConnect }: { tenants: Tenant[]; onChange: () => void; goSettings: () => void; focusConnect?: boolean }) {
   const [s, setS] = useState<Settings>();
   const [sandbox, setSandbox] = useState(false);
   const [domain, setDomain] = useState('');
@@ -21,6 +21,14 @@ export function ConnectionsPage({ tenants, onChange, goSettings }: { tenants: Te
   const error = new URLSearchParams(location.search).get('error');
 
   useEffect(() => { api.settings().then(setS).catch(() => {}); }, []);
+  const toConnect = () => {
+    const el = document.getElementById('connect-org');
+    el?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    el?.classList.add('flash');
+    setTimeout(() => el?.classList.remove('flash'), 1600);
+    document.getElementById('sf-domain')?.focus({ preventScroll: true });
+  };
+  useEffect(() => { if (focusConnect) setTimeout(toConnect, 150); }, [focusConnect]);
   const busy = tenants.some((t) => BUSY.has(t.setup_status ?? ''));
   useEffect(() => {
     if (!busy) return;
@@ -85,9 +93,9 @@ export function ConnectionsPage({ tenants, onChange, goSettings }: { tenants: Te
       {!configured && s && <div className="banner warn"><div><b>Salesforce login app not set</b><span>Add the app's Consumer Key under AI &amp; spending → Advanced before connecting orgs.</span></div><button className="sm" onClick={goSettings}>Open</button></div>}
       {error && <div className="banner bad"><div><b>Couldn't connect</b><span>{error}</span></div></div>}
 
-      {tenants.length > 0 && <Panel flush title="Connected orgs"><Table columns={cols} rows={tenants} rowKey={(t) => t.id} /></Panel>}
+      {tenants.length > 0 && <Panel flush title="Connected orgs" action={<button className="sm" onClick={toConnect}><Plug size={14} /> Connect another org</button>}><Table columns={cols} rows={tenants} rowKey={(t) => t.id} /></Panel>}
 
-      <Panel title={tenants.length ? 'Connect another org' : 'Connect your Salesforce org'}>
+      <Panel className="connect-panel" id="connect-org" title={tenants.length ? 'Connect another org' : 'Connect your Salesforce org'}>
         <div className="form">
           <div className="frow">
             <div className="flabel"><b>Login</b><span>You log in on Salesforce's own page. Nothing is installed in your org.</span></div>
