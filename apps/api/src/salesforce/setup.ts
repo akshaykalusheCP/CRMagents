@@ -91,11 +91,13 @@ async function ensurePermission(tenantId: string, sf: SalesforceClient) {
   const { rows } = await pool.query('select sf_user_id from tenants where id=$1', [tenantId]);
   const userId: string | null = rows[0]?.sf_user_id;
   if (!userId) return;
-  const ps = await sf.query("SELECT Id FROM PermissionSet WHERE Name = 'CRMagents_User' LIMIT 1");
-  const psId = (ps.records[0] as { Id?: string } | undefined)?.Id;
-  if (!psId) return;
-  const has = await sf.query(`SELECT Id FROM PermissionSetAssignment WHERE AssigneeId = '${userId}' AND PermissionSetId = '${psId}' LIMIT 1`);
-  if (!has.records.length) await sf.createRecord('PermissionSetAssignment', { AssigneeId: userId, PermissionSetId: psId });
+  // The connected user uses the panel like everyone else, and records agent activity (Integration).
+  const ps = await sf.query("SELECT Id, Name FROM PermissionSet WHERE Name IN ('CRMagents_User', 'CRMagents_Integration')");
+  const ids = (ps.records as { Id: string }[]).map((r) => r.Id);
+  if (!ids.length) return;
+  const has = new Set(((await sf.query(`SELECT PermissionSetId FROM PermissionSetAssignment WHERE AssigneeId = '${userId}' AND PermissionSetId IN ('${ids.join("','")}')`)).records as { PermissionSetId: string }[]).map((r) => r.PermissionSetId));
+  const missing = ids.filter((id) => !has.has(id));
+  if (missing.length) await sf.saveMany(missing.map((id) => ({ kind: 'create' as const, sobject: 'PermissionSetAssignment', fields: { AssigneeId: userId, PermissionSetId: id } })));
 }
 
 /** Runs in the background; progress is visible in tenants.setup_status / setup_message. */
@@ -137,10 +139,8 @@ export async function grantAccessToAll(tenantId: string): Promise<{ granted: num
   if (!psId) throw new Error('Install CRMagents in Salesforce first.');
   const users = (await sf.query("SELECT Id FROM User WHERE IsActive = true AND UserType = 'Standard' LIMIT 2000")).records as { Id: string }[];
   const has = new Set(((await sf.query(`SELECT AssigneeId FROM PermissionSetAssignment WHERE PermissionSetId = '${psId}' LIMIT 5000`)).records as { AssigneeId: string }[]).map((r) => r.AssigneeId));
-  let granted = 0;
-  for (const u of users) {
-    if (has.has(u.Id)) continue;
-    try { await sf.createRecord('PermissionSetAssignment', { AssigneeId: u.Id, PermissionSetId: psId }); granted++; } catch { /* e.g. license without Apex access */ }
-  }
-  return { granted, total: users.length };
+  // Up to 200 assignments per call; users whose license can't have it are simply skipped.
+  const todo = users.filter((u) => !has.has(u.Id));
+  const res = todo.length ? await sf.saveMany(todo.map((u) => ({ kind: 'create' as const, sobject: 'PermissionSetAssignment', fields: { AssigneeId: u.Id, PermissionSetId: psId } }))) : [];
+  return { granted: res.filter((r) => r.ok).length, total: users.length };
 }

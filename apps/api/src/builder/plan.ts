@@ -2,7 +2,7 @@
 // so the model only spends tokens on understanding the request, not on wiring blocks together.
 
 export const OPERATORS = ['equals', 'not_equals', 'contains', 'greater_than', 'less_than', 'is_empty', 'not_empty'] as const;
-export const ACTIONS = ['classify', 'extract', 'ai_write', 'research', 'query', 'create_task', 'update_record', 'create_record', 'notify_slack', 'run_action', 'wait', 'search_knowledge', 'suggest'] as const;
+export const ACTIONS = ['classify', 'extract', 'ai_write', 'research', 'query', 'create_task', 'update_record', 'create_record', 'notify_slack', 'run_action', 'wait', 'search_knowledge', 'suggest', 'delete_record', 'read_files', 'attach_file'] as const;
 
 export type Action = (typeof ACTIONS)[number];
 
@@ -38,9 +38,15 @@ export interface PlanStep {
   wait_unit?: 'minutes' | 'hours' | 'days';
 }
 
+export const TRIGGER_EVENTS = ['created', 'created or updated', 'updated', 'deleted'] as const;
+
 export interface Plan {
   name: string;
-  trigger_kind: 'record' | 'manual' | 'schedule';
+  trigger_kind: 'record' | 'manual' | 'schedule' | 'webhook';
+  /** record only. Older plans have none ("created"). */
+  trigger_event?: (typeof TRIGGER_EVENTS)[number];
+  /** record only: run only when one of these fields changes. */
+  changed_fields?: string[];
   /** schedule only. */
   schedule: { every: 'hour' | 'day' | 'week'; at: string };
   trigger_object: string;
@@ -59,13 +65,15 @@ export function planSchema(objects: string[], fields: string[], actions: string[
   return {
     type: 'object',
     additionalProperties: false,
-    required: ['name', 'trigger_kind', 'trigger_object', 'schedule', 'conditions', 'steps', 'require_approval', 'questions'],
+    required: ['name', 'trigger_kind', 'trigger_object', 'trigger_event', 'changed_fields', 'schedule', 'conditions', 'steps', 'require_approval', 'questions'],
     properties: {
       name: { type: 'string', description: 'Short workflow name' },
-      trigger_kind: { type: 'string', enum: ['record', 'manual', 'schedule'] },
+      trigger_kind: { type: 'string', enum: ['record', 'manual', 'schedule', 'webhook'] },
+      trigger_event: { type: 'string', enum: [...TRIGGER_EVENTS] },
+      changed_fields: { type: 'array', items: { type: 'string', enum: fieldEnum } },
       schedule: {
         type: 'object', additionalProperties: false, required: ['every', 'at'],
-        properties: { every: { type: 'string', enum: ['hour', 'day', 'week'] }, at: { type: 'string', description: 'HH:MM in UTC; "08:00" if not given' } },
+        properties: { every: { type: 'string', enum: ['hour', 'day', 'week'] }, at: { type: 'string', description: 'HH:MM in the admin\'s time zone; "08:00" if not given' } },
       },
       trigger_object: { type: 'string', enum: [...objects, ''] },
       conditions: {
@@ -127,6 +135,9 @@ Steps run in order. Actions:
 - wait: pause before the next steps (wait_amount, wait_unit), e.g. "if no reply in 3 days" = wait 3 days, then a query/only_if that checks the record again.
 - search_knowledge: find matching sections in the company's uploaded documents (support guides, policies). instruction = what to look up, usually the record's own words, e.g. "{record.Subject} {record.Description}". No AI, free. Output: text (numbered sections), sources. A later ai_write automatically gets these sections; tell it what to write (e.g. "troubleshooting steps for this case").
 - suggest: show advice on the record's page in Salesforce (subject = short title, message = the text, usually {stepN.text} of an ai_write). Changes nothing in Salesforce, so it needs no approval. Prefer it over update_record when the admin wants a recommendation, suggested reply or next steps "on the case/record".
+- read_files: the text of the files attached to the triggering record (PDF, Word, text). No AI. A later ai_write automatically gets it.
+- attach_file: save text as a file on the triggering record (subject = file name, message = content, usually {stepN.text}).
+- delete_record: delete the triggering record (or the current record inside a per_record query). It goes to the Recycle Bin.
 - run_action: run one of the org's own automations listed under "Org actions" (org_action = its key; fields = its inputs as field=input name, value; fill every input marked *). Outputs: the action's listed outputs. Prefer an existing org action over rebuilding the same logic from steps.
 References inside text and values: {record.Field} = field of the triggering record, {stepN.key} = output of step N (1-based; a query's results are {stepN.table}), {trigger.input} = free text passed in, {item.Field} = field of the current record inside a per_record query.
 Rules:
@@ -134,7 +145,8 @@ Rules:
 - Use AI actions only where judgement or writing is needed; prefer query/create_task/update_record otherwise.
 - Use conditions to skip records that don't need processing (e.g. closed ones); they mean "run only when all are true" for the whole workflow.
 - To make one step conditional, use its only_if (e.g. value "{step1.category}", operator equals, compare "Breakdown"); leave only_if.value empty to always run the step.
-- trigger_kind "record" when it reacts to a Salesforce record (created/updated/button); "schedule" for recurring jobs (every morning, hourly, weekly); "manual" for on-demand questions/reports.
+- trigger_kind "record" when it reacts to a Salesforce record (created/updated/deleted/button); "schedule" for recurring jobs (every morning, hourly, weekly); "webhook" when another system (a form, ServiceNow, Jira, an app) sends data: its JSON is {trigger.body.key}; "manual" for on-demand questions/reports.
+- trigger_event (record only): "created", "updated" (changes to existing records), "created or updated", or "deleted". changed_fields: when the admin says "when Status changes" or "when it is escalated", list those fields (and add a condition for the new value if one is named); empty otherwise.
 - To act on each of many records (e.g. "create a task for every stale deal"): a query step with per_record true; the steps after it run once per record. Select the fields you reference ({item.OwnerId} etc.). create_task inside it is linked to that record and assigned to its owner.
 - Use only fields from the provided list for the trigger object; for picklists use the listed values exactly.
 - require_approval = true unless the admin explicitly says no approval is needed.

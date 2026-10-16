@@ -9,6 +9,7 @@ import { render, renderJson, resolveRaw } from './template.js';
 import { hitSources, hitsToText, searchKnowledge } from '../knowledge/store.js';
 import { saveSuggestion } from '../knowledge/suggestions.js';
 import { usePrefetched } from './prefetch.js';
+import { fileNameFor, recordFilesText } from '../salesforce/files.js';
 
 export interface Env {
   sf: SalesforceClient;
@@ -20,7 +21,7 @@ export interface Env {
   /** Puts real values back in place of personal-data placeholders (only for writes that stay in Salesforce). */
   unmask?: <T>(v: T) => T;
   /** Workspace rules: throws before a write that breaks one. */
-  guard?: (ctx: { action: 'update' | 'create' | 'task' | 'email' | 'message' | 'action'; object: string; values?: Record<string, unknown>; recordId?: string; approved?: boolean }) => Promise<void>;
+  guard?: (ctx: { action: 'update' | 'create' | 'delete' | 'task' | 'email' | 'message' | 'action'; object: string; values?: Record<string, unknown>; recordId?: string; approved?: boolean }) => Promise<void>;
   /** This step was approved by a person (approval rules no longer apply to it). */
   approved?: boolean;
   /** Admin-confirmed examples for a block, most similar first (learning from corrections). */
@@ -173,6 +174,13 @@ export const EXECUTORS: Record<string, Executor> = {
     // The triggering record often arrived with its data (polling query or change event): no API call needed.
     const pre = usePrefetched(scope.trigger, sobject, id, fields);
     if (pre) return { output: { record: pre, prefetched: true } };
+    // A deleted record is only in the Recycle Bin: read it with an ALL ROWS query.
+    if (scope.trigger?.deleted && String(scope.trigger.recordId) === id) {
+      const cols = fields.length ? fields.filter((f) => /^\w+$/.test(f)).join(', ') : 'FIELDS(STANDARD)';
+      const r = await env.sf.queryWithDeleted(`SELECT ${cols} FROM ${sobject.replace(/\W/g, '')} WHERE Id = '${id.replace(/\W/g, '')}' LIMIT 1`);
+      if (!r.records[0]) throw new Error('The deleted record is no longer in the Recycle Bin');
+      return { output: { record: r.records[0], deleted: true } };
+    }
     return { output: { record: await env.sf.getRecord(sobject, id, fields.length ? fields : undefined) } };
   },
 
@@ -182,9 +190,9 @@ export const EXECUTORS: Record<string, Executor> = {
     const fields = env.unmask ? env.unmask(renderJson(node.config.fields, scope)) : renderJson(node.config.fields, scope);
     await env.guard?.({ approved: env.approved, action: 'create', object: sobject, values: fields });
     if (env.dryRun) return { output: { id: '(preview)', wouldDo: `Create ${sobject}`, fields } };
-    if (queued(env, node, { kind: 'create', sobject, fields })) return { output: { id: '(saved with the batch)', queued: true } };
+    if (queued(env, node, { kind: 'create', sobject, fields })) return { output: { id: '(saved with the batch)', queued: true, changed: fields } };
     const r = await env.sf.createRecord(sobject, fields);
-    return { output: { id: r.id } };
+    return { output: { id: r.id, changed: fields } };
   },
 
   async 'sf.updateRecord'(node, scope, env) {
@@ -194,9 +202,51 @@ export const EXECUTORS: Record<string, Executor> = {
     const fields = env.unmask ? env.unmask(renderJson(node.config.fields, scope)) : renderJson(node.config.fields, scope);
     await env.guard?.({ approved: env.approved, action: 'update', object: sobject, values: fields, recordId: id });
     if (env.dryRun) return { output: { success: true, wouldDo: `Update ${sobject} ${id}`, fields } };
-    if (queued(env, node, { kind: 'update', sobject, id, fields })) return { output: { success: true, queued: true } };
+    if (queued(env, node, { kind: 'update', sobject, id, fields })) return { output: { success: true, queued: true, changed: fields } };
     await env.sf.updateRecord(sobject, id, fields);
+    return { output: { success: true, changed: fields } };
+  },
+
+  async 'sf.deleteRecord'(node, scope, env) {
+    const sobject = cfg(node, 'sobject', scope);
+    const id = cfg(node, 'id', scope);
+    if (!sobject || !id) throw new Error('Object and Record Id are required');
+    await env.guard?.({ approved: env.approved, action: 'delete', object: sobject, recordId: id });
+    if (env.dryRun) return { output: { success: true, wouldDo: `Delete ${sobject} ${id} (to the Recycle Bin)` } };
+    if (queued(env, node, { kind: 'delete', sobject, id, fields: {} })) return { output: { success: true, queued: true } };
+    await env.sf.deleteRecord(sobject, id);
     return { output: { success: true } };
+  },
+
+  // Create or update by an external Id (e.g. an order number from another system): one call, no lookup first.
+  async 'sf.upsertRecord'(node, scope, env) {
+    const sobject = cfg(node, 'sobject', scope);
+    const field = cfg(node, 'externalIdField', scope);
+    const value = cfg(node, 'externalId', scope);
+    if (!sobject || !field || !value) throw new Error('Object, external Id field and value are required');
+    const fields = env.unmask ? env.unmask(renderJson(node.config.fields, scope)) : renderJson(node.config.fields, scope);
+    await env.guard?.({ approved: env.approved, action: 'update', object: sobject, values: fields });
+    if (env.dryRun) return { output: { id: '(preview)', created: false, wouldDo: `Create or update ${sobject} where ${field} = ${value}`, fields } };
+    return { output: await env.sf.upsertRecord(sobject, field, value, fields) };
+  },
+
+  async 'sf.readFiles'(node, scope, env) {
+    const recordId = cfg(node, 'recordId', scope) || String(scope.trigger?.recordId ?? '');
+    if (!recordId) throw new Error('Which record\'s files?');
+    return { output: await recordFilesText(env.sf, recordId, Number(node.config.maxFiles) || 5, Number(node.config.maxChars) || 30_000) };
+  },
+
+  async 'sf.attachFile'(node, scope, env) {
+    const recordId = cfg(node, 'recordId', scope) || String(scope.trigger?.recordId ?? '');
+    const title = cfg(node, 'title', scope) || 'CRMagents note';
+    let content = render(node.config.content, scope);
+    if (env.unmask) content = env.unmask(content);
+    if (!recordId || !content.trim()) throw new Error('A record and some content are needed');
+    const fileName = fileNameFor(title, String(node.config.format ?? 'md'));
+    await env.guard?.({ approved: env.approved, action: 'create', object: 'ContentVersion', values: { Title: title }, recordId });
+    if (env.dryRun) return { output: { id: '(preview)', wouldDo: `Attach "${fileName}" to ${recordId}` } };
+    const r = await env.sf.attachFile(recordId, title, fileName, Buffer.from(content, 'utf8'));
+    return { output: { id: r.versionId } };
   },
 
   async 'sf.createTask'(node, scope, env) {

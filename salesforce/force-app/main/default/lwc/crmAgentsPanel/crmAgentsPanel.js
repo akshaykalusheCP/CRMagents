@@ -6,6 +6,8 @@ import getRun from '@salesforce/apex/CRMAgentsController.getRun';
 import decideWithNote from '@salesforce/apex/CRMAgentsController.decideWithNote';
 import startAsk from '@salesforce/apex/CRMAgentsController.startAsk';
 import askResult from '@salesforce/apex/CRMAgentsController.askResult';
+import execTools from '@salesforce/apex/CRMAgentsController.execTools';
+import postToolResults from '@salesforce/apex/CRMAgentsController.postToolResults';
 import { markdownToHtml } from 'c/crmMarkdown';
 
 const CHANNEL = '/event/CRMagents_Run_Event__e';
@@ -190,6 +192,12 @@ export default class CrmAgentsPanel extends LightningElement {
                 const r = JSON.parse(json);
                 if (r.status === 'done') return r.answer;
                 if (r.status === 'error') throw new Error(r.error || 'The assistant could not answer');
+                if (r.status === 'tool') {
+                    // The assistant needs Salesforce data or a change: run it here, as this user, then hand it back.
+                    return execTools({ callsJson: JSON.stringify(r.calls) })
+                        .then((results) => postToolResults({ runId, resultsJson: results }))
+                        .then(() => this.waitForAnswer(runId, 0));
+                }
                 return this.waitForAnswer(runId, tries + 1);
             });
     }

@@ -229,7 +229,7 @@ export async function execute(
   return { status: 'done' };
 }
 
-const BATCHABLE = new Set(['sf.updateRecord', 'sf.createRecord', 'sf.createTask']);
+const BATCHABLE = new Set(['sf.updateRecord', 'sf.createRecord', 'sf.createTask', 'sf.deleteRecord']);
 
 async function runLoop(wf: Workflow, node: WFNode, env: Env, st: RunState): Promise<NodeResult> {
   let items = resolveRaw(node.config.items, st.scope);

@@ -14,13 +14,13 @@ export type DocKind = 'pdf' | 'docx' | 'text';
 export interface Hit { docId: string; title: string; heading: string; body: string; rank: number }
 
 /** Plain text out of an uploaded file. PDFs keep a "Page N" marker so sections can say where they came from. */
-export async function extractText(fileName: string, data: Buffer): Promise<{ kind: DocKind; text: string }> {
+export async function extractText(fileName: string, data: Buffer): Promise<{ kind: DocKind; text: string; pages?: number }> {
   const ext = fileName.toLowerCase().split('.').pop() ?? '';
   if (ext === 'pdf' || data.subarray(0, 5).toString() === '%PDF-') {
     const { extractText: pdfText, getDocumentProxy } = await import('unpdf');
     const pdf = await getDocumentProxy(new Uint8Array(data));
-    const { text } = await pdfText(pdf, { mergePages: false });
-    return { kind: 'pdf', text: text.map((t, i) => `## Page ${i + 1}\n\n${tidyPdf(t)}`).join('\n\n') };
+    const { text, totalPages } = await pdfText(pdf, { mergePages: false });
+    return { kind: 'pdf', pages: totalPages, text: text.map((t, i) => `## Page ${i + 1}\n\n${tidyPdf(t)}`).join('\n\n') };
   }
   if (ext === 'docx') {
     const mammoth = await import('mammoth');
@@ -78,16 +78,16 @@ export function chunkText(text: string): { heading: string; body: string }[] {
   return out;
 }
 
-export async function addDocument(accountId: string, d: { title: string; fileName?: string; kind: DocKind; text: string; createdBy?: string }) {
+export async function addDocument(accountId: string, d: { title: string; fileName?: string; kind: DocKind; text: string; createdBy?: string; source?: string; sourceRef?: string; tenantId?: string }) {
   const text = d.text.slice(0, MAX_CHARS);
   const chunks = chunkText(text);
-  if (!chunks.length) throw new Error('No readable text found in this file. Scanned PDFs (images) are not supported yet.');
+  if (!chunks.length) throw new Error('No readable text found in this file.');
   const client = await pool.connect();
   try {
     await client.query('begin');
     const { rows } = await client.query(
-      'insert into knowledge_docs (account_id, title, file_name, kind, chars, chunks, created_by) values ($1,$2,$3,$4,$5,$6,$7) returning id',
-      [accountId, d.title.slice(0, 200), d.fileName ?? null, d.kind, text.length, chunks.length, d.createdBy ?? null],
+      'insert into knowledge_docs (account_id, title, file_name, kind, chars, chunks, created_by, source, source_ref, tenant_id) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id',
+      [accountId, d.title.slice(0, 200), d.fileName ?? null, d.kind, text.length, chunks.length, d.createdBy ?? null, d.source ?? 'upload', d.sourceRef ?? null, d.tenantId ?? null],
     );
     const id = rows[0].id as string;
     // One insert per 200 sections keeps big guides fast.
@@ -113,8 +113,8 @@ export async function addDocument(accountId: string, d: { title: string; fileNam
 
 export async function listDocuments(accountId: string) {
   const { rows } = await pool.query(
-    `select id, title, file_name as "fileName", kind, chars, chunks, created_by as "createdBy", created_at as "createdAt"
-     from knowledge_docs where account_id=$1 order by created_at desc`, [accountId]);
+    `select id, title, file_name as "fileName", kind, chars, chunks, created_by as "createdBy", created_at as "createdAt", source
+     from knowledge_docs where account_id=$1 order by source = 'upload' desc, created_at desc`, [accountId]);
   return rows;
 }
 
@@ -161,4 +161,12 @@ export function hitSources(hits: Hit[]): { title: string; section: string }[] {
     seen.add(k);
     return [{ title: h.title, section: h.heading }];
   });
+}
+
+/** A PDF with almost no text per page is a scan (images of pages). Pure; tested. */
+export function looksScanned(text: string): boolean {
+  const pages = text.split(/^## Page \d+$/m).slice(1);
+  if (!pages.length) return text.trim().length < 50;
+  const chars = pages.reduce((n, p) => n + p.replace(/\s+/g, '').length, 0);
+  return chars / pages.length < 40;
 }

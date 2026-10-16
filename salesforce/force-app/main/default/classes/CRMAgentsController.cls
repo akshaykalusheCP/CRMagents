@@ -41,7 +41,8 @@ public with sharing class CRMAgentsController {
     @AuraEnabled
     public static RunInfo startRun(String workflowId, String recordId, String objectApiName, String input) {
         try {
-            return run(workflowId, recordId, objectApiName, input, 0);
+            // Started by this person: the agent may only change what they could change themselves.
+            return run(workflowId, null, recordId, objectApiName, input, 0, true);
         } catch (Exception e) {
             throw fail(e);
         }
@@ -100,7 +101,11 @@ public with sharing class CRMAgentsController {
     @AuraEnabled
     public static String startAsk(String assistantId, String question, String recordId, String objectApiName, String historyJson) {
         try {
-            return CRMClient.okBody(CRMClient.call('POST', '/sf/v1/ask', System.JSON.serialize(askBody(assistantId, null, question, recordId, objectApiName, historyJson, true)), 30000));
+            Map<String, Object> body = askBody(assistantId, null, question, recordId, objectApiName, historyJson, true);
+            // The assistant's Salesforce tools run here, as this user (execTools).
+            body.put('inOrg', true);
+            body.put('userEmail', System.UserInfo.getUserEmail());
+            return CRMClient.okBody(CRMClient.call('POST', '/sf/v1/ask', System.JSON.serialize(body), 30000));
         } catch (Exception e) {
             throw fail(e);
         }
@@ -111,6 +116,27 @@ public with sharing class CRMAgentsController {
     public static String askResult(String runId) {
         try {
             return CRMClient.okBody(CRMClient.call('GET', '/sf/v1/ask/' + System.EncodingUtil.urlEncode(runId, 'UTF-8'), null, 30000));
+        } catch (Exception e) {
+            throw fail(e);
+        }
+    }
+
+    /** Runs an assistant's tool calls as this user. No callout here: Salesforce doesn't allow one after a change. */
+    @AuraEnabled
+    public static String execTools(String callsJson) {
+        try {
+            return CRMToolRunner.run(callsJson);
+        } catch (Exception e) {
+            throw fail(e);
+        }
+    }
+
+    /** Sends the results of execTools back to CRMagents (a separate request, after the changes are saved). */
+    @AuraEnabled
+    public static void postToolResults(String runId, String resultsJson) {
+        try {
+            CRMClient.okBody(CRMClient.call('POST', '/sf/v1/ask/' + System.EncodingUtil.urlEncode(runId, 'UTF-8') + '/tools',
+                System.JSON.serialize(new Map<String, Object>{ 'results' => System.JSON.deserializeUntyped(resultsJson) }), 30000));
         } catch (Exception e) {
             throw fail(e);
         }
@@ -217,6 +243,21 @@ public with sharing class CRMAgentsController {
         }
     }
 
+    /** What agents changed on this record (read inside Salesforce: no callout, no API use). */
+    @AuraEnabled
+    public static List<CRMagents_Agent_Activity__c> activity(String recordId) {
+        try {
+            String id15 = String.isBlank(recordId) ? '' : recordId.left(15);
+            return [
+                SELECT Name, Agent__c, Changes__c, On_Behalf_Of__r.Name, Started_By__c, Approved_By__c, Status__c, CreatedDate
+                FROM CRMagents_Agent_Activity__c WHERE Record_Id__c IN (:recordId, :id15)
+                WITH USER_MODE ORDER BY CreatedDate DESC LIMIT 10
+            ];
+        } catch (Exception e) {
+            throw fail(e);
+        }
+    }
+
     /** Feedback on a suggestion: helpful, not_helpful or dismissed, recorded with the user's email. */
     @AuraEnabled
     public static void rateSuggestion(String suggestionId, String status) {
@@ -235,7 +276,14 @@ public with sharing class CRMAgentsController {
 
     /** By agent id, or by its name (easier to use in Flow Builder). */
     public static RunInfo run(String workflowId, String workflowName, String recordId, String objectApiName, String input, Integer waitSeconds) {
+        return run(workflowId, workflowName, recordId, objectApiName, input, waitSeconds, false);
+    }
+
+    public static RunInfo run(String workflowId, String workflowName, String recordId, String objectApiName, String input, Integer waitSeconds, Boolean asUser) {
         Map<String, Object> body = new Map<String, Object>{ 'userEmail' => System.UserInfo.getUserEmail() };
+        if (asUser == true) {
+            body.put('userId', System.UserInfo.getUserId());
+        }
         if (String.isNotBlank(workflowId)) {
             body.put('workflowId', workflowId);
         }

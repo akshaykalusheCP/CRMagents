@@ -3,7 +3,7 @@
     <apiVersion>67.0</apiVersion>
     <isExposed>true</isExposed>
     <masterLabel>CRMagents Suggestions</masterLabel>
-    <description>Advice CRMagents agents saved for this record (for example troubleshooting steps from your support guides).</description>
+    <description>Advice CRMagents agents saved for this record, and what agents changed on it.</description>
     <targets>
         <target>lightning__RecordPage</target>
     </targets>

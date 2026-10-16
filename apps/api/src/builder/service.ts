@@ -1,6 +1,7 @@
+import { aiClient } from '../agent/provider.js';
 import { listDocuments } from '../knowledge/store.js';
 import type { Workflow } from '@crmagents/shared';
-import { anthropicClient, createLlm } from '../agent/llm.js';
+import { createLlm } from '../agent/llm.js';
 import { addUsage, emptyUsage, type Usage } from '../agent/pricing.js';
 import { dbResultCache } from '../agent/resultCache.js';
 import { config } from '../config.js';
@@ -8,7 +9,6 @@ import { pool } from '../db.js';
 import { SalesforceClient } from '../salesforce/client.js';
 import { actionContext, describeOrgAction, listOrgActions, parseActionKey, rankActions } from '../salesforce/actions.js';
 import { detectObjects, fields as describeFields, objects as listObjects } from '../salesforce/schema.js';
-import { getSetting } from '../settings.js';
 import { spendGuard } from '../spend.js';
 import { accountOf } from '../tenants.js';
 import { compilePlan } from './compile.js';
@@ -43,12 +43,12 @@ function fieldContext(fs: Awaited<ReturnType<typeof describeFields>>): string {
  * call writes the plan, code compiles and validates it against the org (one repair call if needed).
  * Pass `current` to change an existing draft ("also notify Slack").
  */
-export async function draftWorkflow(tenantId: string, request: string, current?: Plan): Promise<Draft> {
+export async function draftWorkflow(tenantId: string, request: string, current?: Plan, timezone = 'UTC'): Promise<Draft> {
+  const tz = isTimeZone(timezone) ? timezone : 'UTC';
   const accountId = await accountOf(tenantId);
-  const apiKey = await getSetting(accountId, 'anthropicKey');
-  if (!apiKey) throw new Error('Anthropic API key is not configured. Add it in Settings.');
+  const client = await aiClient(accountId);
   const sf = await SalesforceClient.forTenant(tenantId);
-  const llm = createLlm(apiKey, sf, spendGuard(accountId), anthropicClient(apiKey, await getSetting(accountId, 'anthropicWorkspaceId')), await dbResultCache(accountId));
+  const llm = createLlm('', sf, spendGuard(accountId), client, await dbResultCache(accountId));
 
   // ---- code: which objects and fields are we talking about ($0, cached) ----
   const all = await listObjects(tenantId, sf);
@@ -87,6 +87,7 @@ export async function draftWorkflow(tenantId: string, request: string, current?:
           primary ? `Fields of ${primary} (name:type [picklist values]):\n${fieldContext(fs)}` : 'No object detected; pick trigger_object from Objects if the request is about records.',
           actionsText ? `Org actions (key (label) inputs, * = required -> outputs):\n${actionsText}` : '',
           kbText,
+          `Admin's time zone: ${tz} (schedule.at is in this time zone).`,
           rulesText ? `Validation rules your values must pass (object: error shown when broken):\n${rulesText}` : '',
         ].filter(Boolean).join('\n\n')
       : [
@@ -111,6 +112,8 @@ export async function draftWorkflow(tenantId: string, request: string, current?:
 
   const p = plan!;
   const c = compiled!;
+  // Schedules run in the admin's own time zone.
+  for (const n of c.workflow.nodes) if (n.type === 'trigger.schedule') n.config.tz = tz;
   let sample: Draft['sample'];
   if (p.trigger_kind === 'record' && p.trigger_object) {
     try {
@@ -192,4 +195,8 @@ async function validateAgainstOrg(tenantId: string, sf: SalesforceClient, plan: 
     }
   }
   return errors;
+}
+
+function isTimeZone(tz: string): boolean {
+  try { new Intl.DateTimeFormat('en-US', { timeZone: tz }); return true; } catch { return false; }
 }

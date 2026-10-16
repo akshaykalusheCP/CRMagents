@@ -2,6 +2,7 @@ import { FileText, Loader2, Search, ThumbsDown, ThumbsUp, Trash2, Upload, X } fr
 import { useEffect, useRef, useState } from 'react';
 import { api, type KnowledgeDoc, type KnowledgeHit, type RecordSuggestion, type Tenant } from '../api';
 import { Markdown } from '../components/Markdown';
+import { KnowledgeSources } from '../components/KnowledgeSources';
 import { Empty, PageHeader, Panel, SkeletonRows, Status, Table, toast, useConfirm, type Column } from '../components/ui';
 
 // Knowledge: the company's own guides. Assistants search them automatically; agents use them to write
@@ -100,7 +101,7 @@ export function KnowledgePage({ tenant, onAutomate }: { tenant?: Tenant; onAutom
 
   const cols: Column<KnowledgeDoc>[] = [
     { key: 'title', header: 'Document', render: (d) => <div className="cell-main"><b><FileText size={14} className="kb-ico" />{d.title}</b><span className="cell-sub">{d.fileName ?? 'Pasted text'}</span></div> },
-    { key: 'kind', header: 'Type', hideSm: true, render: (d) => KIND[d.kind] },
+    { key: 'kind', header: 'Type', hideSm: true, render: (d) => (d.source === 'sf_article' ? 'Knowledge article' : d.source === 'sf_library' ? `${KIND[d.kind]} · Salesforce Files` : KIND[d.kind]) },
     { key: 'chunks', header: 'Sections', align: 'right', render: (d) => d.chunks.toLocaleString() },
     { key: 'by', header: 'Added', hideSm: true, render: (d) => <div className="cell-main"><span>{ago(d.createdAt)}</span><span className="cell-sub">{d.createdBy ?? ''}</span></div> },
     { key: 'x', header: '', align: 'right', render: (d) => <button className="ghost icon sm" onClick={() => void remove(d)} aria-label={`Remove ${d.title}`}><Trash2 size={14} /></button> },
@@ -136,7 +137,7 @@ export function KnowledgePage({ tenant, onAutomate }: { tenant?: Tenant; onAutom
         <Upload size={20} />
         <div>
           <b>{busy ? `Reading ${uploading[0]}${uploading.length > 1 ? ` and ${uploading.length - 1} more` : ''}…` : 'Drop support guides here'}</b>
-          <span>PDF, Word, Markdown or text · up to {MAX_MB} MB each</span>
+          <span>PDF (scans too), Word, Markdown or text · up to {MAX_MB} MB each</span>
         </div>
         <div className="row" style={{ gap: 8, marginLeft: 'auto' }}>
           <button className="ghost" onClick={() => setPaste((p) => !p)} disabled={busy}>Paste text</button>
@@ -154,6 +155,8 @@ export function KnowledgePage({ tenant, onAutomate }: { tenant?: Tenant; onAutom
           </div>
         </Panel>
       )}
+
+      <KnowledgeSources tenant={tenant} onSynced={() => void load()} />
 
       <Panel flush title="Documents" action={docs?.length ? <span className="kb-meta">{docs.length} document{docs.length === 1 ? '' : 's'} · {docs.reduce((n, d) => n + d.chunks, 0).toLocaleString()} sections</span> : undefined}>
         {docs === null ? <SkeletonRows rows={3} cols={4} /> : (

@@ -33,14 +33,14 @@ When clear: ready = true and request = the full spec in plain words, including e
 /** How many questions the assistant already asked in this conversation. Pure; tested. */
 export const questionsAsked = (messages: ChatMsg[]) => messages.filter((m) => m.role === 'assistant' && m.text.trim().endsWith('?')).length;
 
-export async function builderChat(tenantId: string, messages: ChatMsg[], current?: Plan): Promise<ChatReply> {
+export async function builderChat(tenantId: string, messages: ChatMsg[], current?: Plan, timezone?: string): Promise<ChatReply> {
   const users = messages.filter((m) => m.role === 'user').map((m) => m.text.trim()).filter(Boolean);
   const last = users[users.length - 1];
   if (!last) throw new Error('Say what the agent should do');
 
   // Already built: the message is a change ("also email the owner").
   if (current) {
-    const draft = await draftWorkflow(tenantId, last, current);
+    const draft = await draftWorkflow(tenantId, last, current, timezone);
     return { reply: draft.errors.length ? 'I changed it, but something still needs a fix (see below).' : 'Updated. Review the agent card.', draft, costUsd: draft.builderCostUsd };
   }
 
@@ -67,7 +67,7 @@ export async function builderChat(tenantId: string, messages: ChatMsg[], current
     if (j.request.trim()) request = j.request.trim();
   }
 
-  const draft = await draftWorkflow(tenantId, request);
+  const draft = await draftWorkflow(tenantId, request, undefined, timezone);
   cost += draft.builderCostUsd;
   if (!draft.workflow.nodes.length || (draft.questions.length && !draft.plan.steps.length)) {
     const q = draft.questions[0] ?? 'What should the agent do?';

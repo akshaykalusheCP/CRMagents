@@ -1,4 +1,5 @@
-import { anthropicClient, createLlm, type Llm } from '../agent/llm.js';
+import { aiClient } from '../agent/provider.js';
+import { createLlm, type Llm } from '../agent/llm.js';
 import type { Usage } from '../agent/pricing.js';
 import { dbResultCache } from '../agent/resultCache.js';
 import { config } from '../config.js';
@@ -6,7 +7,6 @@ import { pool } from '../db.js';
 import { SalesforceClient } from '../salesforce/client.js';
 import { detectObjects, fields as describeFields, objects as listObjects } from '../salesforce/schema.js';
 import { flatten } from '../salesforce/table.js';
-import { getSetting } from '../settings.js';
 import { spendGuard } from '../spend.js';
 import { accountOf } from '../tenants.js';
 import type { Insights } from './metrics.js';
@@ -15,10 +15,9 @@ import type { Insights } from './metrics.js';
 
 export async function setup(tenantId: string): Promise<{ llm: Llm; sf: SalesforceClient }> {
   const accountId = await accountOf(tenantId);
-  const apiKey = await getSetting(accountId, 'anthropicKey');
-  if (!apiKey) throw new Error('Anthropic API key is not configured. Add it in Settings.');
+  const client = await aiClient(accountId);
   const sf = await SalesforceClient.forTenant(tenantId);
-  const llm = createLlm(apiKey, sf, spendGuard(accountId), anthropicClient(apiKey, await getSetting(accountId, 'anthropicWorkspaceId')), await dbResultCache(accountId));
+  const llm = createLlm('', sf, spendGuard(accountId), client, await dbResultCache(accountId));
   return { llm, sf };
 }
 

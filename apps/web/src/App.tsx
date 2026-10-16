@@ -1,4 +1,4 @@
-import { BarChart3, BookOpen, Bot, Check, ChevronsUpDown, History, House, Inbox, LayoutDashboard, LogOut, Moon, Plus, Search, Settings as SettingsIcon, Sun } from 'lucide-react';
+import { BarChart3, BookOpen, Bot, PanelLeft, PanelTop, Sparkles, Check, ChevronsUpDown, History, House, Inbox, LayoutDashboard, LogOut, Moon, Plus, Search, Settings as SettingsIcon, Sun } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { api, type Draft, type Me, type Tenant, type WorkflowRow } from './api';
 import { CommandPalette, Menu, Toaster, type Command } from './components/ui';
@@ -6,6 +6,7 @@ import { ApprovalsPage } from './pages/Approvals';
 import { HomePage } from './pages/Home';
 import { InsightsPage } from './pages/Insights';
 import { KnowledgePage } from './pages/Knowledge';
+import { Ribbon } from './components/Ribbon';
 import { SettingsHub } from './pages/SettingsHub';
 import { AuthPage } from './pages/Auth';
 import { RunsPage } from './pages/Runs';
@@ -55,6 +56,9 @@ export function App() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [tenantId, setTenantId] = useState<string>(() => { try { return localStorage.getItem('tenantId') ?? ''; } catch { return ''; } });
   const [theme, toggleTheme] = useTheme();
+  // Stripe-style top navigation by default; the sidebar is still there for people who prefer it.
+  const [layout, setLayout] = useState<'top' | 'side'>(() => { try { return localStorage.getItem('layout') === 'side' ? 'side' : 'top'; } catch { return 'top'; } });
+  const switchLayout = () => { const next = layout === 'top' ? 'side' : 'top'; setLayout(next); try { localStorage.setItem('layout', next); } catch { /* ignore */ } };
   const [cmdk, setCmdk] = useState(false);
   const [settingsAt, setSettingsAt] = useState<{ section: 'orgs' | 'ai' | 'rules'; connect?: boolean; n: number }>({ section: 'orgs', n: 0 });
   const openSettings = (section: 'orgs' | 'ai' | 'rules' = 'orgs', connect = false) => { setSettingsAt((s) => ({ section, connect, n: s.n + 1 })); setTab('settings'); };
@@ -121,6 +125,86 @@ export function App() {
   ];
   const statusDot = tenant?.setup_status === 'ready' ? 'dot-ok' : tenant?.setup_status === 'error' ? 'dot-bad' : 'dot-warn';
 
+  if (layout === 'top') {
+    const items = NAV.flatMap((g) => g.items);
+    return (
+      <div className="app app-top">
+        <header className="tnav">
+          <div className="tnav-inner">
+            <button className="tnav-brand" onClick={() => setTab('home')} aria-label="CRMagents home">
+              <span className="brand-mark"><Sparkles size={15} /></span>CRMagents
+            </button>
+            <nav className="tnav-links" aria-label="Main">
+              {items.map((it) => (
+                <button key={it.key} className={'tnav-link' + (tab === it.key ? ' on' : '')} onClick={() => setTab(it.key)} aria-current={tab === it.key ? 'page' : undefined}>
+                  {it.label}
+                  {it.key === 'approvals' && waitingCount > 0 && <span className="count">{waitingCount}</span>}
+                </button>
+              ))}
+            </nav>
+            <div className="tnav-right">
+              <button className="ghost icon" onClick={() => setCmdk(true)} aria-label="Search (⌘K)" title="Search (⌘K)"><Search size={16} /></button>
+              <button className={'ghost icon' + (tab === 'settings' ? ' on' : '')} onClick={() => setTab('settings')} aria-label="Settings" title="Settings"><SettingsIcon size={16} /></button>
+            {tenants.length > 0 ? (
+                <Menu align="right" trigger={() => (
+                  <button className="org-btn" title="Salesforce org">
+                    <i className={statusDot} /><span className="n">{tenant?.sf_username ?? tenant?.sf_org_id ?? 'Choose an org'}</span><ChevronsUpDown size={14} />
+                  </button>
+                )}>
+                  {(close) => (
+                    <>
+                      <div className="mh">Salesforce orgs</div>
+                      {tenants.map((t) => (
+                        <button key={t.id} className="mi" onClick={() => { setTenantId(t.id); close(); }}>
+                          <i className={t.setup_status === 'ready' ? 'dot-ok' : t.setup_status === 'error' ? 'dot-bad' : 'dot-warn'} />
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{t.sf_username ?? t.sf_org_id}</span>
+                          {t.id === tenantId && <Check size={15} className="check" />}
+                        </button>
+                      ))}
+                      <div className="msep" />
+                      <button className="mi" onClick={() => { close(); openSettings('orgs', true); }}><Plus size={15} /> Connect another org</button>
+                    </>
+                  )}
+                </Menu>
+              ) : (
+                <button className="primary sm" onClick={() => openSettings('orgs', true)}>Connect Salesforce</button>
+              )}
+              <Menu align="right" className="acct-menu" trigger={() => (
+                <button className="acct" title={me.email} aria-label="Account"><span className="ws-mark">{initials(me.accountName || me.email)}</span></button>
+              )}>
+                {(close) => (
+                  <>
+                    <div className="mh"><b>{me.accountName}</b>{me.email}</div>
+                    <div className="msep" />
+                    <button className="mi" onClick={() => { close(); setTab('settings'); }}><SettingsIcon size={15} /> Settings</button>
+                    <button className="mi" onClick={() => { close(); toggleTheme(); }}>{theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />} {theme === 'dark' ? 'Light mode' : 'Dark mode'}</button>
+                    <button className="mi" onClick={() => { close(); switchLayout(); }}><PanelLeft size={15} /> Navigation on the side</button>
+                    <div className="msep" />
+                    <button className="mi danger" onClick={() => { close(); void logout(); }}><LogOut size={15} /> Log out</button>
+                  </>
+                )}
+              </Menu>
+            </div>
+          </div>
+        </header>
+        <main className={'stripe-main' + (tab === 'agents' ? ' full' : '')}>
+          {/* Silk ribbon behind the top of every page, like stripe.com's hero. */}
+          <Ribbon className="app-ribbon" strands={260} angle={0.6} width={0.3} />
+          {tab === 'home' && <HomePage me={me} tenant={tenant} go={setTab} newAgent={newAgent} />}
+          {tab === 'insights' && <InsightsPage key="ins" fixedView="overview" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />}
+          {tab === 'dashboards' && <InsightsPage key="dash" fixedView="dashboards" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />}
+          {tab === 'agents' && <WorkflowsPage tenant={tenant} goConnections={() => setTab('settings')} incoming={incoming} onIncomingOpened={() => setIncoming(null)} prefill={prefill} onPrefillUsed={() => setPrefill(null)} />}
+          {tab === 'approvals' && <ApprovalsPage tenant={tenant} onChange={refreshWaiting} me={me.email} />}
+          {tab === 'knowledge' && <KnowledgePage tenant={tenant} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />}
+          {tab === 'activity' && <RunsPage tenant={tenant} goSettings={() => setTab('settings')} />}
+          {tab === 'settings' && <SettingsHub key={settingsAt.n} section={settingsAt.section} focusConnect={settingsAt.connect} tenants={tenants} tenant={tenant} onChange={reload} />}
+        </main>
+        <CommandPalette open={cmdk} onClose={() => setCmdk(false)} commands={commands} />
+        <Toaster />
+      </div>
+    );
+  }
+
   return (
     <div className="app">
       <aside className="side" aria-label="Main">
@@ -137,6 +221,7 @@ export function App() {
               <div className="msep" />
               <button className="mi" onClick={() => { close(); setTab('settings'); }}><SettingsIcon size={15} /> Settings</button>
               <button className="mi" onClick={() => { close(); toggleTheme(); }}>{theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />} {theme === 'dark' ? 'Light mode' : 'Dark mode'}</button>
+              <button className="mi" onClick={() => { close(); switchLayout(); }}><PanelTop size={15} /> Navigation on top</button>
               <div className="msep" />
               <button className="mi danger" onClick={() => { close(); void logout(); }}><LogOut size={15} /> Log out</button>
             </>

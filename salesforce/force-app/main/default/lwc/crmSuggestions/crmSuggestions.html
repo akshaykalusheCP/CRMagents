@@ -14,7 +14,7 @@
             <template lwc:if={loading}><lightning-spinner size="small" alternative-text="Loading"></lightning-spinner></template>
             <template lwc:if={error}><p class="slds-text-color_error">{error}</p></template>
             <template lwc:if={empty}>
-                <p class="slds-text-color_weak empty">No suggestions for this record yet. Agents with a "Show suggestion on record" step add them here.</p>
+                <p class="slds-text-color_weak empty">No suggestions for this record yet.</p>
             </template>
             <template lwc:if={latest}>
                 <div class="sug">
@@ -45,6 +45,21 @@
                             </div>
                         </template>
                     </template>
+                </template>
+            </template>
+            <template lwc:if={hasChanges}>
+                <div class="changes-toggle"><lightning-button variant="base" label={changesLabel} onclick={toggleChanges}></lightning-button></div>
+                <template lwc:if={showChanges}>
+                    <ul class="activity">
+                        <template for:each={changes} for:item="c">
+                            <li key={c.id}>
+                                <div class="act-head"><b>{c.agent}</b> <span class="slds-text-color_weak meta">{c.when} · {c.who}</span>
+                                    <template lwc:if={c.failed}><span class="slds-text-color_error meta"> · stopped with an error</span></template></div>
+                                <template lwc:if={c.approved}><div class="slds-text-color_weak meta">{c.approved}</div></template>
+                                <ul class="act-lines"><template for:each={c.lines} for:item="l"><li key={l.k}>{l.t}</li></template></ul>
+                            </li>
+                        </template>
+                    </ul>
                 </template>
             </template>
             <div class="copy-host"></div>

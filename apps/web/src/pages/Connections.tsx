@@ -1,6 +1,7 @@
 import { ExternalLink, Loader2, MoreHorizontal, Plug } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, type Settings, type Tenant } from '../api';
+import { RecordPagePicker, UtilityBarPicker } from '../components/PagePlacement';
 import { Drawer, Menu, Panel, Status, Table, toast, type Column, Meter } from '../components/ui';
 
 // Salesforce orgs: who is connected and in what state, how to connect another, and (rarely) your own login app.
@@ -120,8 +121,8 @@ export function ConnectionsPage({ tenants, onChange, goSettings, focusConnect }:
                   <button className="sm primary" disabled={granting} onClick={async () => { setGranting(true); try { const r = await api.grantAccess(guide.id); toast(`Access given to ${r.granted} more user${r.granted === 1 ? '' : 's'} (${r.total} active)`); } catch (e) { toast((e as Error).message, 'bad'); } finally { setGranting(false); } }}>{granting ? <Loader2 size={14} className="spin" /> : null} Give everyone access</button>
                   {link('/lightning/setup/PermSets/home', 'Or choose people')}
                 </div></li>
-              <li><b>Add the Agent Panel to record pages</b><span>Open a record page in Lightning App Builder, drag <i>CRMagents Agent Panel</i> onto it, then Save and Activate. It shows the agents for that kind of record, an assistant to ask, and approvals.</span>{link('/lightning/setup/FlexiPageList/home', 'Open Lightning pages')}</li>
-              <li><b>Put the assistant in the utility bar</b><span>In App Manager, edit your app → Utility Items → Add <i>CRMagents Agent Panel</i>. It's then one click away on every page.</span>{link('/lightning/setup/NavigationMenus/home', 'Open App Manager')}</li>
+              <li><b>Put the assistant in the utility bar</b><span>One click away on every page of the app: agents, an assistant to ask, and approvals.</span><UtilityBarPicker tenant={guide} /></li>
+              <li><b>Add CRMagents to record pages</b><span>The Suggestions card (agent advice and what agents changed) and the Agent Panel, at the top of the side column. Pick an existing page, or get a new one to activate.</span><RecordPagePicker tenant={guide} /></li>
               <li><b>Add the "Ask CRMagents" button</b><span>Ready for Accounts, Cases, Contacts, Leads and Opportunities. In Object Manager → the object → Page Layouts → Mobile &amp; Lightning Actions, drag in <i>Ask CRMagents</i>.</span>{link('/lightning/setup/ObjectManager/Case/PageLayouts/view', 'Open Case page layouts')}</li>
               <li><b>Use agents in your Flows</b><span>In Flow Builder add an Action and search "CRMagents": <i>Run CRMagents agent</i> (by name) and <i>Ask CRMagents assistant</i> (returns the answer, e.g. to save a case summary).</span>{link('/builder_platform_interaction/flowBuilder.app', 'Open Flow Builder')}</li>
               <li><b>Approvals come to Salesforce</b><span>When an agent waits for approval, the approver gets a Salesforce notification (the bell) that opens the record. Nothing to set up.</span></li>

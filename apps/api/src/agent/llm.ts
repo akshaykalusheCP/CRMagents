@@ -54,7 +54,11 @@ export function createLlm(
   guard?: SpendGuard,
   client: Pick<Anthropic, 'messages'> = anthropicClient(apiKey),
   results?: ResultCache,
-  trust: { masker?: Masker; limits?: RunLimits; counters?: { aiCalls: number; toolCalls: number; tokens: number } } = {},
+  trust: {
+    masker?: Masker; limits?: RunLimits; counters?: { aiCalls: number; toolCalls: number; tokens: number };
+    /** Runs a tool somewhere else (inside Salesforce, as the person asking); undefined = run it here. */
+    exec?: (name: string, input: unknown) => Promise<unknown> | undefined;
+  } = {},
 ): Llm {
   let spent = 0; // across every call made through this instance (one workflow run)
   const { masker, limits } = trust;
@@ -147,7 +151,8 @@ export function createLlm(
           if (limits && used.toolCalls >= limits.toolCalls) throw new LimitError(`Run limit reached: ${limits.toolCalls} tool calls.`);
           used.toolCalls++;
           // Salesforce reads get the real values (the data stays in Salesforce); the AI sees the result masked.
-          const out = await tool.run(sf, masker ? masker.unmaskValue(use.input) : use.input);
+          const input = masker ? masker.unmaskValue(use.input) : use.input;
+          const out = await (trust.exec?.(use.name, input) ?? tool.run(sf, input));
           trace.push({ tool: use.name, input: use.input, ok: true });
           results.push({ type: 'tool_result', tool_use_id: use.id, content: toolResultText(masker ? masker.maskValue(out) : out) });
         } catch (e) {

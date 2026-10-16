@@ -7,7 +7,7 @@ import type { SalesforceClient } from '../salesforce/client.js';
 // enterprise team"). The AI turns each sentence into a structured rule once; code checks every write against the
 // rules before it happens, so enforcement never depends on the model.
 
-export const ACTIONS = ['update', 'create', 'task', 'email', 'message', 'action', 'any'] as const;
+export const ACTIONS = ['update', 'create', 'delete', 'task', 'email', 'message', 'action', 'any'] as const;
 export type WriteAction = Exclude<(typeof ACTIONS)[number], 'any'>;
 const OPS = ['equals', 'not_equals', 'contains', 'greater_than', 'less_than', 'is_empty', 'not_empty'] as const;
 
@@ -86,7 +86,7 @@ const SCHEMA = {
     understood: { type: 'boolean', description: 'false if the sentence is not a rule about what agents may change or send' },
     effect: { type: 'string', enum: ['block', 'approve'], description: 'block = never do it; approve = only after a person approves ("ask before", "needs approval", "check with")' },
     summary: { type: 'string', description: 'The rule restated in one short sentence ("Never …" for block, "Ask before …" for approve)' },
-    actions: { type: 'array', items: { type: 'string', enum: [...ACTIONS] }, description: 'update/create records, task = create tasks, email = send email, message = Slack/Chatter, action = run Flows/Apex' },
+    actions: { type: 'array', items: { type: 'string', enum: [...ACTIONS] }, description: 'update/create/delete records, task = create tasks, email = send email, message = Slack/Chatter, action = run Flows/Apex' },
     objects: { type: 'array', items: { type: 'string' }, description: 'Salesforce object API names, e.g. Account, Case; empty for all' },
     when: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['field', 'operator', 'value'], properties: { field: { type: 'string', description: 'API name, relationships allowed (Owner.Name, Account.Type)' }, operator: { type: 'string', enum: [...OPS] }, value: { type: 'string' } } } },
     days: { type: 'array', items: { type: 'integer' }, description: 'Days the rule applies, 0 = Sunday ... 6 = Saturday; empty = every day' },

@@ -26,17 +26,26 @@ import { compileRule, listRules } from './smart/policies.js';
 import { regression } from './smart/regress.js';
 import { builderChat } from './builder/chat.js';
 import { listOrgActions } from './salesforce/actions.js';
-import { addDocument, deleteDocument, extractText, listDocuments, MAX_UPLOAD_BYTES, searchKnowledge } from './knowledge/store.js';
+import { addDocument, deleteDocument, extractText, listDocuments, looksScanned, MAX_UPLOAD_BYTES, searchKnowledge } from './knowledge/store.js';
+import { ocrPdf } from './knowledge/ocr.js';
+import { addSource, listSources, removeSource, syncSource } from './knowledge/sync.js';
 import { listSuggestions, markSuggestion } from './knowledge/suggestions.js';
+import { registerWebhooks, webhookSecret, webhookUrl } from './engine/webhook.js';
+import { backfill, exportAgent, importAgent, listVersions, restoreVersion, saveVersion } from './engine/admin.js';
+import { publicChatInfo, registerPublicChat, setPublicChat } from './agent/publicChat.js';
+import { addToRecordPage, addToUtilityBar, listPages } from './salesforce/pages.js';
 import { config } from './config.js';
 import { migrate, pool } from './db.js';
 import { buildAuthorizeUrl, handleCallback, redirectUri, validateOwnApp } from './salesforce/oauth.js';
 import { getSetting, PLAIN_SETTINGS, setSetting, SETTING_KEYS, type SettingName } from './settings.js';
 
-const app = Fastify({ logger: true });
+// Behind a proxy or tunnel (Render, ngrok): the visitor's address comes from X-Forwarded-For (website chat rate limits).
+const app = Fastify({ logger: true, trustProxy: process.env.TRUST_PROXY !== 'false' });
 
 await app.register(cookie);
 registerSfBridge(app);
+registerWebhooks(app);
+registerPublicChat(app);
 registerAuth(app);
 
 app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
@@ -122,6 +131,14 @@ const settingsBody = z.object({
   maxToolCalls: z.string().regex(/^(\d{1,4})?$/, 'A whole number').optional(),
   maxTokens: z.string().regex(/^(\d{1,8})?$/, 'A whole number').optional(),
   retentionDays: z.string().regex(/^(\d{1,4})?$/, 'A whole number of days (0 keeps everything)').optional(),
+  aiProvider: z.enum(['anthropic', 'openai', 'gemini', 'compatible', '']).optional(),
+  providerKey: z.string().max(500).optional(),
+  aiBaseUrl: z.string().url('Base URL like https://api.example.com/v1').optional().or(z.literal('')),
+  aiModel: z.string().max(100).regex(/^[\w.:/-]*$/, 'Model name, e.g. gpt-5').optional(),
+  aiFastModel: z.string().max(100).regex(/^[\w.:/-]*$/, 'Model name').optional(),
+  aiPriceIn: z.string().regex(/^(\d+(\.\d+)?)?$/, 'USD per million tokens').optional(),
+  aiPriceOut: z.string().regex(/^(\d+(\.\d+)?)?$/, 'USD per million tokens').optional(),
+  auditInSalesforce: z.enum(['on', 'off', '']).optional(),
 });
 
 app.put('/api/settings', async (req) => {
@@ -359,6 +376,21 @@ app.put('/api/tenants/:tenantId/workflows/:id/allowed-fields', async (req) => {
 });
 
 // Give every active Salesforce user access to the CRMagents panel, button and Flow actions.
+// Put CRMagents on Salesforce pages (utility bar, record pages) without App Builder.
+app.get('/api/tenants/:tenantId/salesforce/pages', async (req) => {
+  const { object } = req.query as { object?: string };
+  return listPages(await SalesforceClient.forTenant((req.params as { tenantId: string }).tenantId), object);
+});
+app.post('/api/tenants/:tenantId/salesforce/pages/utility', async (req) => {
+  const { pageId } = z.object({ pageId: z.string() }).parse(req.body);
+  return addToUtilityBar(await SalesforceClient.forTenant((req.params as { tenantId: string }).tenantId), pageId);
+});
+app.post('/api/tenants/:tenantId/salesforce/pages/record', async (req) => {
+  const b = z.object({ object: z.string().regex(/^\w+$/), pageId: z.string().optional() }).parse(req.body);
+  const sf = await SalesforceClient.forTenant((req.params as { tenantId: string }).tenantId);
+  return addToRecordPage(sf, b.object, sf.instanceUrl, b.pageId);
+});
+
 app.post('/api/tenants/:tenantId/grant-access', async (req) => grantAccessToAll((req.params as { tenantId: string }).tenantId));
 
 // Real-time trigger (Change Data Capture) instead of 1-minute checks.
@@ -413,6 +445,16 @@ app.post('/api/tenants/:tenantId/setup', async (req) => {
   return { ok: true };
 });
 
+// ---- Webhook trigger: address and secret for an agent ----
+app.get('/api/tenants/:tenantId/workflows/:id/webhook', async (req) => {
+  const { tenantId, id } = req.params as { tenantId: string; id: string };
+  return { url: webhookUrl(id), secret: await webhookSecret(tenantId, id) };
+});
+app.post('/api/tenants/:tenantId/workflows/:id/webhook/rotate', async (req) => {
+  const { tenantId, id } = req.params as { tenantId: string; id: string };
+  return { url: webhookUrl(id), secret: await webhookSecret(tenantId, id, true) };
+});
+
 // ---- Knowledge base (per account: the same guides serve every connected org) ----
 app.get('/api/knowledge', async (req) => listDocuments(req.user!.accountId));
 
@@ -429,7 +471,10 @@ app.post('/api/knowledge', { bodyLimit: Math.ceil(MAX_UPLOAD_BYTES * 1.4) }, asy
     const buf = Buffer.from(b.data, 'base64');
     if (buf.length > MAX_UPLOAD_BYTES) throw Object.assign(new Error('Files up to 15 MB'), { statusCode: 400 });
     try {
-      ({ kind, text } = await extractText(b.fileName ?? 'file.txt', buf));
+      let pages: number | undefined;
+      ({ kind, text, pages } = await extractText(b.fileName ?? 'file.txt', buf));
+      // A scan (pages that are only images): Claude reads the pages.
+      if (kind === 'pdf' && looksScanned(text)) text = await ocrPdf(req.user!.accountId, buf, pages ?? 1, b.fileName ?? 'PDF');
     } catch (e) {
       throw Object.assign(new Error((e as Error).message || 'Could not read this file'), { statusCode: 400 });
     }
@@ -448,6 +493,26 @@ app.post('/api/knowledge/search', async (req) => {
   return searchKnowledge(req.user!.accountId, b.query, b.limit ?? 5);
 });
 
+// Knowledge that lives in Salesforce (Knowledge articles, Files libraries), synced daily.
+app.get('/api/knowledge/sources', async (req) => listSources(req.user!.accountId));
+app.post('/api/knowledge/sources', async (req) => {
+  const b = z.object({ tenantId: z.string().uuid(), kind: z.enum(['articles', 'library']), library: z.string().max(255).optional() }).parse(req.body);
+  const own = await pool.query('select 1 from tenants where id=$1 and account_id=$2', [b.tenantId, req.user!.accountId]);
+  if (!own.rowCount) throw Object.assign(new Error('not found'), { statusCode: 404 });
+  if (b.kind === 'library' && !b.library?.trim()) throw Object.assign(new Error('Name the Files library'), { statusCode: 400 });
+  return addSource(req.user!.accountId, b.tenantId, b.kind, b.library?.trim());
+});
+app.post('/api/knowledge/sources/:id/sync', async (req) => {
+  const { id } = req.params as { id: string };
+  const own = await pool.query('select 1 from knowledge_sources where id=$1 and account_id=$2', [id, req.user!.accountId]);
+  if (!own.rowCount) throw Object.assign(new Error('not found'), { statusCode: 404 });
+  return syncSource(id);
+});
+app.delete('/api/knowledge/sources/:id', async (req) => {
+  await removeSource(req.user!.accountId, (req.params as { id: string }).id);
+  return { ok: true };
+});
+
 // ---- Suggestions saved on records ----
 app.get('/api/tenants/:tenantId/record-suggestions', async (req) => listSuggestions((req.params as { tenantId: string }).tenantId));
 app.post('/api/tenants/:tenantId/record-suggestions/:id', async (req) => {
@@ -459,14 +524,14 @@ app.post('/api/tenants/:tenantId/record-suggestions/:id', async (req) => {
 
 // ---- Tools catalog ----
 app.get('/api/tools', async () =>
-  Object.values(TOOLS).map((t) => ({ name: t.def.name, description: t.def.description, write: t.write })),
+  Object.values(TOOLS).filter((t) => !t.publicOnly).map((t) => ({ name: t.def.name, description: t.def.description, write: t.write })),
 );
 
 // ---- Agents ----
 const agentBody = z.object({
   name: z.string().min(1),
   systemPrompt: z.string().default(''),
-  tools: z.array(z.string().refine((t) => t in TOOLS, 'unknown tool')).default([]),
+  tools: z.array(z.string().refine((t) => t in TOOLS && !TOOLS[t].publicOnly, 'unknown tool')).default([]),
 });
 
 app.get('/api/tenants/:tenantId/agents', async (req) => {
@@ -503,6 +568,17 @@ app.delete('/api/tenants/:tenantId/agents/:agentId', async (req) => {
   const { tenantId, agentId } = req.params as { tenantId: string; agentId: string };
   await pool.query('delete from agents where id=$2 and tenant_id=$1', [tenantId, agentId]);
   return { ok: true };
+});
+
+// Website chat for an assistant.
+app.get('/api/tenants/:tenantId/agents/:agentId/public', async (req) => {
+  const { tenantId, agentId } = req.params as { tenantId: string; agentId: string };
+  return publicChatInfo(tenantId, agentId);
+});
+app.put('/api/tenants/:tenantId/agents/:agentId/public', async (req) => {
+  const { tenantId, agentId } = req.params as { tenantId: string; agentId: string };
+  const b = z.object({ enabled: z.boolean(), origins: z.string().max(2000).default(''), cases: z.boolean().default(true), greeting: z.string().max(300).default('') }).parse(req.body);
+  return setPublicChat(tenantId, agentId, b);
 });
 
 const runBody = z.object({ input: z.string().min(1), context: z.unknown().optional(), history: z.array(z.object({ role: z.enum(['user', 'assistant']), text: z.string().max(20000) })).max(40).optional() });
@@ -544,6 +620,7 @@ app.post('/api/tenants/:tenantId/workflows', async (req) => {
     'insert into workflows (tenant_id, name, graph) values ($1,$2,$3) returning id',
     [(req.params as { tenantId: string }).tenantId, b.name, JSON.stringify(b.graph)],
   );
+  await saveVersion(rows[0].id, b.name, b.graph, req.user!.email);
   return { id: rows[0].id };
 });
 
@@ -555,6 +632,7 @@ app.put('/api/tenants/:tenantId/workflows/:id', async (req) => {
     tenantId, id, b.name, JSON.stringify(b.graph),
   ]);
   if (!r.rowCount) throw Object.assign(new Error('not found'), { statusCode: 404 });
+  await saveVersion(id, b.name, b.graph, req.user!.email);
   return { ok: true };
 });
 
@@ -568,8 +646,8 @@ app.delete('/api/tenants/:tenantId/workflows/:id', async (req) => {
 // Plain-English request -> validated workflow draft (not saved; the editor saves it).
 app.post('/api/tenants/:tenantId/workflows/draft', async (req) => {
   const { tenantId } = req.params as { tenantId: string };
-  const b = z.object({ request: z.string().trim().min(5, 'Describe what the workflow should do').max(2000), plan: z.any().optional() }).parse(req.body);
-  return draftWorkflow(tenantId, b.request, b.plan);
+  const b = z.object({ request: z.string().trim().min(5, 'Describe what the workflow should do').max(2000), plan: z.any().optional(), timezone: z.string().max(60).optional() }).parse(req.body);
+  return draftWorkflow(tenantId, b.request, b.plan, b.timezone);
 });
 
 // Build an agent by chatting: short clarifying questions, then a validated draft.
@@ -578,8 +656,9 @@ app.post('/api/tenants/:tenantId/builder/chat', async (req) => {
   const b = z.object({
     messages: z.array(z.object({ role: z.enum(['user', 'assistant']), text: z.string().max(4000) })).min(1).max(30),
     plan: z.any().optional(),
+    timezone: z.string().max(60).optional(),
   }).parse(req.body);
-  return builderChat(tenantId, b.messages, b.plan);
+  return builderChat(tenantId, b.messages, b.plan, b.timezone);
 });
 
 // The org's own automations an agent can use (invocable Apex, autolaunched Flows, standard actions).
@@ -644,6 +723,40 @@ app.post('/api/tenants/:tenantId/workflows/:id/deploy', async (req) => {
 app.delete('/api/tenants/:tenantId/workflows/:id/deploy', async (req) => {
   const { tenantId, id } = req.params as { tenantId: string; id: string };
   return undeployWorkflow(tenantId, id);
+});
+
+// Run on records that already exist (queued, newest first).
+app.post('/api/tenants/:tenantId/workflows/:id/backfill', async (req) => {
+  const { tenantId, id } = req.params as { tenantId: string; id: string };
+  const b = z.object({ days: z.number().int().min(1).max(3650), limit: z.number().int().min(1).max(2000) }).parse(req.body);
+  return backfill(tenantId, id, b.days, b.limit, req.user!.email);
+});
+
+// Version history, export and copying agents between orgs.
+app.get('/api/tenants/:tenantId/workflows/:id/versions', async (req) => {
+  const { tenantId, id } = req.params as { tenantId: string; id: string };
+  return listVersions(tenantId, id);
+});
+app.post('/api/tenants/:tenantId/workflows/:id/versions/:vid/restore', async (req) => {
+  const { tenantId, id, vid } = req.params as { tenantId: string; id: string; vid: string };
+  return restoreVersion(tenantId, id, Number(vid), req.user!.email);
+});
+app.get('/api/tenants/:tenantId/workflows/:id/export', async (req) => {
+  const { tenantId, id } = req.params as { tenantId: string; id: string };
+  return exportAgent(tenantId, id);
+});
+app.post('/api/tenants/:tenantId/workflows/import', { bodyLimit: 5_000_000 }, async (req) => {
+  const { tenantId } = req.params as { tenantId: string };
+  const b = z.object({ format: z.literal('crmagents-agent@1').optional(), name: z.string().min(1).max(200), graph: z.any() }).parse(req.body);
+  return importAgent(tenantId, { name: b.name, graph: b.graph }, req.user!.email);
+});
+app.post('/api/tenants/:tenantId/workflows/:id/copy', async (req) => {
+  const { tenantId, id } = req.params as { tenantId: string; id: string };
+  const { targetTenantId, name } = z.object({ targetTenantId: z.string().uuid(), name: z.string().max(200).optional() }).parse(req.body);
+  const own = await pool.query('select 1 from tenants where id=$1 and account_id=$2', [targetTenantId, req.user!.accountId]);
+  if (!own.rowCount) throw Object.assign(new Error('not found'), { statusCode: 404 });
+  const ex = await exportAgent(tenantId, id);
+  return importAgent(targetTenantId, { name: name || ex.name, graph: ex.graph }, req.user!.email);
 });
 
 app.post('/api/tenants/:tenantId/runs/:runId/decision', async (req) => {

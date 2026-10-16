@@ -4,7 +4,7 @@ import type { Plan, PlanStep } from './plan.js';
 // Turns a Plan into a ready-to-run workflow entirely in code: blocks, wiring, {{references}}, approval before
 // writes, cheap models where they were shown to be safe, and a plain-English summary with a cost estimate.
 
-const WRITES = new Set(['create_task', 'update_record', 'create_record', 'run_action']);
+const WRITES = new Set(['create_task', 'update_record', 'create_record', 'run_action', 'delete_record', 'attach_file']);
 // Rough per-run cost of each AI action (USD), from typical prompt sizes at current prices.
 const COST: Record<string, number> = { classify: 0.0003, extract: 0.004, ai_write: 0.01, research: 0.03 };
 const KNOWLEDGE_RULES = 'Base the steps on the knowledge sections given and cite them like [1]. If they do not cover the problem, say so in one line and give general guidance. Be concise.';
@@ -43,7 +43,7 @@ export function compilePlan(plan: Plan): CompileResult {
 
   let x = 0;
   const add = (type: string, config: Record<string, unknown>, label?: string, y = 120): WFNode => {
-    const prefix = { 'trigger.salesforce': 'trigger', 'trigger.manual': 'trigger', 'sf.getRecord': 'sf_get', 'logic.branch': 'branch', 'logic.approval': 'approval', 'util.output': 'output', 'ai.classify': 'ai_classify', 'ai.extract': 'ai_extract', 'ai.agent': 'ai_agent', 'sf.query': 'sf_query', 'sf.createTask': 'sf_task', 'sf.updateRecord': 'sf_update', 'sf.createRecord': 'sf_create', 'notify.slack': 'slack', 'sf.action': 'sf_action', 'logic.wait': 'wait', 'knowledge.search': 'kb', 'crm.suggest': 'suggest' }[type] ?? 'node';
+    const prefix = { 'trigger.salesforce': 'trigger', 'trigger.manual': 'trigger', 'sf.getRecord': 'sf_get', 'logic.branch': 'branch', 'logic.approval': 'approval', 'util.output': 'output', 'ai.classify': 'ai_classify', 'ai.extract': 'ai_extract', 'ai.agent': 'ai_agent', 'sf.query': 'sf_query', 'sf.createTask': 'sf_task', 'sf.updateRecord': 'sf_update', 'sf.createRecord': 'sf_create', 'notify.slack': 'slack', 'sf.action': 'sf_action', 'logic.wait': 'wait', 'knowledge.search': 'kb', 'crm.suggest': 'suggest', 'trigger.webhook': 'trigger', 'trigger.schedule': 'trigger', 'sf.deleteRecord': 'sf_delete', 'sf.readFiles': 'files', 'sf.attachFile': 'attach' }[type] ?? 'node';
     const n: WFNode = { id: nextId(prefix), type, position: { x, y }, config, ...(label ? { label } : {}) };
     if (y === 120) x += 280;
     nodes.push(n);
@@ -101,11 +101,17 @@ export function compilePlan(plan: Plan): CompileResult {
   const isSchedule = plan.trigger_kind === 'schedule';
   const every = plan.schedule?.every ?? 'day';
   const at = /^\d{1,2}:\d{2}$/.test(plan.schedule?.at ?? '') ? plan.schedule.at : '08:00';
-  if (isSchedule) link(add('trigger.schedule', { every, at }));
-  else link(add(isRecord ? 'trigger.salesforce' : 'trigger.manual', isRecord ? { objectApiName: plan.trigger_object } : {}));
+  const event = plan.trigger_event ?? 'created';
+  const changed = event === 'created' || event === 'deleted' ? [] : (plan.changed_fields ?? []).filter((f) => /^\w+$/.test(f));
+  changed.forEach((f) => recordFields.add(f));
+  if (isSchedule) link(add('trigger.schedule', { every, at, tz: 'UTC' }));
+  else if (plan.trigger_kind === 'webhook') link(add('trigger.webhook', { recordIdPath: '', objectApiName: '' }));
+  else link(add(isRecord ? 'trigger.salesforce' : 'trigger.manual', isRecord ? { objectApiName: plan.trigger_object, event, changedFields: changed.join(', ') } : {}));
+  const eventText = event === 'created' ? 'is created' : event === 'updated' ? 'is updated' : event === 'deleted' ? 'is deleted' : 'is created or updated';
   summary.push(isSchedule
-    ? `Runs every ${every}${every === 'hour' ? '' : ` at ${at} UTC`}${every === 'week' ? ' on Mondays' : ''} once turned on`
-    : isRecord ? `Runs when a ${plan.trigger_object} record arrives in Salesforce` : 'Runs on demand');
+    ? `Runs every ${every}${every === 'hour' ? '' : ` at ${at}`}${every === 'week' ? ' on Mondays' : ''} once turned on`
+    : plan.trigger_kind === 'webhook' ? 'Runs when another system sends it data (webhook)'
+    : isRecord ? `Runs when a ${plan.trigger_object} ${eventText}${changed.length ? ` and ${changed.join(' or ')} changes` : ''}` : 'Runs on demand');
   if (plan.trigger_kind === 'record' && !plan.trigger_object) errors.push('trigger_kind is "record" but no trigger_object is set');
 
   const needsRecord = isRecord && (plan.conditions.length > 0 || plan.steps.some((s) => s.input_fields.length || /\{record\./.test(JSON.stringify(s))));
@@ -188,10 +194,13 @@ export function compilePlan(plan: Plan): CompileResult {
         // Knowledge found by an earlier step goes in too, unless the instruction already places it.
         const lastKb = [...stepNodes.slice(0, i)].reverse().find((x) => x?.action === 'search_knowledge');
         const kbIdx = lastKb ? stepNodes.indexOf(lastKb) + 1 : 0;
+        const lastFiles = [...stepNodes.slice(0, i)].reverse().find((x) => x?.action === 'read_files');
+        const filesIdx = lastFiles ? stepNodes.indexOf(lastFiles) + 1 : 0;
+        const filesFeed = lastFiles && !new RegExp(`\\{step${filesIdx}\\.`).test(s.instruction) ? `\n\nFiles on the record:\n{{${lastFiles.id}.text}}` : '';
         const kb = lastKb && !new RegExp(`\\{step${kbIdx}\\.`).test(s.instruction) ? `\n\nFrom our knowledge base:\n{{${lastKb.id}.text}}` : '';
         node = add('ai.agent', {
           instructions: lastKb ? `Do exactly what the task asks. ${KNOWLEDGE_RULES}` : 'Do exactly what the task asks. Be concise.',
-          prompt: convert(s.instruction, i) + data + feed + kb + where,
+          prompt: convert(s.instruction, i) + data + feed + filesFeed + kb + where,
           tools: s.action === 'research' ? READ_TOOLS : [],
         }, s.action === 'research' ? 'AI research' : 'AI write');
         keys = new Set(['text']);
@@ -277,6 +286,25 @@ export function compilePlan(plan: Plan): CompileResult {
         result = result || text;
         break;
       }
+      case 'read_files':
+        if (!isRecord && !inLoop) errors.push(`step ${i + 1}: read_files needs a record trigger or a per-record query before it`);
+        node = add('sf.readFiles', { recordId: inLoop ? '{{item.Id}}' : '{{trigger.recordId}}', maxFiles: 5 }, 'Read files');
+        keys = new Set(['text', 'files']);
+        break;
+      case 'attach_file': {
+        if (!isRecord && !inLoop) errors.push(`step ${i + 1}: attach_file needs a record trigger or a per-record query before it`);
+        const lastAi = [...stepNodes.slice(0, i)].reverse().find((x) => x?.action === 'ai_write' || x?.action === 'research');
+        const content = convert(s.message, i) || (lastAi ? `{{${lastAi.id}.text}}` : '');
+        if (!content) errors.push(`step ${i + 1}: attach_file needs content (usually {stepN.text})`);
+        node = add('sf.attachFile', { recordId: inLoop ? '{{item.Id}}' : '{{trigger.recordId}}', title: convert(s.subject, i) || 'CRMagents note', format: 'md', content }, 'Attach file');
+        keys = new Set(['id']);
+        break;
+      }
+      case 'delete_record':
+        if (!isRecord && !inLoop) errors.push(`step ${i + 1}: delete_record needs a record trigger or a per-record query before it`);
+        node = add('sf.deleteRecord', { sobject: inLoop ? loopObject : plan.trigger_object, id: inLoop ? '{{item.Id}}' : '{{trigger.recordId}}' }, `Delete ${inLoop ? loopObject : plan.trigger_object}`);
+        keys = new Set(['success']);
+        break;
       case 'wait':
         if (inLoop) errors.push(`step ${i + 1}: a wait can't be inside a per-record loop`);
         node = add('logic.wait', { mode: 'For a while', amount: Math.max(1, s.wait_amount ?? 1), unit: s.wait_unit ?? 'days' }, 'Wait');
@@ -358,6 +386,8 @@ function changeText(s: PlanStep, plan: Plan, conv: (t: string) => string): strin
     case 'create_task': return `Create Task "${conv(s.subject || 'Follow up')}"`;
     case 'create_record': return `Create ${s.object}: ${s.fields.map((f) => `${f.field} = ${conv(f.value)}`).join(', ')}`;
     case 'run_action': return `${actionLabel(s.org_action ?? '')}${s.fields.length ? `: ${s.fields.map((f) => `${f.field} = ${conv(f.value)}`).join(', ')}` : ''}`;
+    case 'delete_record': return `Delete this ${plan.trigger_object}`;
+    case 'attach_file': return `Attach file "${conv(s.subject || 'CRMagents note')}" to this ${plan.trigger_object}`;
     default: return s.action;
   }
 }
@@ -376,6 +406,9 @@ function describe(s: PlanStep, plan: Plan): string {
     case 'run_action': return `${actionLabel(s.org_action ?? '')} (your org's own automation)`;
     case 'wait': return `Waits ${s.wait_amount ?? 1} ${s.wait_unit ?? 'days'}`;
     case 'search_knowledge': return 'Looks up your uploaded guides (no AI)';
+    case 'delete_record': return `Deletes the ${plan.trigger_object} (Recycle Bin)`;
+    case 'read_files': return 'Reads the files attached to the record (no AI)';
+    case 'attach_file': return `Attaches "${cut(s.subject || 'CRMagents note', 40)}" as a file on the record`;
     case 'suggest': return `Shows "${cut(s.subject || 'Suggestion', 40)}" on the record in Salesforce (changes nothing)`;
     default: return s.action;
   }

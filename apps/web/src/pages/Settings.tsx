@@ -5,7 +5,7 @@ import { Meter, Panel, Status, toast } from '../components/ui';
 
 // AI & spending: the AI key, the daily budget and answer reuse. Secrets are write-only; a save bar appears on change.
 
-const EMPTY = { sfClientId: '', sfClientSecret: '', sfLoginUrl: '', anthropicKey: '', dailyBudgetUsd: '', anthropicWorkspaceId: '', aiCacheHours: '', maskPii: '', maskFields: '', maxAiCalls: '', maxToolCalls: '', maxTokens: '', retentionDays: '' };
+const EMPTY = { sfClientId: '', sfClientSecret: '', sfLoginUrl: '', anthropicKey: '', dailyBudgetUsd: '', anthropicWorkspaceId: '', aiCacheHours: '', maskPii: '', maskFields: '', maxAiCalls: '', maxToolCalls: '', maxTokens: '', retentionDays: '', aiProvider: '', providerKey: '', aiBaseUrl: '', aiModel: '', aiFastModel: '', aiPriceIn: '', aiPriceOut: '', auditInSalesforce: '' };
 
 export function SettingsPage() {
   const [s, setS] = useState<Settings>();
@@ -18,7 +18,8 @@ export function SettingsPage() {
   const load = () => api.settings().then((x) => {
     setS(x);
     const f = { ...EMPTY, sfClientId: x.sfClientId, sfLoginUrl: x.sfLoginUrl, dailyBudgetUsd: x.dailyBudgetUsd ?? '', anthropicWorkspaceId: x.anthropicWorkspaceId ?? '', aiCacheHours: x.aiCacheHours ?? '',
-      maskPii: x.maskPii ?? '', maskFields: x.maskFields ?? '', maxAiCalls: x.maxAiCalls ?? '', maxToolCalls: x.maxToolCalls ?? '', maxTokens: x.maxTokens ?? '', retentionDays: x.retentionDays ?? '' };
+      maskPii: x.maskPii ?? '', maskFields: x.maskFields ?? '', maxAiCalls: x.maxAiCalls ?? '', maxToolCalls: x.maxToolCalls ?? '', maxTokens: x.maxTokens ?? '', retentionDays: x.retentionDays ?? '',
+      aiProvider: x.aiProvider ?? '', providerKey: '', aiBaseUrl: x.aiBaseUrl ?? '', aiModel: x.aiModel ?? '', aiFastModel: x.aiFastModel ?? '', aiPriceIn: x.aiPriceIn ?? '', aiPriceOut: x.aiPriceOut ?? '', auditInSalesforce: x.auditInSalesforce ?? '' };
     setForm(f); setBase(f);
   });
   useEffect(() => { load().catch((e) => setMsg(e.message)); api.usage().then(setUsage).catch(() => {}); }, []);
@@ -29,7 +30,9 @@ export function SettingsPage() {
     try {
       // Secrets are only sent when typed, so a blank field never wipes a stored value.
       const body: Record<string, string> = { sfClientId: form.sfClientId, sfLoginUrl: form.sfLoginUrl, dailyBudgetUsd: form.dailyBudgetUsd.trim(), anthropicWorkspaceId: form.anthropicWorkspaceId.trim(), aiCacheHours: form.aiCacheHours.trim(),
-        maskPii: form.maskPii, maskFields: form.maskFields.trim(), maxAiCalls: form.maxAiCalls.trim(), maxToolCalls: form.maxToolCalls.trim(), maxTokens: form.maxTokens.trim(), retentionDays: form.retentionDays.trim() };
+        maskPii: form.maskPii, maskFields: form.maskFields.trim(), maxAiCalls: form.maxAiCalls.trim(), maxToolCalls: form.maxToolCalls.trim(), maxTokens: form.maxTokens.trim(), retentionDays: form.retentionDays.trim(),
+        aiProvider: form.aiProvider, aiBaseUrl: form.aiBaseUrl.trim(), aiModel: form.aiModel.trim(), aiFastModel: form.aiFastModel.trim(), aiPriceIn: form.aiPriceIn.trim(), aiPriceOut: form.aiPriceOut.trim(), auditInSalesforce: form.auditInSalesforce };
+      if (form.providerKey) body.providerKey = form.providerKey;
       if (form.sfClientSecret) body.sfClientSecret = form.sfClientSecret;
       if (form.anthropicKey) body.anthropicKey = form.anthropicKey;
       await api.saveSettings(body);
@@ -44,7 +47,41 @@ export function SettingsPage() {
 
   return (
     <div className="smart-col">
-      <Panel title="AI key">
+      <Panel title="AI provider">
+        <div className="form">
+          <div className="frow">
+            <div className="flabel"><b>Provider</b><span>Claude is recommended and tested most. Others use your own account and key.</span></div>
+            <div className="ffield">
+              <select value={form.aiProvider || 'anthropic'} onChange={(e) => { setMsg(''); setForm({ ...form, aiProvider: e.target.value === 'anthropic' ? '' : e.target.value }); }} aria-label="AI provider">
+                <option value="anthropic">Claude (Anthropic)</option>
+                <option value="openai">OpenAI</option>
+                <option value="gemini">Google Gemini</option>
+                <option value="compatible">Other (OpenAI-compatible: Azure, Mistral, DeepSeek, self-hosted…)</option>
+              </select>
+            </div>
+          </div>
+          {form.aiProvider && form.aiProvider !== 'anthropic' && <>
+            <div className="frow">
+              <div className="flabel"><b>API key</b><span>Stored encrypted.</span></div>
+              <div className="ffield"><div className="row" style={{ gap: 8 }}>
+                <input type="password" value={form.providerKey} onChange={set('providerKey')} placeholder={s?.providerKey?.set ? '•••••••• saved, type to replace' : 'Key from the provider'} />
+                {s?.providerKey?.set ? <Status tone="ok">Saved</Status> : <Status tone="warn">Missing</Status>}
+              </div></div>
+            </div>
+            {form.aiProvider === 'compatible' && (
+              <div className="frow"><div className="flabel"><b>Base URL</b><span>Ends before /chat/completions.</span></div>
+                <div className="ffield"><input value={form.aiBaseUrl} onChange={set('aiBaseUrl')} placeholder="https://api.example.com/v1" /></div></div>
+            )}
+            <div className="frow"><div className="flabel"><b>Model</b><span>Used for writing and research. The low-cost model is used for sorting into categories.</span></div>
+              <div className="ffield row" style={{ gap: 8 }}><input value={form.aiModel} onChange={set('aiModel')} placeholder="Main model name" /><input value={form.aiFastModel} onChange={set('aiFastModel')} placeholder="Low-cost model (optional)" /></div></div>
+            <div className="frow"><div className="flabel"><b>Prices</b><span>USD per million tokens, so spending and the daily budget stay right.</span></div>
+              <div className="ffield row" style={{ gap: 8 }}><input value={form.aiPriceIn} onChange={set('aiPriceIn')} placeholder="Input, e.g. 5" /><input value={form.aiPriceOut} onChange={set('aiPriceOut')} placeholder="Output, e.g. 15" /></div></div>
+            <p className="muted small" style={{ margin: 0 }}>Reading scanned PDFs still uses Claude, so keep a Claude key below if you upload scans.</p>
+          </>}
+        </div>
+      </Panel>
+
+      <Panel title="Claude key">
         <div className="form">
           <div className="frow">
             <div className="flabel"><b>Anthropic API key</b><span>Stored encrypted and never shown again.</span></div>
@@ -76,6 +113,14 @@ export function SettingsPage() {
             <div className="ffield"><div className="input-affix"><input id="ai-cache" value={form.aiCacheHours} onChange={set('aiCacheHours')} placeholder="24" inputMode="numeric" /><span>hours</span></div>
               {usage?.cacheHitRate != null && <span className="muted small">{Math.round(usage.cacheHitRate * 100)}% of AI input was reused in the last 24 hours</span>}</div>
           </div>
+        </div>
+      </Panel>
+
+      <Panel title="Record of changes in Salesforce">
+        <div className="setting-row">
+          <div><b>{form.auditInSalesforce === 'off' ? 'Off' : 'On (recommended)'}</b>
+            <p className="muted small">Every change an agent makes is also recorded in Salesforce (CRMagents Agent Activity): which agent, what changed, for whom and who approved. Shown on the record's Suggestions card. One API call per run that changed something.</p></div>
+          <label className="check"><input type="checkbox" checked={form.auditInSalesforce !== 'off'} onChange={(e) => { setMsg(''); setForm({ ...form, auditInSalesforce: e.target.checked ? 'on' : 'off' }); }} /> Record changes</label>
         </div>
       </Panel>
 

@@ -1,0 +1,39 @@
+import { anthropicClient } from '../agent/llm.js';
+import { usageFrom } from '../agent/pricing.js';
+import { pool } from '../db.js';
+import { getSetting } from '../settings.js';
+import { spendGuard } from '../spend.js';
+
+// Scanned PDFs (pages that are only images) are read by Claude, which sees each page. Uses the low-cost model;
+// the cost counts toward the workspace's daily AI budget like any other AI use.
+
+const OCR_MODEL = 'claude-haiku-5-5';
+const MAX_PAGES = 100;
+
+export async function ocrPdf(accountId: string, pdf: Buffer, pages: number, title: string): Promise<string> {
+  if (pages > MAX_PAGES) throw new Error(`This scanned PDF has ${pages} pages; reading scans works up to ${MAX_PAGES}. Split it into smaller files.`);
+  const key = await getSetting(accountId, 'anthropicKey');
+  if (!key) throw new Error('Reading scanned PDFs uses Claude: add an Anthropic API key in Settings → AI & spending.');
+  await spendGuard(accountId)(0);
+  const client = anthropicClient(key, await getSetting(accountId, 'anthropicWorkspaceId'));
+  // Long transcripts: streamed so the request can't time out.
+  const msg = await client.messages.stream({
+    model: OCR_MODEL,
+    max_tokens: 64000,
+    messages: [{
+      role: 'user',
+      content: [
+        { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: pdf.toString('base64') } },
+        { type: 'text', text: 'Transcribe all the text in this document exactly, page by page. Start each page with a line "## Page N". Keep headings on their own line and keep lists and tables readable as plain text. Output only the transcript.' },
+      ],
+    }],
+  }).finalMessage();
+  const usage = usageFrom(OCR_MODEL, msg.usage);
+  // Logged like a run so it shows in usage and counts toward the daily budget.
+  await pool.query(
+    `insert into runs (tenant_id, input, status, output, input_tokens, output_tokens, cost_usd)
+     select t.id, $2, 'done', $3, $4, $5, $6 from tenants t where t.account_id=$1 order by t.created_at limit 1`,
+    [accountId, JSON.stringify({ knowledge: 'ocr', title }), `Read scanned PDF "${title}"`, usage.input, usage.output, usage.costUsd]);
+  if (msg.stop_reason === 'max_tokens') throw new Error('This scan has too much text to read in one go. Split it into smaller files.');
+  return msg.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
+}

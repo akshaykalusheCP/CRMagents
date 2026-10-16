@@ -1,4 +1,4 @@
-import { ArrowLeft, ChevronRight, History, Loader2, Pencil, Power, Trash2, Zap } from 'lucide-react';
+import { ArrowLeft, ChevronRight, History, Loader2, Pencil, Power, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { Edge } from '@xyflow/react';
 import { api, type AgentHealth, type BacktestResult, type Run, type Tenant, type WorkflowRow } from '../api';
@@ -8,6 +8,7 @@ import type { WFRFNode } from '../components/WorkflowNode';
 import { Empty, Facts, Panel, Status, Table, toast, type Column } from '../components/ui';
 import { runLabel, runTone } from './Home';
 import { RunsPage } from './Runs';
+import { BackfillPanel, MovePanel, StartMode, VersionsPanel, WebhookPanel } from '../components/AgentAdmin';
 
 // One agent's page: what it does in plain English, how it has been doing, its runs and its settings.
 // Editing the steps opens the editor; everything else happens here.
@@ -19,8 +20,12 @@ const when = (iso: string) => new Date(iso).toLocaleString([], { month: 'short',
 function triggerText(w: WorkflowRow) {
   const t = w.graph.nodes.find((n) => n.type.startsWith('trigger.'));
   if (!t) return 'No trigger yet';
-  if (t.type === 'trigger.schedule') return `Every ${t.config.every ?? 'day'}${t.config.every === 'hour' ? '' : ` at ${t.config.at ?? '08:00'} UTC`}`;
-  if (t.type === 'trigger.salesforce') return `When a ${t.config.objectApiName ?? 'record'} is ${t.config.event === 'created or updated' ? 'created or updated' : 'created'}`;
+  if (t.type === 'trigger.schedule') return `Every ${t.config.every ?? 'day'}${t.config.every === 'hour' ? '' : ` at ${t.config.at ?? '08:00'} ${t.config.tz || 'UTC'}`}`;
+  if (t.type === 'trigger.webhook') return 'When another system calls its web address';
+  if (t.type === 'trigger.salesforce') {
+    const changed = String(t.config.changedFields ?? '').trim();
+    return `When a ${t.config.objectApiName ?? 'record'} is ${t.config.event ?? 'created'}${changed && t.config.event !== 'created' && t.config.event !== 'deleted' ? ` and ${changed.split(/\s*,\s*/).join(' or ')} changes` : ''}`;
+  }
   return 'When you run it';
 }
 
@@ -35,7 +40,8 @@ export function AgentPage({ tenant, row, onBack, onEdit, onChanged, onDeleted }:
   const [bt, setBt] = useState<BacktestResult | 'loading' | { error: string } | null>(null);
   const t = tenant.id;
   const isRecord = row.graph.nodes.some((n) => n.type === 'trigger.salesforce');
-  const canRun = isRecord || row.graph.nodes.some((n) => n.type === 'trigger.schedule');
+  const isWebhook = row.graph.nodes.some((n) => n.type === 'trigger.webhook');
+  const canRun = isRecord || isWebhook || row.graph.nodes.some((n) => n.type === 'trigger.schedule');
 
   useEffect(() => {
     api.agentHealth(t).then((h) => setHealth(h.find((x) => x.workflowId === row.id))).catch(() => {});
@@ -52,7 +58,6 @@ export function AgentPage({ tenant, row, onBack, onEdit, onChanged, onDeleted }:
     try { await fn(); } catch (e) { setErr((e as Error).message); } finally { setBusy(''); }
   };
   const toggleLive = () => act('live', async () => { const r = await api.setLive(t, row.id, !row.live); onChanged({ live: r.live, watch_error: null }); toast(r.live ? 'Agent turned on' : 'Agent turned off'); });
-  const toggleRealtime = () => act('rt', async () => { const r = await api.setRealtime(t, row.id, !row.realtime); onChanged({ realtime: r.realtime }); toast(r.realtime ? 'Real-time on: reacts within seconds' : 'Back to 1-minute checks'); });
   const letItAct = () => act('trust', async () => { const r = await api.dropApproval(t, row.id); onChanged({ graph: r.graph }); setHealth((h) => h && { ...h, suggestion: undefined }); toast('Approval step removed: it now acts on its own'); });
   const remove = () => act('delete', async () => { await api.deleteWorkflow(t, row.id); toast('Agent deleted', 'info'); onDeleted(); });
   // Objects this agent writes (where a field limit makes sense).
@@ -150,18 +155,9 @@ export function AgentPage({ tenant, row, onBack, onEdit, onChanged, onDeleted }:
 
       {tab === 'settings' && (
         <div className="smart-col" style={{ maxWidth: 720 }}>
-          {isRecord && (
-            <Panel title="How fast it reacts">
-              <div className="setting-row">
-                <div><b>{row.realtime ? 'Real-time' : 'Every minute'}</b>
-                  <p className="muted small">{row.realtime ? 'Starts within seconds of a change in Salesforce (Change Data Capture). Falls back to 1-minute checks if the stream drops.' : 'CRMagents checks Salesforce for new records every minute.'}</p>
-                </div>
-                <button onClick={() => void toggleRealtime()} disabled={!!busy || !row.live} title={row.live ? undefined : 'Turn the agent on first'}>
-                  {busy === 'rt' ? <Loader2 size={15} className="spin" /> : <Zap size={15} />} {row.realtime ? 'Use 1-minute checks' : 'Switch to real-time'}
-                </button>
-              </div>
-            </Panel>
-          )}
+          {isRecord && <StartMode tenant={tenant} row={row} onChanged={onChanged} />}
+          {isWebhook && <WebhookPanel tenant={tenant} row={row} />}
+          {isRecord && <BackfillPanel tenant={tenant} row={row} />}
           {written.length > 0 && (
             <Panel title="Fields it may change">
               <p className="muted small" style={{ margin: '0 0 12px' }}>Limit what this agent can write. Leave empty for no limit (workspace rules still apply). Field API names, separated by commas.</p>
@@ -176,6 +172,8 @@ export function AgentPage({ tenant, row, onBack, onEdit, onChanged, onDeleted }:
               <div className="row" style={{ marginTop: 12 }}><button className="primary" onClick={() => void saveFields()} disabled={busy === 'fields'}>Save limits</button></div>
             </Panel>
           )}
+          <VersionsPanel tenant={tenant} row={row} onRestored={onChanged} />
+          <MovePanel tenant={tenant} row={row} />
           <Panel title="Delete agent">
             <div className="setting-row">
               <p className="muted small" style={{ margin: 0 }}>Removes the agent. Its past runs stay in Activity.</p>

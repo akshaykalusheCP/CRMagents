@@ -1,3 +1,4 @@
+import { PublicChatSettings } from '../components/PublicChat';
 import { Loader2, Plus, Send } from 'lucide-react';
 import { Markdown } from '../components/Markdown';
 import { useEffect, useState } from 'react';
@@ -110,6 +111,7 @@ export function AgentsPage({ tenant, goConnections }: { tenant?: Tenant; goConne
 
                 </div>
               )}
+              {sel.id && <PublicChatSettings tenantId={tenant!.id} agentId={sel.id} />}
             </div>
           ) : (
             <div className="inbox-detail"><Empty title="Pick an assistant" body="Or create a new one. Assistants answer questions; automations act on records by themselves." /></div>

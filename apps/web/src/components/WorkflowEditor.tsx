@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CATEGORY_COLORS, NODE_DEFS, NODE_DEF_BY_TYPE, type Category, type Workflow, type WFNode } from '@crmagents/shared';
-import { api, type BacktestResult, type Draft, type Preview, type RegressionResult, type RunResult, type ToolInfo } from '../api';
+import { api, localTz, type BacktestResult, type Draft, type Preview, type RegressionResult, type RunResult, type ToolInfo } from '../api';
 import { BacktestView, RegressionView, ResultModal, Working } from './Smart';
 import { Menu, toast, useConfirm } from './ui';
 import { Inspector } from './Inspector';
@@ -321,14 +321,14 @@ function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDe
     try { const r = await api.setRealtime(tenantId, id, !realtime); setRealtimeOn(r.realtime); }
     catch (e) { setMsg((e as Error).message); }
   };
-  const whenText = schedule ? `every ${schedule.every ?? 'day'}${schedule.every === 'hour' ? '' : ` at ${schedule.at || '08:00'} UTC`}` : `for every ${triggerObject} that is ${triggerEvent} in Salesforce (checked every minute)`;
+  const whenText = schedule ? `every ${schedule.every ?? 'day'}${schedule.every === 'hour' ? '' : ` at ${schedule.at || '08:00'} ${schedule.tz || 'UTC'}`}` : `for every ${triggerObject} that is ${triggerEvent} in Salesforce`;
   // Turn on = CRMagents checks Salesforce every minute for matching records. Nothing is installed in the org.
   // On-demand agents have nothing to "turn on": offer to run them on a schedule instead.
   const manualTrigger = nodes.find((n) => n.data.type === 'trigger.manual');
   const [sched, setSched] = useState<{ every: 'hour' | 'day' | 'week'; at: string } | null>(null);
   const scheduleAndTurnOn = async () => {
     if (!sched || !manualTrigger) return;
-    const config = { every: sched.every, at: sched.at };
+    const config = { every: sched.every, at: sched.at, tz: localTz() };
     const next = nodes.map((n) => (n.id === manualTrigger.id ? { ...n, data: { ...n.data, type: 'trigger.schedule', label: 'Schedule', config } } : n));
     setDeploying(true); setMsg('');
     try {
@@ -338,7 +338,7 @@ function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDe
       await api.setLive(tenantId, wid, true);
       setLive(true);
       setSched(null);
-      toast(`Turned on: runs every ${sched.every}${sched.every === 'hour' ? '' : ` at ${sched.at} UTC`}`);
+      toast(`Turned on: runs every ${sched.every}${sched.every === 'hour' ? '' : ` at ${sched.at} (${localTz()})`}`);
     } catch (e) { setMsg((e as Error).message); }
     finally { setDeploying(false); }
   };
@@ -463,7 +463,7 @@ function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDe
             {sched.every !== 'hour' && (
               <label className="row" style={{ gap: 10, fontSize: 14 }}>At
                 <input id="sched-at" type="time" value={sched.at} onChange={(e) => setSched({ ...sched, at: e.target.value || '08:00' })} style={{ width: 130 }} />
-                <span className="muted small">UTC{sched.every === 'week' ? ', on Mondays' : ''}</span>
+                <span className="muted small">{localTz()}{sched.every === 'week' ? ', on Mondays' : ''}</span>
               </label>
             )}
             <div className="confirm-actions">

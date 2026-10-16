@@ -1,12 +1,13 @@
+import { aiClient } from './provider.js';
 import { pool } from '../db.js';
 import { SalesforceClient } from '../salesforce/client.js';
-import { getSetting } from '../settings.js';
 import { checkRunRate, spendGuard } from '../spend.js';
 import { accountOf } from '../tenants.js';
-import { anthropicClient, createLlm } from './llm.js';
+import { createLlm } from './llm.js';
 import { dbResultCache } from './resultCache.js';
 import { runTrust } from '../trust/policy.js';
 import { hasKnowledge } from '../knowledge/store.js';
+import { endRemote, remoteExecutor } from './remote.js';
 
 export interface AgentSpec {
   id?: string;
@@ -15,21 +16,24 @@ export interface AgentSpec {
 }
 
 // Standalone single-agent run (the "Single agents" page). Workflows use the engine instead.
-export async function runAgent(tenantId: string, agent: AgentSpec, userInput: string, context?: unknown, history?: { role: 'user' | 'assistant'; text: string }[], opts: { onStarted?: (runId: string) => void } = {}) {
+export async function runAgent(
+  tenantId: string, agent: AgentSpec, userInput: string, context?: unknown, history?: { role: 'user' | 'assistant'; text: string }[],
+  opts: { onStarted?: (runId: string) => void; /** Salesforce tools run inside Salesforce as the person asking. */ inOrg?: boolean; startedBy?: string } = {},
+) {
   const accountId = await accountOf(tenantId);
   checkRunRate(accountId);
-  const apiKey = await getSetting(accountId, 'anthropicKey');
-  if (!apiKey) throw new Error('Anthropic API key is not configured. Add it in Settings.');
+  const client = await aiClient(accountId);
   const sf = await SalesforceClient.forTenant(tenantId);
-  const workspaceId = await getSetting(accountId, 'anthropicWorkspaceId');
   const { masker, limits } = await runTrust(accountId);
-  const llm = createLlm(apiKey, sf, spendGuard(accountId), anthropicClient(apiKey, workspaceId), await dbResultCache(accountId), { masker, limits });
+  const remote: { exec?: (name: string, input: unknown) => Promise<unknown> | undefined } = {};
+  const llm = createLlm('', sf, spendGuard(accountId), client, await dbResultCache(accountId), { masker, limits, exec: (n, i) => remote.exec?.(n, i) });
 
   const { rows } = await pool.query(
-    'insert into runs (tenant_id, agent_id, input) values ($1,$2,$3) returning id',
-    [tenantId, agent.id ?? null, JSON.stringify({ userInput, context })],
+    'insert into runs (tenant_id, agent_id, input, started_by) values ($1,$2,$3,$4) returning id',
+    [tenantId, agent.id ?? null, JSON.stringify({ userInput, context }), opts.startedBy ?? null],
   );
   const runId = rows[0].id as string;
+  if (opts.inOrg) remote.exec = remoteExecutor(runId);
   opts.onStarted?.(runId);
   try {
     const r = await llm.agent({
@@ -48,5 +52,7 @@ export async function runAgent(tenantId: string, agent: AgentSpec, userInput: st
   } catch (e) {
     await pool.query(`update runs set status='error', output=$2 where id=$1`, [runId, e instanceof Error ? e.message : String(e)]);
     throw e;
+  } finally {
+    endRemote(runId);
   }
 }

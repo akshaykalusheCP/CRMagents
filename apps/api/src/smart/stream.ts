@@ -3,7 +3,7 @@ import type { Workflow } from '@crmagents/shared';
 import { config } from '../config.js';
 import { pool } from '../db.js';
 import { startRunAsync } from '../engine/service.js';
-import { triggerOf } from '../engine/watcher.js';
+import { triggersOf } from '../engine/watcher.js';
 import { SalesforceClient } from '../salesforce/client.js';
 
 // Real-time triggers: Salesforce Change Data Capture over the Streaming API (CometD long-polling, no extra
@@ -18,18 +18,26 @@ export function changeEventFor(object: string): string {
   return object.endsWith('__c') ? `${object.slice(0, -3)}__ChangeEvent` : `${object}ChangeEvent`;
 }
 
-export interface ChangeHeader { entityName: string; changeType: string; recordIds: string[]; commitUser?: string }
+export interface ChangeHeader { entityName: string; changeType: string; recordIds: string[]; commitUser?: string; changedFields?: string[] }
 
 /** Which agents and records a change event starts. Pure; tested. */
-export function routeEvent(h: ChangeHeader, agents: { id: string; object: string; event: string }[], ownUserId: string | null): { workflowId: string; recordId: string }[] {
+export function routeEvent(h: ChangeHeader, agents: { id: string; object: string; event: string; changed?: string[] }[], ownUserId: string | null): { workflowId: string; recordId: string }[] {
   const type = h.changeType.replace(/^GAP_/, '');
-  if (!['CREATE', 'UPDATE', 'UNDELETE'].includes(type)) return [];
-  // Our own writes come back as UPDATE events; skipping them stops agents from triggering themselves.
-  if (type === 'UPDATE' && ownUserId && h.commitUser && h.commitUser.slice(0, 15) === ownUserId.slice(0, 15)) return [];
+  if (!['CREATE', 'UPDATE', 'UNDELETE', 'DELETE'].includes(type)) return [];
+  // Our own writes come back as events; skipping them stops agents from triggering themselves.
+  if (type !== 'CREATE' && ownUserId && h.commitUser && h.commitUser.slice(0, 15) === ownUserId.slice(0, 15)) return [];
+  // Compound fields come as "Name.FirstName": the watched field is the part before the dot.
+  const changed = new Set((h.changedFields ?? []).map((f) => f.split('.')[0].toLowerCase()));
   const out: { workflowId: string; recordId: string }[] = [];
   for (const a of agents) {
     if (a.object !== h.entityName) continue;
-    if (a.event === 'created' && type !== 'CREATE') continue;
+    const ok = a.event === 'created' ? type === 'CREATE'
+      : a.event === 'deleted' ? type === 'DELETE'
+      : a.event === 'updated' ? type === 'UPDATE'
+      : type !== 'DELETE'; // created or updated
+    if (!ok) continue;
+    // "Only when these fields change" (gap events carry no field list: let them through).
+    if (type === 'UPDATE' && a.changed?.length && !h.changeType.startsWith('GAP_') && !a.changed.some((f) => changed.has(f.toLowerCase()))) continue;
     for (const id of h.recordIds) out.push({ workflowId: a.id, recordId: id });
   }
   return out;
@@ -134,13 +142,14 @@ class OrgStream {
     const { rows } = await pool.query(
       `select w.id, w.graph, t.sf_user_id from workflows w join tenants t on t.id = w.tenant_id
        where w.tenant_id=$1 and w.live and w.realtime`, [this.tenantId]);
-    const agents = rows.flatMap((r) => { const t = triggerOf(r.graph); return t ? [{ id: r.id, object: t.object, event: t.event }] : []; });
+    const agents = rows.flatMap((r) => triggersOf(r.graph).map((t) => ({ id: r.id, object: t.object, event: t.event, changed: t.changed })));
     for (const job of routeEvent(h, agents, rows[0]?.sf_user_id ?? null)) {
       // A "created" event carries every field with a value: the run can skip fetching the record.
       const graph = rows.find((r) => r.id === job.workflowId)?.graph;
       const fields = h.changeType === 'CREATE' && graph ? prefetchFields(graph, h.entityName) : null;
       const prefetched = fields?.length && h.recordIds.length === 1 ? fromCreateEvent(payload, fields) : null;
-      await startRunAsync(this.tenantId, job.workflowId, { recordId: job.recordId, objectApiName: h.entityName, ...(prefetched ? { prefetched } : {}) }).catch(() => undefined);
+      const deleted = h.changeType.replace(/^GAP_/, '') === 'DELETE';
+      await startRunAsync(this.tenantId, job.workflowId, { recordId: job.recordId, objectApiName: h.entityName, ...(deleted ? { deleted: true } : {}), ...(prefetched ? { prefetched } : {}) }).catch(() => undefined);
     }
     if (replayId !== undefined) {
       await pool.query(
@@ -169,8 +178,7 @@ export async function syncStreams(log: { error: (o: unknown, m: string) => void 
      where w.live and w.realtime and t.setup_status = 'ready'`);
   const want = new Map<string, Set<string>>();
   for (const w of rows as Live[]) {
-    const t = triggerOf(w.graph);
-    if (t) (want.get(w.tenant_id) ?? want.set(w.tenant_id, new Set()).get(w.tenant_id)!).add(`/data/${changeEventFor(t.object)}`);
+    for (const t of triggersOf(w.graph)) (want.get(w.tenant_id) ?? want.set(w.tenant_id, new Set()).get(w.tenant_id)!).add(`/data/${changeEventFor(t.object)}`);
   }
   for (const [tenant, cur] of streams) {
     const chans = want.get(tenant);

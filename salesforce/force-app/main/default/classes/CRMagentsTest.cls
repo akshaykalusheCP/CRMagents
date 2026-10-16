@@ -200,4 +200,26 @@ private class CRMagentsTest {
         System.assert(res[0].error.contains('callout time limit'), res[0].error);
         System.assertEquals(null, res[0].answer);
     }
+
+    @IsTest
+    static void showsAgentActivityForARecord() {
+        Account a = new Account(Name = 'Audit Co');
+        insert a;
+        // CRMagents writes activity (Integration permission set); people read it (User permission set).
+        User u = new User(Id = System.UserInfo.getUserId());
+        List<PermissionSetAssignment> add = new List<PermissionSetAssignment>();
+        for (PermissionSet ps : [SELECT Id FROM PermissionSet WHERE Name IN ('CRMagents_User', 'CRMagents_Integration')]) {
+            if ([SELECT COUNT() FROM PermissionSetAssignment WHERE AssigneeId = :u.Id AND PermissionSetId = :ps.Id] == 0) {
+                add.add(new PermissionSetAssignment(AssigneeId = u.Id, PermissionSetId = ps.Id));
+            }
+        }
+        insert add;
+        List<CRMagents_Agent_Activity__c> rows;
+        System.runAs(u) {
+            insert new CRMagents_Agent_Activity__c(Agent__c = 'Triage', Record_Id__c = a.Id, Changes__c = 'Update Account: Rating = Hot', Status__c = 'done');
+            rows = CRMAgentsController.activity(a.Id);
+        }
+        System.assertEquals(1, rows.size());
+        System.assertEquals('Triage', rows[0].Agent__c);
+    }
 }

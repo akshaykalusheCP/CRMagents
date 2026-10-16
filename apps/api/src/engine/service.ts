@@ -1,9 +1,10 @@
+import { auditRun } from '../salesforce/audit.js';
+import { aiClient } from '../agent/provider.js';
 import type { Prefetched } from './prefetch.js';
 import { APPROVERS, validateWorkflow, type Workflow } from '@crmagents/shared';
-import { anthropicClient, createLlm, type Llm } from '../agent/llm.js';
+import { createLlm, type Llm } from '../agent/llm.js';
 import { pool } from '../db.js';
 import { SalesforceClient } from '../salesforce/client.js';
-import { getSetting } from '../settings.js';
 import { checkRunRate, spendGuard } from '../spend.js';
 import { accountOf } from '../tenants.js';
 import { emptyUsage } from '../agent/pricing.js';
@@ -19,6 +20,12 @@ export interface TriggerPayload {
   recordId?: string;
   objectApiName?: string;
   context?: unknown;
+  /** Salesforce user who started it (from the Agent Panel or a Flow): changes are limited to what they could do. */
+  sfUserId?: string;
+  /** Body of a webhook call. */
+  body?: unknown;
+  /** The record was deleted (it is read from the Recycle Bin). */
+  deleted?: boolean;
   /** The record's data when it came with the trigger (saves the "get record" call). */
   prefetched?: Prefetched;
 }
@@ -42,10 +49,8 @@ async function makeEnv(tenantId: string, workflowId?: string, st?: RunState) {
   let real: Llm | undefined;
   const llm = async (): Promise<Llm> => {
     if (real) return real;
-    const apiKey = await getSetting(accountId, 'anthropicKey');
-    if (!apiKey) throw new Error('Anthropic API key is not configured. Add it in Settings.');
-    const workspaceId = await getSetting(accountId, 'anthropicWorkspaceId');
-    return (real = createLlm(apiKey, sf, spendGuard(accountId), anthropicClient(apiKey, workspaceId), await dbResultCache(accountId), { masker, limits, counters }));
+    const client = await aiClient(accountId);
+    return (real = createLlm('', sf, spendGuard(accountId), client, await dbResultCache(accountId), { masker, limits, counters }));
   };
   const lazy: Llm = {
     agent: async (o) => (await llm()).agent(o),
@@ -60,7 +65,33 @@ async function makeEnv(tenantId: string, workflowId?: string, st?: RunState) {
     }
     : undefined;
   const unmask = masker ? <T,>(v: T): T => masker.unmaskValue(v) : undefined;
-  return { sf, llm: lazy, guard, unmask, ...(workflowId ? { examples: examplesFor(workflowId) } : {}) };
+  // Started by a person in Salesforce: the agent may only change records that person could change themselves.
+  const asUser = String(st?.scope?.trigger?.sfUserId ?? '');
+  const userGuard = /^005[a-zA-Z0-9]{12,15}$/.test(asUser) ? userAccessGuard(sf, asUser) : undefined;
+  const allGuards = userGuard || guard
+    ? async (ctx: Parameters<NonNullable<typeof guard>>[0]) => { await userGuard?.(ctx); await guard?.(ctx); }
+    : undefined;
+  return { sf, llm: lazy, guard: allGuards, unmask, ...(workflowId ? { examples: examplesFor(workflowId) } : {}) };
+}
+
+/**
+ * Checks Salesforce's own record access for a user before an update or delete (sharing rules, ownership, teams).
+ * One query per record, remembered for the run.
+ */
+export function userAccessGuard(sf: SalesforceClient, userId: string) {
+  const seen = new Map<string, boolean>();
+  return async (ctx: { action: string; recordId?: string; object: string }) => {
+    if (!ctx.recordId || !['update', 'delete'].includes(ctx.action) || !/^[a-zA-Z0-9]{15,18}$/.test(ctx.recordId)) return;
+    const key = `${ctx.action}:${ctx.recordId}`;
+    if (!seen.has(key)) {
+      const field = ctx.action === 'delete' ? 'HasDeleteAccess' : 'HasEditAccess';
+      const r = await sf.query(`SELECT RecordId, ${field} FROM UserRecordAccess WHERE UserId = '${userId}' AND RecordId = '${ctx.recordId}'`);
+      seen.set(key, (r.records[0] as Record<string, unknown> | undefined)?.[field] === true);
+    }
+    if (!seen.get(key)) {
+      throw Object.assign(new Error(`The person who started this agent can't ${ctx.action === 'delete' ? 'delete' : 'edit'} this ${ctx.object} in Salesforce, so the agent won't either.`), { statusCode: 403 });
+    }
+  };
 }
 
 async function persist(runId: string, st: RunState, graph: Workflow, status: string, error?: string, unmask: <T>(v: T) => T = (v) => v) {
@@ -103,6 +134,8 @@ async function drive(runId: string, tenantId: string, graph: Workflow, st: RunSt
     }
     // Live update for the Salesforce panel, and a bell notification when someone needs to approve.
     void notifySalesforce(tenantId, runId);
+    // The changes it made, recorded in Salesforce (CRMagents Agent Activity).
+    if (status === 'done' || status === 'error') void auditRun(tenantId, runId);
     return saved;
   } catch (e) {
     return await persist(runId, st, graph, 'error', e instanceof Error ? e.message : String(e));

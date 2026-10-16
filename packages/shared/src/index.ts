@@ -75,10 +75,11 @@ export const NODE_DEFS: NodeDef[] = [
     category: 'Trigger',
     description: 'Starts when a record is created or changed in Salesforce (or when Salesforce calls it).',
     fields: [
-      { key: 'objectApiName', label: 'Object', kind: 'text', placeholder: 'Case', help: 'The Salesforce object to watch, e.g. Case or Lead.' },
-      { key: 'event', label: 'Run when a record is', kind: 'select', options: ['created', 'created or updated'], default: 'created', help: 'When the agent is turned on, CRMagents checks for these every minute.' },
+      { key: 'objectApiName', label: 'Object', kind: 'text', placeholder: 'Case', help: 'The Salesforce object to watch, e.g. Case. Several: "Case, Lead" ({{trigger.objectApiName}} says which one).' },
+      { key: 'event', label: 'Run when a record is', kind: 'select', options: ['created', 'created or updated', 'updated', 'deleted'], default: 'created', help: 'Deleted records are read from the Recycle Bin (kept 15 days).' },
+      { key: 'changedFields', label: 'Only when these fields change (optional)', kind: 'text', placeholder: 'Status, Priority', help: 'For "updated" / "created or updated": run only when one of these fields gets a new value.' },
     ],
-    outputs: ['recordId', 'objectApiName', 'input', 'context'],
+    outputs: ['recordId', 'objectApiName', 'deleted', 'input', 'context'],
   },
   {
     type: 'trigger.schedule',
@@ -87,9 +88,21 @@ export const NODE_DEFS: NodeDef[] = [
     description: 'Runs on a schedule (every hour, day or week) once the agent is turned on.',
     fields: [
       { key: 'every', label: 'Run every', kind: 'select', options: ['day', 'hour', 'week'], default: 'day' },
-      { key: 'at', label: 'At (UTC, HH:MM)', kind: 'text', placeholder: '08:00', default: '08:00', help: 'For daily and weekly runs (weekly runs on Mondays).' },
+      { key: 'at', label: 'At (HH:MM)', kind: 'text', placeholder: '08:00', default: '08:00', help: 'For daily and weekly runs (weekly runs on Mondays).' },
+      { key: 'tz', label: 'Time zone', kind: 'text', placeholder: 'Asia/Kolkata', default: 'UTC', help: 'IANA name, e.g. Asia/Kolkata, Europe/London, America/New_York.' },
     ],
     outputs: ['input'],
+  },
+  {
+    type: 'trigger.webhook',
+    label: 'Webhook',
+    category: 'Trigger',
+    description: 'Starts when another system (a form, ServiceNow, Jira, your app) sends a request to this agent\'s web address. The JSON it sends is {{trigger.body}}.',
+    fields: [
+      { key: 'recordIdPath', label: 'Record Id in the body (optional)', kind: 'text', placeholder: 'caseId', help: 'If the body names a Salesforce record, its key here makes it {{trigger.recordId}}.' },
+      { key: 'objectApiName', label: 'Object of that record (optional)', kind: 'text', placeholder: 'Case' },
+    ],
+    outputs: ['body', 'recordId', 'objectApiName', 'input'],
   },
   {
     type: 'ai.agent',
@@ -175,6 +188,54 @@ export const NODE_DEFS: NodeDef[] = [
       { key: 'fields', label: 'Fields (JSON)', kind: 'textarea', placeholder: '{"Priority": "High"}' },
     ],
     outputs: ['success'],
+  },
+  {
+    type: 'sf.deleteRecord',
+    label: 'Delete record',
+    category: 'Salesforce',
+    description: 'Delete a record. It stays in the Recycle Bin for 15 days.',
+    fields: [
+      { key: 'sobject', label: 'Object', kind: 'text' },
+      { key: 'id', label: 'Record Id', kind: 'text', placeholder: '{{trigger.recordId}}' },
+    ],
+    outputs: ['success'],
+  },
+  {
+    type: 'sf.upsertRecord',
+    label: 'Create or update by external Id',
+    category: 'Salesforce',
+    description: 'Update the record with this external Id, or create it if there is none (e.g. an order number from another system).',
+    fields: [
+      { key: 'sobject', label: 'Object', kind: 'text', placeholder: 'Order__c' },
+      { key: 'externalIdField', label: 'External Id field', kind: 'text', placeholder: 'Order_Number__c' },
+      { key: 'externalId', label: 'External Id value', kind: 'text', placeholder: '{{trigger.body.orderNumber}}' },
+      { key: 'fields', label: 'Fields (JSON)', kind: 'textarea', placeholder: '{"Status__c": "Shipped"}' },
+    ],
+    outputs: ['id', 'created'],
+  },
+  {
+    type: 'sf.readFiles',
+    label: 'Read files',
+    category: 'Salesforce',
+    description: "The text of a record's attached files (PDF, Word, text, CSV, HTML), newest first, for an AI step to use.",
+    fields: [
+      { key: 'recordId', label: 'Record Id', kind: 'text', placeholder: '{{trigger.recordId}}' },
+      { key: 'maxFiles', label: 'At most this many files', kind: 'number', default: 5 },
+    ],
+    outputs: ['text', 'files'],
+  },
+  {
+    type: 'sf.attachFile',
+    label: 'Attach file',
+    category: 'Salesforce',
+    description: 'Save text (a summary, a report, a CSV) as a file on the record.',
+    fields: [
+      { key: 'recordId', label: 'Record Id', kind: 'text', placeholder: '{{trigger.recordId}}' },
+      { key: 'title', label: 'File name', kind: 'text', placeholder: 'Case summary' },
+      { key: 'format', label: 'Format', kind: 'select', options: ['md', 'txt', 'csv', 'html', 'json'], default: 'md' },
+      { key: 'content', label: 'Content', kind: 'textarea', placeholder: '{{ai_agent_1.text}}' },
+    ],
+    outputs: ['id'],
   },
   {
     type: 'sf.createTask',
@@ -319,7 +380,7 @@ export const NODE_DEFS: NodeDef[] = [
 ];
 
 /** Steps that change data or send it out; each can ask a person first. */
-export const WRITE_NODE_TYPES = ['sf.createRecord', 'sf.updateRecord', 'sf.createTask', 'sf.action', 'notify.slack', 'http.request'];
+export const WRITE_NODE_TYPES = ['sf.createRecord', 'sf.updateRecord', 'sf.deleteRecord', 'sf.upsertRecord', 'sf.createTask', 'sf.action', 'notify.slack', 'http.request', 'sf.attachFile'];
 for (const d of NODE_DEFS) {
   if (!WRITE_NODE_TYPES.includes(d.type)) continue;
   d.fields.push(

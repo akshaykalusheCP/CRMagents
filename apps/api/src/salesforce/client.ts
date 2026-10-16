@@ -30,7 +30,7 @@ export class SalesforceClient {
     readonly tenantId: string,
     readonly accountId: string,
     private own: { clientId: string; clientSecret: string } | undefined,
-    private instanceUrl: string,
+    readonly instanceUrl: string,
   ) {}
 
   static async forTenant(tenantId: string): Promise<SalesforceClient> {
@@ -293,6 +293,48 @@ export class SalesforceClient {
     return this.call<void>('PATCH', `/sobjects/${encodeURIComponent(sobject)}/${encodeURIComponent(id)}`, fields);
   }
 
+  /** Files attached to a record (latest versions), newest first. */
+  async listFiles(recordId: string): Promise<RecordFile[]> {
+    if (!/^[a-zA-Z0-9]{15,18}$/.test(recordId)) throw new Error('Bad record Id');
+    const r = await this.query(
+      `SELECT ContentDocumentId, ContentDocument.Title, ContentDocument.FileExtension, ContentDocument.ContentSize, ContentDocument.LatestPublishedVersionId, ContentDocument.LastModifiedDate FROM ContentDocumentLink WHERE LinkedEntityId = '${recordId}' ORDER BY ContentDocument.LastModifiedDate DESC LIMIT 50`);
+    return r.records.map((x: any) => ({
+      documentId: x.ContentDocumentId, versionId: x.ContentDocument?.LatestPublishedVersionId, title: x.ContentDocument?.Title ?? '',
+      extension: String(x.ContentDocument?.FileExtension ?? '').toLowerCase(), size: Number(x.ContentDocument?.ContentSize ?? 0),
+    }));
+  }
+
+  /** A file's bytes (one call). */
+  async downloadFile(versionId: string): Promise<Buffer> {
+    if (!/^068[a-zA-Z0-9]{12,15}$/.test(versionId)) throw new Error('Bad file version Id');
+    const res = await this.request('GET', `/sobjects/ContentVersion/${versionId}/VersionData`);
+    return Buffer.from(await res.arrayBuffer());
+  }
+
+  /** Attaches a new file to a record. */
+  async attachFile(recordId: string, title: string, fileName: string, data: Buffer) {
+    const r = await this.call<{ id: string }>('POST', '/sobjects/ContentVersion', {
+      Title: title.slice(0, 255), PathOnClient: fileName, VersionData: data.toString('base64'), FirstPublishLocationId: recordId,
+    });
+    return { versionId: r.id };
+  }
+
+  deleteRecord(sobject: string, id: string) {
+    return this.call<void>('DELETE', `/sobjects/${encodeURIComponent(sobject)}/${encodeURIComponent(id)}`);
+  }
+
+  /** Creates or updates by an external Id field: no lookup call needed to know whether the record exists. */
+  async upsertRecord(sobject: string, externalIdField: string, externalId: string, fields: Record<string, unknown>) {
+    const r = await this.call<{ id: string; created: boolean } | undefined>('PATCH', `/sobjects/${encodeURIComponent(sobject)}/${encodeURIComponent(externalIdField)}/${encodeURIComponent(externalId)}`, fields);
+    return { id: r?.id ?? '', created: r?.created ?? false };
+  }
+
+  /** Deleted records too (the Recycle Bin keeps them 15 days): one page of an ALL ROWS query. */
+  async queryWithDeleted(soql: string) {
+    const r = await this.call<{ totalSize: number; records: unknown[] }>('GET', `/queryAll?q=${encodeURIComponent(soql)}`);
+    return { totalSize: r.totalSize, records: r.records.map((x) => compactRecord(x)) as any[] };
+  }
+
   /**
    * Many creates/updates at once, each succeeding or failing on its own. Up to 200 records go in one
    * sObject Collections call; more than BULK_OVER of one kind go through a Bulk API 2.0 job.
@@ -308,13 +350,22 @@ export class SalesforceClient {
     for (const [k, idx] of groups) {
       const kind = k.split(':')[0] as SaveOp['kind'];
       const sobject = k.slice(kind.length + 1);
-      if (idx.length > BULK_OVER) {
+      if (idx.length > BULK_OVER && kind !== 'delete') {
         const r = await this.bulkSave(kind, sobject, idx.map((i) => ops[i]));
         idx.forEach((i, j) => { results[i] = r[j]; });
         continue;
       }
       for (let c = 0; c < idx.length; c += COLLECTION_SIZE) {
         const part = idx.slice(c, c + COLLECTION_SIZE);
+        if (kind === 'delete') {
+          const r = await this.call<{ id?: string; success: boolean; errors: { message: string; statusCode: string }[] }[]>(
+            'DELETE', `/composite/sobjects?allOrNone=false&ids=${part.map((i) => encodeURIComponent(String(ops[i].id))).join(',')}`);
+          part.forEach((i, j) => {
+            const x = r[j];
+            results[i] = x?.success ? { ok: true, id: ops[i].id } : { ok: false, error: x?.errors?.map((e) => `${e.statusCode}: ${e.message}`).join('; ') || 'Failed' };
+          });
+          continue;
+        }
         const r = await this.call<{ id?: string; success: boolean; errors: { message: string; statusCode: string }[] }[]>(
           kind === 'create' ? 'POST' : 'PATCH', '/composite/sobjects', {
             allOrNone: false,
@@ -363,7 +414,9 @@ const COLLECTION_SIZE = 200; // sObject Collections: records per call
 /** Above this many rows/records, a Bulk API 2.0 job uses fewer calls than paging or collections. */
 export const BULK_OVER = 10_000;
 
-export interface SaveOp { kind: 'create' | 'update'; sobject: string; id?: string; fields: Record<string, unknown> }
+export interface RecordFile { documentId: string; versionId: string; title: string; extension: string; size: number }
+
+export interface SaveOp { kind: 'create' | 'update' | 'delete'; sobject: string; id?: string; fields: Record<string, unknown> }
 export interface SaveResult { ok: boolean; id?: string; error?: string }
 
 function csvCell(v: unknown): string {

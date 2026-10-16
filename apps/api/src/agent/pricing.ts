@@ -37,6 +37,8 @@ export function usageFrom(model: string, u: {
   output_tokens: number;
   cache_creation_input_tokens?: number | null;
   cache_read_input_tokens?: number | null;
+  /** Set by the adapter for other AI providers, which price differently. */
+  cost_usd?: number;
 }): Usage {
   const input = u.input_tokens;
   const cacheWrite = u.cache_creation_input_tokens ?? 0;
@@ -44,7 +46,7 @@ export function usageFrom(model: string, u: {
   const long = model === 'claude-haiku-5-5' && input + cacheWrite + cacheRead > 100_000;
   const r = long ? HAIKU_LONG : (RATES[model] ?? FALLBACK);
   const output = u.output_tokens;
-  const costUsd = (input * r.input + cacheWrite * r.cacheWrite5m + cacheRead * r.cacheRead + output * r.output) / 1_000_000;
+  const costUsd = typeof u.cost_usd === 'number' ? u.cost_usd : (input * r.input + cacheWrite * r.cacheWrite5m + cacheRead * r.cacheRead + output * r.output) / 1_000_000;
   return { input, cacheWrite, cacheRead, output, costUsd };
 }
 

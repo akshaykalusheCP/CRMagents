@@ -1,3 +1,4 @@
+import { deliverResults, takeCalls } from './agent/remote.js';
 import { markSuggestion, recordSuggestions } from './knowledge/suggestions.js';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
@@ -158,6 +159,7 @@ export function registerSfBridge(app: FastifyInstance) {
     input: z.string().max(20_000).optional(),
     context: z.unknown().optional(),
     waitSeconds: z.number().min(0).max(90).optional(),
+    userId: z.string().regex(/^005[a-zA-Z0-9]{12,15}$/).optional(),
   });
 
   app.post('/sf/v1/run', async (req) => {
@@ -171,7 +173,7 @@ export function registerSfBridge(app: FastifyInstance) {
     }
     if (!id) throw Object.assign(new Error(b.workflowName ? `No agent named "${b.workflowName}"` : 'Give an agent id or name'), { statusCode: 404 });
     return startRunAsync(tenantId, id, {
-      input: b.input, recordId: b.recordId, objectApiName: b.objectApiName, context: b.context,
+      input: b.input, recordId: b.recordId, objectApiName: b.objectApiName, context: b.context, sfUserId: b.userId,
     }, (b.waitSeconds ?? 0) * 1000, b.userEmail);
   });
 
@@ -185,7 +187,7 @@ export function registerSfBridge(app: FastifyInstance) {
       const id = b.workflowId ?? rows.find((w) => w.name === b.workflowName?.trim().toLowerCase())?.id;
       if (!id) { results.push({ status: 'error', error: b.workflowName ? `No agent named "${b.workflowName}"` : 'Give an agent id or name' }); continue; }
       try {
-        results.push(await queueRun(tenantId, id, { input: b.input, recordId: b.recordId, objectApiName: b.objectApiName, context: b.context }, b.userEmail));
+        results.push(await queueRun(tenantId, id, { input: b.input, recordId: b.recordId, objectApiName: b.objectApiName, context: b.context, sfUserId: b.userId }, b.userEmail));
       } catch (e) {
         results.push({ status: 'error', error: e instanceof Error ? e.message : String(e) });
       }
@@ -204,6 +206,9 @@ export function registerSfBridge(app: FastifyInstance) {
     record: z.record(z.unknown()).optional(),
     /** Return a run id at once; the answer is read with GET /sf/v1/ask/:id. */
     async: z.boolean().optional(),
+    /** Salesforce runs the assistant's Salesforce tools as the person asking (package 0.7+). */
+    inOrg: z.boolean().optional(),
+    userEmail: z.string().max(200).optional(),
   });
   const SYSTEM_FIELDS = /^(SystemModstamp|LastViewedDate|LastReferencedDate|IsDeleted|PhotoUrl|attributes)$/;
   app.post('/sf/v1/ask', { bodyLimit: 5_000_000 }, async (req) => {
@@ -235,7 +240,7 @@ FORMAT (mandatory, overrides any other style instruction): you are answering in 
     if (b.async) {
       // Answer in the background; the panel checks GET /sf/v1/ask/:id (short calls, nothing held open in Salesforce).
       const runId = await new Promise<string>((resolve, reject) => {
-        runAgent(tenantId, spec, b.question, context, b.history, { onStarted: resolve }).catch(reject);
+        runAgent(tenantId, spec, b.question, context, b.history, { onStarted: resolve, inOrg: b.inOrg, startedBy: b.userEmail?.toLowerCase() }).catch(reject);
       });
       return { runId, status: 'running' };
     }
@@ -247,6 +252,11 @@ FORMAT (mandatory, overrides any other style instruction): you are answering in 
     const { rows } = await pool.query('select status, output from runs where id=$1 and tenant_id=$2', [(req.params as { id: string }).id, req.sfTenant!.tenantId]);
     if (!rows[0]) throw Object.assign(new Error('Question not found'), { statusCode: 404 });
     const status = rows[0].status === 'done' ? 'done' : rows[0].status === 'error' ? 'error' : 'running';
+    // Tool calls for Salesforce to run as the person asking.
+    if (status === 'running') {
+      const calls = takeCalls((req.params as { id: string }).id);
+      if (calls.length) return { status: 'tool', calls };
+    }
     return { status, ...(status === 'done' ? { answer: rows[0].output } : status === 'error' ? { error: rows[0].output } : {}) };
   });
 
@@ -260,6 +270,14 @@ FORMAT (mandatory, overrides any other style instruction): you are answering in 
     const b = z.object({ status: z.enum(['helpful', 'not_helpful', 'dismissed']), userEmail: z.string().max(200).optional() }).parse(req.body);
     await markSuggestion(req.sfTenant!.tenantId, (req.params as { id: string }).id, b.status, b.userEmail);
     return { ok: true };
+  });
+
+  app.post('/sf/v1/ask/:id/tools', { bodyLimit: 10_000_000 }, async (req) => {
+    const { id } = req.params as { id: string };
+    const own = await pool.query('select 1 from runs where id=$1 and tenant_id=$2', [id, req.sfTenant!.tenantId]);
+    if (!own.rowCount) throw Object.assign(new Error('Question not found'), { statusCode: 404 });
+    const { results } = z.object({ results: z.array(z.object({ id: z.string(), ok: z.boolean(), result: z.unknown().optional(), error: z.string().max(5000).optional() })).max(50) }).parse(req.body);
+    return { accepted: deliverResults(id, results) };
   });
 
   app.get('/sf/v1/runs/:id', async (req) => getRun(req.sfTenant!.tenantId, (req.params as { id: string }).id));

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>On_Behalf_Of__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>The Salesforce user who started the agent (empty when it started on its own).</description>
+    <label>On Behalf Of</label>
+    <referenceTo>User</referenceTo>
+    <relationshipName>CRMagents_Activities</relationshipName>
+    <required>false</required>
+    <type>Lookup</type>
+</CustomField>

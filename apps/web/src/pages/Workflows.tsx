@@ -1,8 +1,8 @@
-import { LayoutTemplate, Plus, Sparkles, Workflow as WorkflowIcon, X } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { LayoutTemplate, Plus, Sparkles, Upload, Workflow as WorkflowIcon, X } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import { TEMPLATES, type Workflow } from '@crmagents/shared';
 import { AgentBuilder } from '../components/AgentBuilder';
-import { Empty, FilterTabs, PageHeader, Panel, SkeletonRows, Status, Table, type Column } from '../components/ui';
+import { Empty, FilterTabs, PageHeader, Panel, SkeletonRows, Status, Table, toast, type Column } from '../components/ui';
 import { Ribbon } from '../components/Ribbon';
 import { api, type AgentHealth, type Draft as AiDraft, type Tenant, type WorkflowRow } from '../api';
 import { NodeTile } from '../components/nodeIcons';
@@ -78,6 +78,7 @@ export function WorkflowsPage({ tenant, goConnections, incoming, onIncomingOpene
   const [filter, setFilter] = useState<'all' | 'on' | 'off' | 'problem'>('all');
   const [health, setHealth] = useState<Record<string, AgentHealth>>({});
 
+  const importRef = useRef<HTMLInputElement>(null);
   const load = () => tenant && api.workflows(tenant.id).then((r) => { setRows(r); setDetail((d) => d && (r.find((x) => x.id === d.id) ?? null)); }).catch((e) => setErr(e.message)).finally(() => setLoaded(true));
   useEffect(() => { setCur(null); setDetail(null); setBuilder(null); setLoaded(false); load(); if (tenant) api.agentHealth(tenant.id).then((h) => setHealth(Object.fromEntries(h.map((x) => [x.workflowId, x])))).catch(() => {}); }, [tenant?.id]);
   // "Fix with an agent" from Insights: put the request in the describe box, ready to build.
@@ -178,6 +179,20 @@ export function WorkflowsPage({ tenant, goConnections, incoming, onIncomingOpene
           description={<>Automations run by themselves in <b style={{ color: 'var(--text)', fontWeight: 500 }}>{tenant.sf_username ?? tenant.sf_org_id}</b>; assistants answer questions when you ask.</>}
           actions={<>
             <button onClick={() => setPicker(true)}><LayoutTemplate size={15} /> Templates</button>
+            <button onClick={() => importRef.current?.click()} title="Add an agent from a .crmagents.json file (exported from another org)"><Upload size={15} /> Import</button>
+              <input ref={importRef} type="file" accept=".json,application/json" hidden onChange={async (e) => {
+                const f = e.target.files?.[0];
+                e.target.value = '';
+                if (!f) return;
+                try {
+                  const data = JSON.parse(await f.text());
+                  if (!data?.graph?.nodes) throw new Error('This is not a CRMagents agent file');
+                  const r = await api.importAgent(tenant.id, { name: String(data.name || f.name.replace(/\.crmagents\.json$|\.json$/, '')), graph: data.graph });
+                  toast(r.missing.length ? `Imported (off). Missing in this org: ${r.missing.slice(0, 4).join(', ')}${r.missing.length > 4 ? '…' : ''}` : 'Imported (turned off)', r.missing.length ? 'bad' : 'ok');
+                  load();
+                } catch (err) { toast((err as Error).message, 'bad'); }
+              }} />
+
             <button className="primary cta" onClick={() => setBuilder({})}><Plus size={15} /> New agent</button>
           </>}
         >

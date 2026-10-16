@@ -11,6 +11,9 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
 }
 
 import type { Workflow } from '@crmagents/shared';
+
+/** The browser's time zone, e.g. "Asia/Kolkata" (schedules run in it). */
+export const localTz = () => { try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC'; } catch { return 'UTC'; } };
 export type { Workflow };
 export interface Tenant {
   id: string; sf_org_id: string; sf_instance_url: string; sf_username: string | null;
@@ -18,12 +21,15 @@ export interface Tenant {
   /** Salesforce API calls used in the last 24 hours, as last reported by the org. */
   api_used?: number | null; api_max?: number | null; api_checked_at?: string | null;
 }
-export interface KnowledgeDoc { id: string; title: string; fileName: string | null; kind: 'pdf' | 'docx' | 'text'; chars: number; chunks: number; createdBy: string | null; createdAt: string }
+export interface KnowledgeDoc { id: string; title: string; fileName: string | null; kind: 'pdf' | 'docx' | 'text'; chars: number; chunks: number; createdBy: string | null; createdAt: string; source?: string }
+export interface KnowledgeSource { id: string; kind: 'articles' | 'library'; library: string | null; lastSyncedAt: string | null; lastResult: string | null; org: string | null; tenantId: string }
 export interface KnowledgeHit { docId: string; title: string; heading: string; body: string; rank: number }
 export interface RecordSuggestion {
   id: string; recordId: string; objectName: string; title: string; body: string; sources: { title: string; section: string }[];
   status: 'new' | 'helpful' | 'not_helpful' | 'dismissed'; agentName: string | null; decidedBy: string | null; createdAt: string;
 }
+export interface SfPage { id: string; label: string; managed: boolean }
+export interface PublicChat { enabled: boolean; origins: string; cases: boolean; greeting: string; snippet: string }
 export interface Agent { id: string; name: string; systemPrompt: string; tools: string[] }
 export interface ToolInfo { name: string; description: string; write: boolean }
 export interface Run {
@@ -92,6 +98,8 @@ export interface Settings {
   callbackUrl: string; sfClientId: string; sfLoginUrl: string;
   sfClientSecret: { set: boolean }; anthropicKey: { set: boolean }; dailyBudgetUsd: string; anthropicWorkspaceId: string; aiCacheHours: string;
   maskPii?: string; maskFields?: string; maxAiCalls?: string; maxToolCalls?: string; maxTokens?: string; retentionDays?: string;
+  aiProvider?: string; providerKey?: { set: boolean }; aiBaseUrl?: string; aiModel?: string; aiFastModel?: string; aiPriceIn?: string; aiPriceOut?: string;
+  auditInSalesforce?: string;
 }
 
 export interface Me { id: string; email: string; accountName: string; role: string }
@@ -121,8 +129,21 @@ export const api = {
   deleteAgent: (t: string, id: string) => req('DELETE', `/api/tenants/${t}/agents/${id}`),
   run: (t: string, id: string, input: string, history?: { role: 'user' | 'assistant'; text: string }[]) =>
     req<{ runId: string; output: string }>('POST', `/api/tenants/${t}/agents/${id}/run`, { input, history }),
+  publicChat: (t: string, agentId: string) => req<PublicChat>('GET', `/api/tenants/${t}/agents/${agentId}/public`),
+  setPublicChat: (t: string, agentId: string, b: Omit<PublicChat, 'snippet'>) => req<PublicChat>('PUT', `/api/tenants/${t}/agents/${agentId}/public`, b),
+  sfPages: (t: string, object?: string) => req<{ utilityBars: SfPage[]; recordPages: SfPage[] }>('GET', `/api/tenants/${t}/salesforce/pages${object ? `?object=${encodeURIComponent(object)}` : ''}`),
+  addToUtilityBar: (t: string, pageId: string) => req<{ changed: boolean; label: string }>('POST', `/api/tenants/${t}/salesforce/pages/utility`, { pageId }),
+  addToRecordPage: (t: string, object: string, pageId?: string) => req<{ changed: boolean; id: string; label: string; activateUrl: string | null }>('POST', `/api/tenants/${t}/salesforce/pages/record`, { object, pageId }),
+  webhook: (t: string, id: string) => req<{ url: string; secret: string }>('GET', `/api/tenants/${t}/workflows/${id}/webhook`),
+  rotateWebhook: (t: string, id: string) => req<{ url: string; secret: string }>('POST', `/api/tenants/${t}/workflows/${id}/webhook/rotate`, {}),
+  backfill: (t: string, id: string, days: number, limit: number) => req<{ queued: number; objects: { object: string; found: number }[] }>('POST', `/api/tenants/${t}/workflows/${id}/backfill`, { days, limit }),
+  versions: (t: string, id: string) => req<{ id: number; name: string; savedBy: string | null; createdAt: string; steps: number }[]>('GET', `/api/tenants/${t}/workflows/${id}/versions`),
+  restoreVersion: (t: string, id: string, vid: number) => req<{ name: string; graph: Workflow }>('POST', `/api/tenants/${t}/workflows/${id}/versions/${vid}/restore`, {}),
+  exportAgent: (t: string, id: string) => req<{ format: string; name: string; graph: Workflow }>('GET', `/api/tenants/${t}/workflows/${id}/export`),
+  importAgent: (t: string, b: { name: string; graph: Workflow }) => req<{ id: string; missing: string[] }>('POST', `/api/tenants/${t}/workflows/import`, b),
+  copyAgent: (t: string, id: string, targetTenantId: string) => req<{ id: string; missing: string[] }>('POST', `/api/tenants/${t}/workflows/${id}/copy`, { targetTenantId }),
   setAllowedFields: (t: string, id: string, allowed: Record<string, string[]>) => req<{ allowed: Record<string, string[]> }>('PUT', `/api/tenants/${t}/workflows/${id}/allowed-fields`, { allowed }),
-  draftWorkflow: (t: string, request: string, plan?: unknown) => req<Draft>('POST', `/api/tenants/${t}/workflows/draft`, { request, plan }),
+  draftWorkflow: (t: string, request: string, plan?: unknown) => req<Draft>('POST', `/api/tenants/${t}/workflows/draft`, { request, plan, timezone: localTz() }),
   suggestions: (t: string, refresh = false) => req<Suggestion[]>('GET', `/api/tenants/${t}/suggestions${refresh ? '?refresh=1' : ''}`),
   dismissSuggestion: (t: string, key: string) => req('POST', `/api/tenants/${t}/suggestions/${key}/dismiss`),
   backtest: (t: string, id: string) => req<BacktestResult>('POST', `/api/tenants/${t}/workflows/${id}/backtest`),
@@ -134,6 +155,10 @@ export const api = {
   addKnowledge: (b: { fileName?: string; data?: string; title?: string; text?: string }) => req<{ id: string; chunks: number }>('POST', '/api/knowledge', b),
   deleteKnowledge: (id: string) => req('DELETE', `/api/knowledge/${id}`),
   searchKnowledge: (query: string) => req<KnowledgeHit[]>('POST', '/api/knowledge/search', { query }),
+  knowledgeSources: () => req<KnowledgeSource[]>('GET', '/api/knowledge/sources'),
+  addKnowledgeSource: (b: { tenantId: string; kind: 'articles' | 'library'; library?: string }) => req<{ id: string; result: string; ok: boolean }>('POST', '/api/knowledge/sources', b),
+  syncKnowledgeSource: (id: string) => req<{ id: string; result: string; ok: boolean }>('POST', `/api/knowledge/sources/${id}/sync`, {}),
+  removeKnowledgeSource: (id: string) => req('DELETE', `/api/knowledge/sources/${id}`),
   recordSuggestions: (t: string) => req<RecordSuggestion[]>('GET', `/api/tenants/${t}/record-suggestions`),
   markSuggestion: (t: string, id: string, status: RecordSuggestion['status']) => req('POST', `/api/tenants/${t}/record-suggestions/${id}`, { status }),
   rules: (t: string) => req<RuleRow[]>('GET', `/api/tenants/${t}/rules`),
@@ -142,7 +167,7 @@ export const api = {
   deleteRule: (t: string, id: string) => req('DELETE', `/api/tenants/${t}/rules/${id}`),
   regression: (t: string, id: string, graph: Workflow) => req<RegressionResult>('POST', `/api/tenants/${t}/workflows/${id}/regression`, { graph }),
   setRealtime: (t: string, id: string, on: boolean) => req<{ realtime: boolean }>('POST', `/api/tenants/${t}/workflows/${id}/realtime`, { on }),
-  builderChat: (t: string, messages: { role: 'user' | 'assistant'; text: string }[], plan?: unknown) => req<ChatReply>('POST', `/api/tenants/${t}/builder/chat`, { messages, plan }),
+  builderChat: (t: string, messages: { role: 'user' | 'assistant'; text: string }[], plan?: unknown) => req<ChatReply>('POST', `/api/tenants/${t}/builder/chat`, { messages, plan, timezone: localTz() }),
   previewWorkflow: (t: string, id: string, limit = 10) => req<Preview>('POST', `/api/tenants/${t}/workflows/${id}/preview`, { limit }),
   feedback: (t: string, id: string, b: { nodeId: string; input: string; label: string; source: 'correction' | 'confirmed' }) =>
     req<{ ok: boolean; examples: number }>('POST', `/api/tenants/${t}/workflows/${id}/feedback`, b),

@@ -3,6 +3,7 @@ import { subscribe, unsubscribe, onError } from 'lightning/empApi';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import suggestions from '@salesforce/apex/CRMAgentsController.suggestions';
 import rateSuggestion from '@salesforce/apex/CRMAgentsController.rateSuggestion';
+import activity from '@salesforce/apex/CRMAgentsController.activity';
 import { markdownToHtml } from 'c/crmMarkdown';
 
 const CHANNEL = '/event/CRMagents_Run_Event__e';
@@ -22,6 +23,8 @@ export default class CrmSuggestions extends LightningElement {
     error;
     loading = true;
     showOlder = false;
+    changes = [];
+    showChanges = false;
     subscription;
 
     connectedCallback() {
@@ -40,6 +43,18 @@ export default class CrmSuggestions extends LightningElement {
 
     load() {
         if (!this.recordId) return;
+        // What agents changed here, read inside Salesforce.
+        activity({ recordId: this.recordId })
+            .then((rows) => {
+                this.changes = (rows || []).map((r) => ({
+                    id: r.Name, agent: r.Agent__c, when: ago(r.CreatedDate),
+                    who: r.On_Behalf_Of__r ? 'for ' + r.On_Behalf_Of__r.Name : (r.Started_By__c ? 'started by ' + r.Started_By__c : 'automatic'),
+                    approved: r.Approved_By__c ? 'approved by ' + r.Approved_By__c : '',
+                    lines: (r.Changes__c || '').split('\n').filter((x) => x).slice(0, 8).map((t, i) => ({ k: i, t })),
+                    failed: r.Status__c === 'error'
+                }));
+            })
+            .catch(() => { this.changes = []; });
         suggestions({ recordId: this.recordId })
             .then((json) => {
                 this.items = JSON.parse(json).map((s) => ({
@@ -62,6 +77,9 @@ export default class CrmSuggestions extends LightningElement {
     get hasOlder() { return this.items.length > 1; }
     get olderLabel() { return (this.showOlder ? 'Hide' : 'Show') + ' ' + this.older.length + ' earlier'; }
     get empty() { return !this.loading && !this.error && this.items.length === 0; }
+    get hasChanges() { return this.changes.length > 0; }
+    get changesLabel() { return (this.showChanges ? 'Hide' : 'Show') + ' agent changes (' + this.changes.length + ')'; }
+    toggleChanges() { this.showChanges = !this.showChanges; }
     get helpfulVariant() { return this.latest && this.latest.helpful ? 'brand' : 'border-filled'; }
     get notHelpfulVariant() { return this.latest && this.latest.notHelpful ? 'brand' : 'border-filled'; }
 

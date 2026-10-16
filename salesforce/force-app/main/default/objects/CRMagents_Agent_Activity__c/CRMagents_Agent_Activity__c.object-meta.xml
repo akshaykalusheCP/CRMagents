@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <deploymentStatus>Deployed</deploymentStatus>
+    <description>Every change a CRMagents agent made in Salesforce: which agent, which record, what changed and for whom. Written by CRMagents; read-only for users.</description>
+    <enableActivities>false</enableActivities>
+    <enableBulkApi>true</enableBulkApi>
+    <enableFeeds>false</enableFeeds>
+    <enableHistory>false</enableHistory>
+    <enableReports>true</enableReports>
+    <enableSearch>true</enableSearch>
+    <enableSharing>true</enableSharing>
+    <enableStreamingApi>true</enableStreamingApi>
+    <label>CRMagents Agent Activity</label>
+    <nameField>
+        <displayFormat>ACT-{000000}</displayFormat>
+        <label>Activity</label>
+        <type>AutoNumber</type>
+    </nameField>
+    <pluralLabel>CRMagents Agent Activity</pluralLabel>
+    <sharingModel>Read</sharingModel>
+    <visibility>Public</visibility>
+</CustomObject>

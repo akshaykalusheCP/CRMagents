@@ -72,11 +72,22 @@ function describe(n: WFRFNode, byId: Map<string, WFRFNode>, exitsElsewhere: bool
   const c = n.data.config;
   const P = (t: unknown) => withPills(firstText(t), byId);
   switch (n.data.type) {
-    case 'trigger.salesforce': return { title: <>When a <b>{c.objectApiName || 'record'}</b> is {c.event === 'created or updated' ? 'created or updated' : 'created'}</>, detail: 'In Salesforce, checked every minute once the agent is turned on' };
+    case 'trigger.salesforce': {
+      const changed = String(c.changedFields ?? '').split(',').map((x: string) => x.trim()).filter(Boolean);
+      const ev = String(c.event || 'created');
+      return { title: <>When a <b>{c.objectApiName || 'record'}</b> is {ev}{changed.length > 0 && ev !== 'created' && ev !== 'deleted' && <> and <b>{changed.join(' or ')}</b> changes</>}</>, detail: ev === 'deleted' ? 'Read from the Recycle Bin once the agent is turned on' : 'In Salesforce, once the agent is turned on' };
+    }
+    case 'trigger.webhook': return { title: 'When another system calls its web address', detail: 'The data it sends is {{trigger.body}}; the address is in the agent\'s Settings' };
+    case 'sf.deleteRecord': return { title: <>Delete the <b>{c.sobject || 'record'}</b></>, detail: 'It goes to the Recycle Bin' };
+    case 'sf.upsertRecord': return { title: <>Create or update a <b>{c.sobject || 'record'}</b> by {c.externalIdField || 'external Id'}</>, detail: P(c.externalId) };
+    case 'knowledge.search': return { title: 'Look it up in your guides', detail: P(c.query) };
+    case 'crm.suggest': return { title: <>Show <b>{c.title || 'a suggestion'}</b> on the record</>, detail: 'In the CRMagents Suggestions card; changes nothing in Salesforce' };
+    case 'sf.readFiles': return { title: 'Read the files on the record', detail: 'PDF, Word, text and HTML, newest first' };
+    case 'sf.attachFile': return { title: <>Attach <b>{c.title || 'a file'}</b> to the record</>, detail: P(c.content) };
     case 'trigger.manual': return { title: 'When you run it', detail: 'Manually, from a test or through the API' };
     case 'trigger.schedule': {
       const every = String(c.every ?? 'day');
-      return { title: <>Every <b>{every}</b>{every !== 'hour' && <> at <b>{c.at || '08:00'}</b> UTC</>}{every === 'week' && ' on Mondays'}</>, detail: 'Once the agent is turned on' };
+      return { title: <>Every <b>{every}</b>{every !== 'hour' && <> at <b>{c.at || '08:00'}</b> {c.tz || 'UTC'}</>}{every === 'week' && ' on Mondays'}</>, detail: 'Once the agent is turned on' };
     }
     case 'sf.getRecord': return { title: <>Look up the <b>{c.sobject || 'record'}</b></>, detail: c.fields ? `Fields: ${c.fields}` : 'All fields' };
     case 'logic.branch': {

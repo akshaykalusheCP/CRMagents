@@ -23,3 +23,7 @@
 .md b { font-weight: 700; }
 .md code { font-family: monospace; font-size: 0.75rem; background: rgba(0,0,0,0.06); padding: 0 0.25rem; border-radius: 0.2rem; }
 .md h3, .md h4 { font-weight: 700; margin: 0.4rem 0 0.2rem; }
+.changes-toggle { margin-top: 0.25rem; }
+.activity { list-style: none; margin: 0.25rem 0 0.5rem; padding: 0; }
+.activity > li { border-top: 1px solid var(--slds-g-color-border-base-1, #e5e5e5); padding: 0.5rem 0; font-size: 0.8125rem; }
+.act-lines { list-style: disc; margin: 0.25rem 0 0 1.1rem; color: var(--slds-g-color-neutral-base-30, #444); }
