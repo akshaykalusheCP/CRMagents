@@ -196,7 +196,13 @@ export function registerSfBridge(app: FastifyInstance) {
       if (rec) context = { record: { object: b.objectApiName, id: b.recordId, fields: Object.fromEntries(Object.entries(rec).filter(([k]) => !/^(SystemModstamp|LastViewedDate|LastReferencedDate|IsDeleted|PhotoUrl)$/.test(k)).slice(0, 60)) } };
     }
     // Answers show in a narrow Salesforce panel: keep them short and scannable.
-    const system = `${rows[0].system_prompt}\n\nYou are answering inside a narrow Salesforce side panel. Start with a one-line answer, then at most 5 short bullet points. Use **bold** only for key facts. No headings, no tables, no long paragraphs.`;
+    const system = `${rows[0].system_prompt}
+
+FORMAT (mandatory, overrides any other style instruction): you are answering in a narrow Salesforce side panel that people skim.
+- First line: one sentence, at most 25 words, that directly answers what was asked.
+- Then a blank line and 3 to 5 bullets ("- "), each at most 14 words. Facts or next actions only.
+- Bold at most one short phrase per bullet. No headings, no sub-bullets, no tables, no closing remarks.
+- Answer only what was asked; don't restate the whole record.`;
     const r = await runAgent(tenantId, { id: rows[0].id, systemPrompt: system, tools: rows[0].tools }, b.question, context, b.history);
     return { answer: r.output, runId: r.runId };
   });
