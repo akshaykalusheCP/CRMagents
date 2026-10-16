@@ -51,7 +51,7 @@ async function ensurePackage(tenantId: string, sf: SalesforceClient) {
         SecurityType: 'None', // admins only; users get access through the permission set below
       });
     } catch (e) {
-      if (attempt >= 12 || !/INVALID_CROSS_REFERENCE_KEY/.test(String(e))) throw e;
+      if (attempt >= 40 || !/INVALID_CROSS_REFERENCE_KEY/.test(String(e))) throw e;
       await sleep(15_000);
     }
   }

@@ -38,6 +38,9 @@ export default class CrmAgentsPanel extends LightningElement {
 
     connectedCallback() {
         this.load();
+        // Utility bar panels stay open in the background: refresh when the panel becomes visible again.
+        this.onVisible = () => { if (document.visibilityState === 'visible') this.load(); };
+        document.addEventListener('visibilitychange', this.onVisible);
         // Live updates: CRMagents publishes an event whenever a run changes state.
         subscribe(CHANNEL, -1, (msg) => this.onEvent(msg && msg.data && msg.data.payload))
             .then((s) => { this.subscription = s; })
@@ -47,6 +50,7 @@ export default class CrmAgentsPanel extends LightningElement {
 
     disconnectedCallback() {
         clearTimeout(this.timer);
+        document.removeEventListener('visibilitychange', this.onVisible);
         if (this.subscription) unsubscribe(this.subscription, () => {});
     }
 
@@ -71,9 +75,20 @@ export default class CrmAgentsPanel extends LightningElement {
     // ---------- getters ----------
     get ready() { return !!this.data; }
     get agents() {
-        return ((this.data && this.data.agents) || []).map((a) => ({ ...a, liveLabel: a.live ? 'On' : 'Off' }));
+        const busy = this.runBusy;
+        return ((this.data && this.data.agents) || []).map((a) => ({
+            ...a,
+            liveLabel: a.live ? 'On' : 'Off',
+            hint: a.needsRecord ? `Open a ${a.needsRecord} to run it` : a.trigger,
+            cannotRun: busy || !!a.needsRecord
+        }));
     }
     get hasAgents() { return this.agents.length > 0; }
+    get emptyText() {
+        return this.data && this.data.totalAgents
+            ? `None of your agents run on ${this.objectApiName || 'this page'}. Agents for other records show up when you open them.`
+            : 'No agents yet. Build one in CRMagents and it shows up here.';
+    }
     get assistants() { return ((this.data && this.data.assistants) || []).map((a) => ({ label: a.name, value: a.id })); }
     get hasAssistants() { return this.assistants.length > 0; }
     get approvals() {

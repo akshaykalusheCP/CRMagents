@@ -1,12 +1,12 @@
 {
   "packageDirectories": [
     {
-      "versionName": "ver 0.2",
-      "versionNumber": "0.2.0.NEXT",
+      "versionName": "ver 0.3",
+      "versionNumber": "0.3.0.NEXT",
       "path": "force-app",
       "default": true,
       "package": "CRMagents",
-      "versionDescription": "CRMagents for Salesforce: Agent Panel (agents, assistants, approvals, live updates), Ask CRMagents button, Flow actions"
+      "versionDescription": "Agent Panel lists scheduled and on-demand agents everywhere; utility bar shows all agents"
     }
   ],
   "name": "crmagents",
@@ -19,6 +19,7 @@
     "CRMagents@0.1.0-2": "04tQy000000ZrHZIA0",
     "CRMagents@0.1.0-3": "04tQy000000ZtjBIAS",
     "CRMagents@0.1.0-4": "04tQy000000ZtknIAC",
-    "CRMagents@0.2.0-1": "04tQy000000aAvJIAU"
+    "CRMagents@0.2.0-1": "04tQy000000aAvJIAU",
+    "CRMagents@0.3.0-1": "04tQy000000aB6bIAE"
   }
 }

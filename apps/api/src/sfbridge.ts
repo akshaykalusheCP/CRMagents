@@ -78,17 +78,24 @@ export function registerSfBridge(app: FastifyInstance) {
     return reply.code(401).send({ error: 'unauthorized' });
   });
 
-  const forObject = (w: { graph: Workflow }, object: string) => {
+  /** Which agents to show: on-demand and scheduled ones everywhere ("Run now"); record agents for their object,
+   * or all of them when there is no record (utility bar, home), marked as needing one. Pure enough to test. */
+  const forObject = (w: { graph: Workflow }, object: string, hasRecord: boolean) => {
     const t = w.graph.nodes.find((n) => n.type.startsWith('trigger.'));
     if (!t) return false;
-    if (t.type === 'trigger.manual') return true; // on-demand agents can run on any record
+    if (t.type === 'trigger.manual' || t.type === 'trigger.schedule') return true;
     if (t.type !== 'trigger.salesforce') return false;
+    if (!hasRecord) return true;
     return !object || !t.config.objectApiName || String(t.config.objectApiName).toLowerCase() === object;
+  };
+  const needsRecord = (g: Workflow) => {
+    const t = g.nodes.find((n) => n.type === 'trigger.salesforce');
+    return t ? String(t.config.objectApiName ?? 'record') : null;
   };
   const describeTrigger = (g: Workflow) => {
     const t = g.nodes.find((n) => n.type.startsWith('trigger.'));
     if (t?.type === 'trigger.salesforce') return `Runs on ${t.config.objectApiName ?? 'records'}`;
-    if (t?.type === 'trigger.schedule') return `Every ${t.config.every ?? 'day'}`;
+    if (t?.type === 'trigger.schedule') return `Every ${t.config.every ?? 'day'}${t.config.every === 'hour' ? '' : ` at ${t.config.at ?? '08:00'} UTC`} · can also run now`;
     return 'On demand';
   };
   const waitingMessage = (steps: { status: string; output?: { message?: string } }[] | null) =>
@@ -117,7 +124,11 @@ export function registerSfBridge(app: FastifyInstance) {
         : Promise.resolve({ rows: [] as any[] }),
     ]);
     return {
-      agents: flows.rows.filter((w) => forObject(w, object)).map((w) => ({ id: w.id, name: w.name, live: !!w.live, trigger: describeTrigger(w.graph) })),
+      agents: flows.rows.filter((w) => forObject(w, object, !!recordId)).map((w) => {
+        const obj = needsRecord(w.graph);
+        return { id: w.id, name: w.name, live: !!w.live, trigger: describeTrigger(w.graph), needsRecord: !recordId && obj ? obj : null };
+      }),
+      totalAgents: flows.rows.length,
       assistants: assistants.rows,
       approvals: approvals.rows.map((r) => ({ runId: r.id, agent: r.name, message: waitingMessage(r.steps), assignedLabel: r.assigned_label ?? 'Anyone', forMe: !!user && r.assigned_to === user, createdAt: r.created_at, recordId: r.record_id })),
       recent: recent.rows.map((r) => ({ runId: r.id, agent: r.name, status: r.status, createdAt: r.created_at, output: r.output ?? '' })),

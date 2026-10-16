@@ -49,8 +49,8 @@
                             <ul class="agent-list">
                                 <template for:each={agents} for:item="a">
                                     <li key={a.id} class="agent">
-                                        <div class="agent-text"><b>{a.name}</b><span class="slds-text-color_weak">{a.trigger}</span></div>
-                                        <lightning-button label="Run" data-id={a.id} onclick={handleRun} disabled={runBusy}></lightning-button>
+                                        <div class="agent-text"><b>{a.name}</b><span class="slds-text-color_weak">{a.hint}</span></div>
+                                        <lightning-button label="Run" data-id={a.id} onclick={handleRun} disabled={a.cannotRun}></lightning-button>
                                     </li>
                                 </template>
                             </ul>
@@ -60,7 +60,7 @@
                             </template>
                         </template>
                         <template lwc:else>
-                            <p class="slds-text-color_weak empty">No agents for this kind of record yet. Build one in CRMagents.</p>
+                            <p class="slds-text-color_weak empty">{emptyText}</p>
                         </template>
 
                         <template lwc:if={hasRecent}>
