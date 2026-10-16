@@ -17,10 +17,10 @@ const time = (iso: string) => {
 const money = (v: number) => (v < 0.01 && v > 0 ? `$${v.toFixed(4)}` : `$${v.toFixed(2)}`);
 
 export function runTone(status: string) {
-  return status === 'done' ? 'ok' : status === 'error' ? 'bad' : status === 'waiting' ? 'warn' : 'neutral';
+  return status === 'done' ? 'ok' : status === 'error' ? 'bad' : status === 'waiting' || status === 'stopped' ? 'warn' : status === 'sleeping' ? 'info' : 'neutral';
 }
 export function runLabel(status: string) {
-  return ({ done: 'Succeeded', error: 'Failed', waiting: 'Waiting for approval', running: 'Running' } as Record<string, string>)[status] ?? status;
+  return ({ done: 'Succeeded', error: 'Failed', waiting: 'Waiting for approval', running: 'Running', stopped: 'Stopped: needs you', cancelled: 'Cancelled', sleeping: 'Waiting (timer)' } as Record<string, string>)[status] ?? status;
 }
 
 export function HomePage({ me, tenant, go, newAgent }: { me: Me; tenant?: Tenant; go: Go; newAgent: (request?: string) => void }) {

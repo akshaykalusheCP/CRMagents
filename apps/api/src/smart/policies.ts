@@ -13,6 +13,8 @@ const OPS = ['equals', 'not_equals', 'contains', 'greater_than', 'less_than', 'i
 
 export interface Rule {
   summary: string;
+  /** block = never allowed; approve = allowed only after a person approves. */
+  effect?: 'block' | 'approve';
   actions: (typeof ACTIONS)[number][];
   /** Salesforce objects the rule covers; empty = all. */
   objects: string[];
@@ -79,10 +81,11 @@ export function violates(rule: Rule, ctx: WriteContext): boolean {
 }
 
 const SCHEMA = {
-  type: 'object', additionalProperties: false, required: ['summary', 'actions', 'objects', 'when', 'days', 'hours', 'timezone', 'understood'],
+  type: 'object', additionalProperties: false, required: ['summary', 'effect', 'actions', 'objects', 'when', 'days', 'hours', 'timezone', 'understood'],
   properties: {
     understood: { type: 'boolean', description: 'false if the sentence is not a rule about what agents may change or send' },
-    summary: { type: 'string', description: 'The rule restated in one short sentence starting with "Never" or "Don\'t"' },
+    effect: { type: 'string', enum: ['block', 'approve'], description: 'block = never do it; approve = only after a person approves ("ask before", "needs approval", "check with")' },
+    summary: { type: 'string', description: 'The rule restated in one short sentence ("Never …" for block, "Ask before …" for approve)' },
     actions: { type: 'array', items: { type: 'string', enum: [...ACTIONS] }, description: 'update/create records, task = create tasks, email = send email, message = Slack/Chatter, action = run Flows/Apex' },
     objects: { type: 'array', items: { type: 'string' }, description: 'Salesforce object API names, e.g. Account, Case; empty for all' },
     when: { type: 'array', items: { type: 'object', additionalProperties: false, required: ['field', 'operator', 'value'], properties: { field: { type: 'string', description: 'API name, relationships allowed (Owner.Name, Account.Type)' }, operator: { type: 'string', enum: [...OPS] }, value: { type: 'string' } } } },
@@ -95,7 +98,7 @@ const SCHEMA = {
 export async function compileRule(tenantId: string, text: string, defaultTz: string): Promise<Rule> {
   const { llm } = await setup(tenantId);
   const r = await llm.complete({
-    system: 'Turn a Salesforce admin\'s rule about what automation must never do into the JSON rule. The rule BLOCKS matching changes.',
+    system: 'Turn a Salesforce admin\'s rule about what automation may do into the JSON rule. effect "block" stops matching changes; effect "approve" lets them happen only after a person approves.',
     prompt: `Rule: ${text}\nDefault time zone: ${defaultTz}`,
     schema: SCHEMA, model: config.builderModel,
   });
@@ -114,11 +117,14 @@ export async function listRules(tenantId: string) {
   return rows as { id: string; text: string; rule: Rule; enabled: boolean; created_at: string }[];
 }
 
-/** A guard for one run: throws before any write that breaks an enabled rule. Fetches record fields only when a rule needs them. */
+export class ApprovalRequired extends Error {}
+
+/** A guard for one run: throws before any write that breaks an enabled rule (or needs approval and has none).
+ * Fetches record fields only when a rule needs them. */
 export async function makeGuard(tenantId: string, sf: SalesforceClient) {
   const rules = (await listRules(tenantId)).filter((r) => r.enabled);
   if (!rules.length) return undefined;
-  return async (ctx: WriteContext & { recordId?: string }) => {
+  return async (ctx: WriteContext & { recordId?: string; approved?: boolean }) => {
     const relevant = rules.filter((r) => violates({ ...r.rule, when: [] }, ctx)); // action/object/time match first
     for (const r of relevant) {
       let record = ctx.record;
@@ -126,7 +132,9 @@ export async function makeGuard(tenantId: string, sf: SalesforceClient) {
         const fields = [...new Set(r.rule.when.map((c) => c.field))].filter((f) => /^[\w.]+$/.test(f));
         record = (await sf.query(`SELECT ${fields.join(', ')} FROM ${ctx.object} WHERE Id = '${ctx.recordId}'`).catch(() => ({ records: [] }))).records[0] as Record<string, unknown> | undefined;
       }
-      if (violates(r.rule, { ...ctx, record })) throw new Error(`Blocked by workspace rule: ${r.rule.summary}`);
+      if (!violates(r.rule, { ...ctx, record })) continue;
+      if (r.rule.effect === 'approve') { if (!ctx.approved) throw new ApprovalRequired(`Workspace rule: ${r.rule.summary}`); continue; }
+      throw new Error(`Blocked by workspace rule: ${r.rule.summary}`);
     }
   };
 }

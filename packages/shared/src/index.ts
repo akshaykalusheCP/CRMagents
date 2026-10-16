@@ -57,6 +57,9 @@ export const CATEGORY_COLORS: Record<Category, string> = {
 
 const OUT: HandleDef[] = [{ id: 'out', label: '' }];
 
+/** Who can approve a paused run. Owner/manager are looked up in Salesforce and matched to people by email. */
+export const APPROVERS = ['Anyone in the workspace', 'Record owner', "Record owner's manager", 'A specific person'] as const;
+
 export const NODE_DEFS: NodeDef[] = [
   {
     type: 'trigger.manual',
@@ -227,9 +230,26 @@ export const NODE_DEFS: NodeDef[] = [
     label: 'Human approval',
     category: 'Logic',
     description: 'Pause until a person approves or rejects. Put it before any write you want reviewed.',
-    fields: [{ key: 'message', label: 'What needs approval', kind: 'textarea', placeholder: 'Create task: {{ai_agent_1.text}}' }],
+    fields: [
+      { key: 'message', label: 'What needs approval', kind: 'textarea', placeholder: 'Create task: {{ai_agent_1.text}}' },
+      { key: 'approver', label: 'Who approves', kind: 'select', options: [...APPROVERS], default: APPROVERS[0] },
+      { key: 'approverEmail', label: 'Approver email (for "A specific person")', kind: 'text', placeholder: 'name@company.com' },
+    ],
     outputs: ['approved'],
     handles: [{ id: 'approved', label: 'approved' }, { id: 'rejected', label: 'rejected' }],
+  },
+  {
+    type: 'logic.wait',
+    label: 'Wait',
+    category: 'Logic',
+    description: 'Pause the run for a while (or until a date), then carry on. For follow-ups like "if no reply in 3 days".',
+    fields: [
+      { key: 'mode', label: 'Wait', kind: 'select', options: ['For a while', 'Until a date and time'], default: 'For a while' },
+      { key: 'amount', label: 'How long', kind: 'number', default: 1 },
+      { key: 'unit', label: 'Unit', kind: 'select', options: ['minutes', 'hours', 'days'], default: 'days' },
+      { key: 'until', label: 'Until (date/time or {{reference}})', kind: 'text', placeholder: '{{sf_get_1.record.Follow_Up_Date__c}}' },
+    ],
+    outputs: ['waitedUntil'],
   },
   {
     type: 'http.request',
@@ -272,6 +292,17 @@ export const NODE_DEFS: NodeDef[] = [
     outputs: ['value'],
   },
 ];
+
+/** Steps that change data or send it out; each can ask a person first. */
+export const WRITE_NODE_TYPES = ['sf.createRecord', 'sf.updateRecord', 'sf.createTask', 'sf.action', 'notify.slack', 'http.request'];
+for (const d of NODE_DEFS) {
+  if (!WRITE_NODE_TYPES.includes(d.type)) continue;
+  d.fields.push(
+    { key: 'askFirst', label: 'Ask before running', kind: 'select', options: ['No', 'Yes'], default: 'No', help: 'Pause and ask a person before this step changes anything.' },
+    { key: 'approver', label: 'Who approves', kind: 'select', options: [...APPROVERS], default: APPROVERS[0] },
+    { key: 'approverEmail', label: 'Approver email (for "A specific person")', kind: 'text', placeholder: 'name@company.com' },
+  );
+}
 
 export const NODE_DEF_BY_TYPE: Record<string, NodeDef> = Object.fromEntries(NODE_DEFS.map((d) => [d.type, d]));
 

@@ -6,7 +6,7 @@ import { runLabel, runTone } from './Home';
 
 // Every run in the org, newest first. Click a run for its timeline, output and tool calls in a side panel.
 
-type F = 'all' | 'done' | 'error' | 'waiting';
+type F = 'all' | 'done' | 'error' | 'waiting' | 'stopped';
 const money = (v: number) => (v > 0 && v < 0.01 ? `$${v.toFixed(4)}` : `$${v.toFixed(2)}`);
 const tokens = (r: Run) => r.input_tokens + r.cache_read_tokens + r.cache_write_tokens + r.output_tokens;
 const when = (iso: string) => new Date(iso).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
@@ -37,6 +37,14 @@ export function RunsPage({ tenant, goSettings, workflowId, embedded }: { tenant?
     try { await api.decide(tenant.id, id, approve); toast(approve ? 'Approved' : 'Rejected', approve ? 'ok' : 'info'); load(); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   };
 
+  const cancel = async (runId: string) => {
+    setBusy(true);
+    try { await api.cancelRun(tenant.id, runId); toast('Run cancelled', 'info'); load(); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+  };
+  const resume = async (runId: string) => {
+    setBusy(true);
+    try { await api.resumeRun(tenant.id, runId); toast('Run resumed'); load(); } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+  };
   const diagnose = async (runId: string) => {
     setDiag({ runId, loading: true });
     try { setDiag({ runId, d: await api.diagnose(tenant.id, runId) }); } catch (e) { setDiag({ runId, err: (e as Error).message }); }
@@ -78,6 +86,7 @@ export function RunsPage({ tenant, goSettings, workflowId, embedded }: { tenant?
       <FilterTabs value={filter} onChange={setFilter} options={[
         { id: 'all', label: 'All', count: count('all') }, { id: 'done', label: 'Succeeded', count: count('done') },
         { id: 'error', label: 'Failed', count: count('error') }, { id: 'waiting', label: 'Waiting', count: count('waiting') },
+        ...(count('stopped') ? [{ id: 'stopped' as F, label: 'Stopped', count: count('stopped') }] : []),
       ]} />
       <Panel flush>
         {!loaded ? <SkeletonRows rows={6} cols={4} /> : <Table columns={columns} rows={shown} rowKey={(r) => r.id} onRowClick={(r) => setOpenId(r.id)} selected={openId}
@@ -87,9 +96,12 @@ export function RunsPage({ tenant, goSettings, workflowId, embedded }: { tenant?
       <Drawer open={!!open} onClose={() => setOpenId(undefined)}
         title={open?.agent_name ?? 'Run'}
         sub={open && <><Status tone={runTone(open.status)}>{runLabel(open.status)}</Status><span>{when(open.created_at)}</span></>}
-        footer={open?.status === 'waiting' ? <>
-          <button onClick={() => void decide(open.id, false)} disabled={busy}>Reject</button>
-          <button className="primary" onClick={() => void decide(open.id, true)} disabled={busy}>Approve</button>
+        footer={open && ['waiting', 'running', 'stopped', 'sleeping'].includes(open.status) ? <>
+          <button className="danger" onClick={() => void cancel(open.id)} disabled={busy}>Cancel run</button>
+          <span style={{ flex: 1 }} />
+          {open.status === 'waiting' && <><button onClick={() => void decide(open.id, false)} disabled={busy}>Reject</button>
+            <button className="primary" onClick={() => void decide(open.id, true)} disabled={busy}>Approve</button></>}
+          {open.status === 'stopped' && <button className="primary" onClick={() => void resume(open.id)} disabled={busy}>Resume</button>}
         </> : undefined}>
         {open && <>
           <Facts items={[
@@ -98,6 +110,15 @@ export function RunsPage({ tenant, goSettings, workflowId, embedded }: { tenant?
             ['Reused from cache', open.cache_read_tokens ? open.cache_read_tokens.toLocaleString() : 'None'],
             ['Steps', String(open.steps?.length ?? 0)],
           ]} />
+          {open.status === 'sleeping' && <div className="banner ok"><div><b>Waiting on a timer</b><span>{open.steps?.find((x) => x.status === 'waiting')?.output ? String((open.steps.find((x) => x.status === 'waiting')!.output as { message?: string }).message ?? '') : 'It continues by itself.'}</span></div></div>}
+          {open.status === 'stopped' && <div className="banner warn"><div><b>This run stopped part-way</b><span>{open.output}</span></div></div>}
+          {open.decided_by && (
+            <div className="dsec"><h3>Decision</h3>
+              <p style={{ margin: 0 }}>{open.steps?.some((s) => s.type === 'logic.approval' && (s.output as { approved?: boolean } | undefined)?.approved === false) ? 'Rejected' : 'Approved'} by <b>{open.decided_by}</b>{open.decided_at ? ` · ${when(open.decided_at)}` : ''}</p>
+              {open.decision_note && <p className="muted small" style={{ margin: 0 }}>“{open.decision_note}”</p>}
+            </div>
+          )}
+          {open.purged_at && <p className="muted small" style={{ margin: 0 }}>Details were cleared under your workspace's retention setting.</p>}
           {open.status === 'error' && (
             <div className="dsec diag">
               <h3>Why it failed</h3>
@@ -132,7 +153,7 @@ export function RunsPage({ tenant, goSettings, workflowId, embedded }: { tenant?
                   <li key={i}>
                     <span className={'tdot ' + s.status} />
                     <span className="tl-main"><span>{s.label}{s.iteration !== undefined ? ` · record ${s.iteration + 1}` : ''}{s.reused ? ' · reused' : ''}</span>{s.error && <span className="tl-err">{s.error}</span>}</span>
-                    <span className="tl-ms">{s.ms} ms</span>
+                    <span className="tl-ms">{s.ai ? `${s.ai.tokens.toLocaleString()} tok · ${money(s.ai.costUsd)}` : s.reused ? 'reused' : `${s.ms} ms`}</span>
                   </li>
                 ))}
               </ol>

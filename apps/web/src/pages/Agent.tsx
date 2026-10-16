@@ -55,6 +55,15 @@ export function AgentPage({ tenant, row, onBack, onEdit, onChanged, onDeleted }:
   const toggleRealtime = () => act('rt', async () => { const r = await api.setRealtime(t, row.id, !row.realtime); onChanged({ realtime: r.realtime }); toast(r.realtime ? 'Real-time on: reacts within seconds' : 'Back to 1-minute checks'); });
   const letItAct = () => act('trust', async () => { const r = await api.dropApproval(t, row.id); onChanged({ graph: r.graph }); setHealth((h) => h && { ...h, suggestion: undefined }); toast('Approval step removed: it now acts on its own'); });
   const remove = () => act('delete', async () => { await api.deleteWorkflow(t, row.id); toast('Agent deleted', 'info'); onDeleted(); });
+  // Objects this agent writes (where a field limit makes sense).
+  const written = [...new Set(row.graph.nodes.filter((n) => n.type === 'sf.updateRecord' || n.type === 'sf.createRecord').map((n) => String(n.config.sobject ?? '')).filter(Boolean))];
+  const [fieldsDraft, setFieldsDraft] = useState<Record<string, string>>(() => Object.fromEntries(Object.entries(row.allowed_fields ?? {}).map(([o, f]) => [o, f.join(', ')])));
+  const saveFields = () => act('fields', async () => {
+    const allowed = Object.fromEntries(Object.entries(fieldsDraft).map(([o, v]) => [o, v.split(',').map((x) => x.trim()).filter((x) => /^\w+$/.test(x))]));
+    const r = await api.setAllowedFields(t, row.id, allowed);
+    onChanged({ allowed_fields: r.allowed });
+    toast('Field limits saved');
+  });
   const replay = async () => { setBt('loading'); try { setBt(await api.backtest(t, row.id)); } catch (e) { setBt({ error: (e as Error).message }); } };
 
   const status = row.live ? (row.watch_error ? <Status tone="bad" title={row.watch_error}>Problem</Status> : <Status tone="ok">On</Status>) : <Status tone="neutral">Off</Status>;
@@ -151,6 +160,20 @@ export function AgentPage({ tenant, row, onBack, onEdit, onChanged, onDeleted }:
                   {busy === 'rt' ? <Loader2 size={15} className="spin" /> : <Zap size={15} />} {row.realtime ? 'Use 1-minute checks' : 'Switch to real-time'}
                 </button>
               </div>
+            </Panel>
+          )}
+          {written.length > 0 && (
+            <Panel title="Fields it may change">
+              <p className="muted small" style={{ margin: '0 0 12px' }}>Limit what this agent can write. Leave empty for no limit (workspace rules still apply). Field API names, separated by commas.</p>
+              <div className="form">
+                {written.map((o) => (
+                  <div className="frow" key={o}>
+                    <div className="flabel"><b>{o}</b></div>
+                    <div className="ffield"><input id={`af-${o}`} value={fieldsDraft[o] ?? ''} onChange={(e) => setFieldsDraft({ ...fieldsDraft, [o]: e.target.value })} placeholder="e.g. Status, Priority" /></div>
+                  </div>
+                ))}
+              </div>
+              <div className="row" style={{ marginTop: 12 }}><button className="primary" onClick={() => void saveFields()} disabled={busy === 'fields'}>Save limits</button></div>
             </Panel>
           )}
           <Panel title="Delete agent">

@@ -1,4 +1,5 @@
-import { topoOrder, type WFNode, type Workflow } from '@crmagents/shared';
+import { topoOrder, WRITE_NODE_TYPES, type WFNode, type Workflow } from '@crmagents/shared';
+import { ApprovalRequired } from '../smart/policies.js';
 import { addUsage, emptyUsage, totalTokens, type Usage } from '../agent/pricing.js';
 import { EXECUTORS, type Env, type NodeResult } from './nodes.js';
 import { resolveRaw } from './template.js';
@@ -14,6 +15,8 @@ export interface Step {
   iteration?: number;
   trace?: unknown;
   reused?: boolean;
+  /** AI use by this step: tokens and cost (for the run's full history). */
+  ai?: { tokens: number; costUsd: number };
 }
 
 export interface RunState {
@@ -27,10 +30,17 @@ export interface RunState {
   final?: unknown;
   pending?: string; // approval node waiting for a decision
   decision?: { nodeId: string; approve: boolean };
+  /** Personal-data placeholders for this run ([EMAIL_1] -> real value), kept across pauses. */
+  masks?: Record<string, string>;
+  /** Wait step: the run sleeps until this time, then resumes at that step. */
+  sleepUntil?: string;
+  woke?: string;
+  /** AI/tool/token use so far, so per-run limits hold across pauses. */
+  counters?: { aiCalls: number; toolCalls: number; tokens: number };
 }
 
 export interface Outcome {
-  status: 'done' | 'waiting' | 'error';
+  status: 'done' | 'waiting' | 'sleeping' | 'error';
   error?: string;
 }
 
@@ -67,6 +77,19 @@ const clip = (v: unknown): unknown => {
 };
 
 const summarize = (out: Record<string, any>): unknown => out.value ?? out.text ?? out;
+
+const UNIT_MS: Record<string, number> = { minutes: 60_000, hours: 3_600_000, days: 86_400_000 };
+/** When a Wait step ends. Pure; tested. */
+export function waitUntil(cfg: Record<string, any>, scope: Record<string, any>, now: Date): Date {
+  if (cfg.mode === 'Until a date and time') {
+    const raw = String(cfg.until ?? '').replace(/\{\{\s*([\w.[\]]+)\s*\}\}/g, (_m, p: string) => String(resolveRaw(`{{${p}}}`, scope) ?? ''));
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) throw new Error(`Wait: "${raw || 'empty'}" is not a date`);
+    return d;
+  }
+  const amount = Math.max(0, Number(cfg.amount ?? 1));
+  return new Date(now.getTime() + amount * (UNIT_MS[String(cfg.unit ?? 'days')] ?? UNIT_MS.days));
+}
 
 export async function execute(
   wf: Workflow,
@@ -118,12 +141,59 @@ export async function execute(
           st.steps = st.steps.filter((s) => !(s.nodeId === id && s.status === 'waiting'));
           result = { output: { approved }, handles: [approved ? 'approved' : 'rejected'] };
         }
+      } else if (node.type === 'logic.wait') {
+        const until = waitUntil(node.config, st.scope, new Date());
+        if (env.dryRun) result = { output: { waitedUntil: until.toISOString(), wouldDo: `Wait until ${until.toUTCString()}` } };
+        else if (st.woke === id) { st.woke = undefined; st.sleepUntil = undefined; result = { output: { waitedUntil: until.toISOString() } }; }
+        else {
+          if (nested) throw new Error('A Wait step inside a loop is not supported.');
+          if (until.getTime() <= Date.now()) result = { output: { waitedUntil: until.toISOString() } };
+          else {
+            st.sleepUntil = until.toISOString();
+            st.pending = id;
+            st.steps.push({ nodeId: id, type: node.type, label, status: 'waiting', output: { message: `Waiting until ${until.toUTCString()}` }, ms: 0 });
+            return { status: 'sleeping' };
+          }
+        }
       } else if (node.type === 'logic.loop') {
         result = await runLoop(wf, node, env, st);
       } else {
         const exec = EXECUTORS[node.type];
         if (!exec) throw new Error(`No executor for ${node.type}`);
-        result = await exec(node, st.scope, env);
+        // A person's decision on this step (it asked first, or a rule needed approval).
+        let approved = false;
+        if (st.decision?.nodeId === id) {
+          const ok = st.decision.approve;
+          st.decision = undefined;
+          st.pending = undefined;
+          st.steps = st.steps.filter((s) => !(s.nodeId === id && s.status === 'waiting'));
+          if (!ok) {
+            st.steps.push({ nodeId: id, type: node.type, label, status: 'ok', output: { approved: false, skipped: true }, ms: 0 });
+            st.final = `Not approved: "${label}" was not run. Nothing was changed.`;
+            return { status: 'done' };
+          }
+          approved = true;
+        }
+        const pause = async (reason: string): Promise<Outcome> => {
+          if (nested) throw new Error(`"${label}" needs approval, which isn't supported inside a loop. Add one approval step before the loop instead.`);
+          // Describe exactly what would happen, with real values, by running the step in preview.
+          const preview = await exec(node, st.scope, { ...env, dryRun: true, approved: true }).catch(() => null);
+          const what = preview?.output?.wouldDo ? `${preview.output.wouldDo}${preview.output.fields || preview.output.inputs ? `: ${JSON.stringify(preview.output.fields ?? preview.output.inputs)}` : ''}` : label;
+          st.pending = id;
+          st.steps.push({ nodeId: id, type: node.type, label, status: 'waiting', output: { message: `${reason}\n- ${what}` }, ms: 0 });
+          return { status: 'waiting' };
+        };
+        if (!env.dryRun && !approved && WRITE_NODE_TYPES.includes(node.type) && node.config.askFirst === 'Yes') return await pause(`Approve "${label}"?`);
+        try {
+          result = await exec(node, st.scope, approved ? { ...env, approved: true } : env);
+        } catch (e) {
+          if (!(e instanceof ApprovalRequired)) throw e;
+          if (env.dryRun) {
+            // Preview: note that it would ask, and show the rest as if approved.
+            result = await exec(node, st.scope, { ...env, approved: true });
+            result.output = { ...result.output, wouldDo: `Ask for approval (${e.message}), then ${String(result.output.wouldDo ?? label)}` };
+          } else return await pause(e.message);
+        }
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -131,6 +201,7 @@ export async function execute(
       if (node.config.continueOnError) {
         st.scope[id] = { error: msg };
         for (const e of wf.edges) if (e.source === id) st.active.push(e.id);
+        if (!nested) await env.checkpoint?.({ ...st, cursor: st.cursor + 1 });
         continue;
       }
       return { status: 'error', error: `${label}: ${msg}` };
@@ -141,7 +212,10 @@ export async function execute(
       st.usage = addUsage(st.usage ?? emptyUsage(), result.usage);
       st.tokens += totalTokens(result.usage);
     }
-    st.steps.push({ nodeId: id, type: node.type, label, status: 'ok', output: clip(result.output), ms: Date.now() - t0, trace: result.trace, ...(result.reused ? { reused: true } : {}) });
+    if (node.type === 'logic.wait') st.steps = st.steps.filter((s) => !(s.nodeId === id && s.status === 'waiting'));
+    st.steps.push({ nodeId: id, type: node.type, label, status: 'ok', output: clip(result.output), ms: Date.now() - t0, trace: result.trace,
+      ...(result.reused ? { reused: true } : {}),
+      ...(result.usage && (result.usage.costUsd || totalTokens(result.usage)) ? { ai: { tokens: totalTokens(result.usage), costUsd: result.usage.costUsd } } : {}) });
     if (node.type !== 'logic.loop' && !isTrigger) st.last = summarize(result.output);
     if (node.type === 'util.output') st.final = result.output.value;
 
@@ -149,6 +223,8 @@ export async function execute(
       if (e.source !== id) continue;
       if (!result.handles || result.handles.includes(e.sourceHandle ?? 'out')) st.active.push(e.id);
     }
+    // Progress is saved with the cursor past this step, so a resume never repeats a finished step.
+    if (!nested) await env.checkpoint?.({ ...st, cursor: st.cursor + 1 });
   }
   return { status: 'done' };
 }

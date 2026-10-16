@@ -15,6 +15,7 @@ function route(method: string, url: URL, body: any): Response {
   if (p === '/t/builder/chat') return json(demoChat(body));
   if (p === '/t/workflows' && method === 'GET') return json(DEMO_AGENTS);
   if (p === '/t/agents' && method === 'GET') return json(DEMO_ASSISTANTS);
+  if (/^\/t\/agents\/[^/]+\/run$/.test(p)) return json({ runId: 'x', output: body.history?.length ? 'Of those 9, 4 are High priority: 00001042, 00001039, 00001031 and 00001027.' : 'There are 9 open cases: 4 High, 3 Medium, 2 Low.' });
   if (p === '/api/tools') return json(DEMO_TOOLS);
   if (p === '/t/suggestions') return json(DEMO_SUGGESTIONS);
   if (/^\/t\/suggestions\/.+\/dismiss$/.test(p)) return json({ ok: true });
@@ -24,7 +25,7 @@ function route(method: string, url: URL, body: any): Response {
   if (/^\/t\/workflows\/[^/]+\/backtest$/.test(p)) return json(DEMO_BACKTEST);
   if (p === '/t/runs' && method === 'GET') return json(url.searchParams.get('status') === 'waiting' ? DEMO_RUNS.filter((r) => r.status === 'waiting') : DEMO_RUNS);
   if (p === '/api/usage') return json({ runs: 23, costUsd: 0.42, budgetUsd: 2, cacheHitRate: 0.61, tokens: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 } });
-  if (p === '/api/settings') return json({ sfClientId: '3MVG9demo', sfLoginUrl: 'https://login.salesforce.com', sfClientSecret: { set: false }, anthropicKey: { set: true }, dailyBudgetUsd: '2', anthropicWorkspaceId: '', aiCacheHours: '24', callbackUrl: 'https://app.crmagents.example/oauth/callback' });
+  if (p === '/api/settings') return json({ maskPii: 'on', maskFields: 'Salary__c', maxAiCalls: '', maxToolCalls: '', maxTokens: '', retentionDays: '30', sfClientId: '3MVG9demo', sfLoginUrl: 'https://login.salesforce.com', sfClientSecret: { set: false }, anthropicKey: { set: true }, dailyBudgetUsd: '2', anthropicWorkspaceId: '', aiCacheHours: '24', callbackUrl: 'https://app.crmagents.example/oauth/callback' });
   if (p === '/t/insights/ask') return json({ error: 'Asking questions needs a connected org (this is demo data).' }, 400);
   if (p === '/t/dashboards' && method === 'GET') return json(fx.dashboards);
   if (p === '/t/dashboards/run') return json(body.tiles.map((t: any) => ({ ...fx.dashboard.tiles.find((x: any) => x.title === t.title), ...t })));
@@ -68,7 +69,7 @@ const g = (types: string[], trigger: Record<string, unknown>) => ({
 });
 const ago = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString();
 const DEMO_AGENTS = [
-  { id: 'w1', name: 'Case triage', live: true, live_since: ago(300), watch_error: null, updated_at: ago(5), graph: g(['trigger.salesforce', 'sf.getRecord', 'ai.classify', 'logic.approval', 'sf.createTask', 'util.output'], { objectApiName: 'Case' }) },
+  { id: 'w1', name: 'Case triage', live: true, live_since: ago(300), watch_error: null, updated_at: ago(5), allowed_fields: { Case: ['Status', 'Priority'] }, graph: g(['trigger.salesforce', 'sf.getRecord', 'ai.classify', 'logic.approval', 'sf.updateRecord', 'sf.createTask', 'util.output'], { objectApiName: 'Case' }) },
   { id: 'w2', name: 'Stale deal follow-ups', live: true, live_since: ago(200), watch_error: null, updated_at: ago(30), graph: g(['trigger.schedule', 'sf.query', 'logic.loop', 'sf.createTask', 'util.output'], { every: 'week', at: '08:00' }) },
   { id: 'w3', name: 'Escalated case follow-up', live: true, live_since: ago(50), watch_error: 'Salesforce session expired. Reconnect the org.', updated_at: ago(52), graph: g(['trigger.salesforce', 'logic.branch', 'sf.action', 'sf.createTask', 'util.output'], { objectApiName: 'Case' }) },
   { id: 'w4', name: 'Lead scoring', live: false, live_since: null, watch_error: null, updated_at: ago(80), graph: g(['trigger.salesforce', 'sf.getRecord', 'ai.extract', 'sf.updateRecord', 'util.output'], { objectApiName: 'Lead' }) },
@@ -78,16 +79,19 @@ const names = ['Case triage', 'Stale deal follow-ups', 'Escalated case follow-up
 const STEPS = [
   { nodeId: 'trigger_1', type: 'trigger.salesforce', label: 'Case created', status: 'ok', ms: 2 },
   { nodeId: 'sf_get_1', type: 'sf.getRecord', label: 'Get Case', status: 'ok', ms: 184 },
-  { nodeId: 'ai_classify_1', type: 'ai.classify', label: 'Classify', status: 'ok', ms: 912 },
+  { nodeId: 'ai_classify_1', type: 'ai.classify', label: 'Classify', status: 'ok', ms: 912, ai: { tokens: 1240, costUsd: 0.0003 } },
 ];
 const DEMO_RUNS = Array.from({ length: 64 }, (_, i) => {
   const h = Math.floor((i * 5.1) + (i % 3) * 2);
-  const status = i === 1 || i === 4 ? 'waiting' : i % 17 === 5 ? 'error' : 'done';
+  const status = i === 1 || i === 4 ? 'waiting' : i === 2 ? 'sleeping' : i % 17 === 5 ? 'error' : 'done';
   return { id: `r${i}`, status, agent_name: names[i % names.length], trace: [], output_tokens: 120, cache_read_tokens: 1800, cache_write_tokens: 0,
     cost_usd: i % names.length === 0 ? 0.0003 : i % names.length === 3 ? 0.004 : 0, created_at: ago(h), input_tokens: 0,
-    steps: status === 'waiting' ? [...STEPS, { nodeId: 'approval_1', type: 'logic.approval', label: 'Approve changes', status: 'waiting', ms: 1, output: { message: 'Approve these changes?\n- Create Task "Triage: Billing" on Case 00001042\n- Update Case 00001042: Priority = High' } }]
+    steps: status === 'sleeping' ? [...STEPS, { nodeId: 'wait_1', type: 'logic.wait', label: 'Wait', status: 'waiting', ms: 0, output: { message: 'Waiting until Mon, 19 Oct 2026 08:00:00 GMT' } }] : status === 'waiting' ? [...STEPS, { nodeId: 'approval_1', type: 'logic.approval', label: 'Approve changes', status: 'waiting', ms: 1, output: { message: 'Approve these changes?\n- Create Task "Triage: Billing" on Case 00001042\n- Update Case 00001042: Priority = High' } }]
       : status === 'error' ? [...STEPS.slice(0, 2), { nodeId: 'sf_task_1', type: 'sf.createTask', label: 'Create task', status: 'error', ms: 140, error: 'REQUIRED_FIELD_MISSING: Subject' }] : [...STEPS, { nodeId: 'sf_task_1', type: 'sf.createTask', label: 'Create task', status: 'ok', ms: 160 }],
-    output: status === 'done' ? 'Category: Billing (mentions an invoice and a refund).' : null, workflow_id: `w${(i % names.length) + 1}` };
+    output: status === 'done' ? 'Category: Billing (mentions an invoice and a refund).' : null,
+    ...(status === 'waiting' ? { assigned_to: i === 1 ? 'owner@demo-company.com' : null, assigned_label: i === 1 ? 'owner@demo-company.com (record owner)' : 'Anyone in the workspace', started_by: i === 4 ? 'asha@demo-company.com' : null } : {}),
+    ...(status === 'done' && i % 3 === 0 ? { decided_by: 'owner@demo-company.com', decided_at: ago(h - 1), decision_note: i % 6 === 0 ? 'Looks right' : null } : {}),
+    workflow_id: `w${(i % names.length) + 1}` };
 });
 
 const DEMO_SUGGESTIONS = [
@@ -101,7 +105,8 @@ const DEMO_HEALTH = [
   { workflowId: 'w4', runs: 12, succeeded: 12, failed: 0, waiting: 0, approved: 3, rejected: 4, streak: 0, rejectNotes: ['Score too high for students'], suggestion: { kind: 'review', title: 'People often reject it', detail: '4 of 7 changes were rejected. Reasons: Score too high for students' } },
 ];
 const DEMO_RULES = [
-  { id: 'r1', text: 'Never email customers on weekends', enabled: true, created_at: ago(100), rule: { summary: 'Never send email on weekends.', actions: ['email'], objects: [], when: [], days: [0, 6], hours: null, timezone: 'Asia/Kolkata' } },
+  { id: 'r1', text: 'Never email customers on weekends', enabled: true, created_at: ago(100), rule: { summary: 'Never send email on weekends.', effect: 'block', actions: ['email'], objects: [], when: [], days: [0, 6], hours: null, timezone: 'Asia/Kolkata' } },
+  { id: 'r3', text: 'Ask before updating opportunities over 10,000', enabled: true, created_at: ago(80), rule: { summary: 'Ask before updating opportunities with Amount over 10,000.', effect: 'approve', actions: ['update'], objects: ['Opportunity'], when: [{ field: 'Amount', operator: 'greater_than', value: '10000' }], days: [], hours: null, timezone: 'Asia/Kolkata' } },
   { id: 'r2', text: "Don't change accounts owned by the Enterprise team", enabled: true, created_at: ago(90), rule: { summary: "Don't update or add tasks to accounts owned by the Enterprise team.", actions: ['update', 'task'], objects: ['Account'], when: [{ field: 'Owner.Name', operator: 'equals', value: 'Enterprise Team' }], days: [], hours: null, timezone: 'Asia/Kolkata' } },
 ];
 const DEMO_BACKTEST = {

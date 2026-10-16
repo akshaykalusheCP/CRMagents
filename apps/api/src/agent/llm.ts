@@ -1,4 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
+import type { Masker } from '../trust/mask.js';
+import { LimitError, type RunLimits } from '../trust/policy.js';
 import { config } from '../config.js';
 import type { SalesforceClient } from '../salesforce/client.js';
 import { addUsage, emptyUsage, usageFrom, type Usage } from './pricing.js';
@@ -25,7 +27,7 @@ export interface CallOptions {
 
 export interface Llm {
   /** Tool-using agent loop. */
-  agent(o: { system: string; prompt: string; tools: string[] } & CallOptions): Promise<LlmResult>;
+  agent(o: { system: string; prompt: string; tools: string[]; history?: { role: 'user' | 'assistant'; text: string }[] } & CallOptions): Promise<LlmResult>;
   /** Single completion, no tools. With `schema`, the reply is guaranteed JSON matching it. */
   complete(o: { system: string; prompt: string; schema?: Record<string, unknown> } & CallOptions): Promise<LlmResult>;
 }
@@ -52,8 +54,19 @@ export function createLlm(
   guard?: SpendGuard,
   client: Pick<Anthropic, 'messages'> = anthropicClient(apiKey),
   results?: ResultCache,
+  trust: { masker?: Masker; limits?: RunLimits; counters?: { aiCalls: number; toolCalls: number; tokens: number } } = {},
 ): Llm {
   let spent = 0; // across every call made through this instance (one workflow run)
+  const { masker, limits } = trust;
+  // Counters live on the run when given, so limits hold across an approval pause.
+  const used = trust.counters ?? { aiCalls: 0, toolCalls: 0, tokens: 0 };
+  const beforeCall = () => {
+    if (limits && used.aiCalls >= limits.aiCalls) throw new LimitError(`Run limit reached: ${limits.aiCalls} AI calls. Raise it in Settings → AI & spending, or narrow the agent.`);
+    if (limits && used.tokens >= limits.tokens) throw new LimitError(`Run limit reached: ${limits.tokens.toLocaleString()} tokens.`);
+    used.aiCalls++;
+  };
+  const counted = (u: Usage) => { used.tokens += u.input + u.output + u.cacheRead + u.cacheWrite; return u; };
+  const mask = (t: string) => (masker ? masker.maskText(t) : t);
 
   const outputConfig = (o: CallOptions, format?: Record<string, unknown>) => {
     const oc: Record<string, unknown> = {};
@@ -65,21 +78,23 @@ export function createLlm(
   /** One request, no tools: the answer depends only on the request, so identical requests reuse it. */
   async function single(o: { system: string; prompt: string; schema?: Record<string, unknown> } & CallOptions): Promise<LlmResult> {
     const model = o.model || config.model;
-    const system = `${o.system}\n\n${GUARDRAILS}`;
-    const key = results ? cacheKey({ model, effort: o.effort ?? null, system, prompt: o.prompt, schema: o.schema ?? null }) : '';
+    const system = `${mask(o.system)}\n\n${GUARDRAILS}`;
+    const prompt = mask(o.prompt);
+    const key = results ? cacheKey({ model, effort: o.effort ?? null, system, prompt, schema: o.schema ?? null }) : '';
     const hit = results ? await results.get(key) : null;
     if (hit !== null) return { text: hit, usage: emptyUsage(), trace: [], reused: true };
 
     await guard?.(spent);
+    beforeCall();
     // Single-shot with a unique prompt: prompt caching would only add the write premium, so it is off here.
     const res = await client.messages.create({
       model,
       max_tokens: 16000,
       system,
       ...outputConfig(o, o.schema),
-      messages: [{ role: 'user', content: o.prompt }],
+      messages: [{ role: 'user', content: prompt }],
     });
-    const usage = usageFrom(model, res.usage);
+    const usage = counted(usageFrom(model, res.usage));
     spent += usage.costUsd;
     if (res.stop_reason === 'refusal') throw new Error('The AI model declined this request.');
     if (res.stop_reason === 'max_tokens') throw new Error('The AI response was cut off (max tokens reached).');
@@ -88,30 +103,33 @@ export function createLlm(
     return { text, usage, trace: [] };
   }
 
-  async function agent(o: { system: string; prompt: string; tools: string[] } & CallOptions): Promise<LlmResult> {
+  async function agent(o: { system: string; prompt: string; tools: string[]; history?: { role: 'user' | 'assistant'; text: string }[] } & CallOptions): Promise<LlmResult> {
     const model = o.model || config.model;
     const defs = o.tools.map((n) => TOOLS[n]).filter(Boolean);
     // Without tools there is no live data involved: treat it as a single, reusable request.
-    if (defs.length === 0) return single({ system: o.system, prompt: o.prompt, model: o.model, effort: o.effort });
+    // Earlier turns of a conversation, as plain text (masked like everything else).
+    const past = (o.history ?? []).map((h) => ({ role: h.role, content: mask(h.text) }) as Anthropic.MessageParam);
+    if (defs.length === 0 && !past.length) return single({ system: o.system, prompt: o.prompt, model: o.model, effort: o.effort });
     // With tools the conversation is re-sent every turn, so prompt caching pays: an explicit breakpoint on the
     // static prefix (tools + system) plus automatic caching for the growing tail.
-    const systemText = `${o.system}\n\n${GUARDRAILS}`;
-    const messages: Anthropic.MessageParam[] = [{ role: 'user', content: o.prompt }];
+    const systemText = `${mask(o.system)}\n\n${GUARDRAILS}`;
+    const messages: Anthropic.MessageParam[] = [...past, { role: 'user', content: mask(o.prompt) }];
     const trace: ToolTrace[] = [];
     let usage = emptyUsage();
 
     for (let turn = 0; turn < MAX_TURNS; turn++) {
       await guard?.(spent);
+      beforeCall();
       const res = await client.messages.create({
         model,
         max_tokens: 16000, // backstop only; thinking counts toward it
         system: [{ type: 'text', text: systemText, cache_control: { type: 'ephemeral' } }],
         cache_control: { type: 'ephemeral' },
-        tools: defs.map((t) => t.def),
+        ...(defs.length ? { tools: defs.map((t) => t.def) } : {}),
         ...outputConfig(o),
         messages,
       });
-      const u = usageFrom(model, res.usage);
+      const u = counted(usageFrom(model, res.usage));
       usage = addUsage(usage, u);
       spent += u.costUsd;
       if (res.stop_reason === 'refusal') throw new Error('The AI model declined this request.');
@@ -126,10 +144,14 @@ export function createLlm(
         try {
           const tool = TOOLS[use.name];
           if (!tool || !o.tools.includes(use.name)) throw new Error(`Tool ${use.name} is not enabled`);
-          const out = await tool.run(sf, use.input);
+          if (limits && used.toolCalls >= limits.toolCalls) throw new LimitError(`Run limit reached: ${limits.toolCalls} tool calls.`);
+          used.toolCalls++;
+          // Salesforce reads get the real values (the data stays in Salesforce); the AI sees the result masked.
+          const out = await tool.run(sf, masker ? masker.unmaskValue(use.input) : use.input);
           trace.push({ tool: use.name, input: use.input, ok: true });
-          results.push({ type: 'tool_result', tool_use_id: use.id, content: toolResultText(out) });
+          results.push({ type: 'tool_result', tool_use_id: use.id, content: toolResultText(masker ? masker.maskValue(out) : out) });
         } catch (e) {
+          if (e instanceof LimitError) throw e;
           const msg = e instanceof Error ? e.message : String(e);
           trace.push({ tool: use.name, input: use.input, ok: false, error: msg });
           results.push({ type: 'tool_result', tool_use_id: use.id, content: msg, is_error: true });

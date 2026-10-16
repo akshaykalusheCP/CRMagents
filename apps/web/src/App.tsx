@@ -192,7 +192,7 @@ export function App() {
           {tab === 'insights' && <InsightsPage key="ins" fixedView="overview" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />}
           {tab === 'dashboards' && <InsightsPage key="dash" fixedView="dashboards" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />}
           {tab === 'agents' && <WorkflowsPage tenant={tenant} goConnections={() => setTab('settings')} incoming={incoming} onIncomingOpened={() => setIncoming(null)} prefill={prefill} onPrefillUsed={() => setPrefill(null)} />}
-          {tab === 'approvals' && <ApprovalsPage tenant={tenant} onChange={refreshWaiting} />}
+          {tab === 'approvals' && <ApprovalsPage tenant={tenant} onChange={refreshWaiting} me={me.email} />}
           {tab === 'activity' && <RunsPage tenant={tenant} goSettings={() => setTab('settings')} />}
           {tab === 'settings' && <SettingsHub tenants={tenants} tenant={tenant} onChange={reload} />}
         </main>

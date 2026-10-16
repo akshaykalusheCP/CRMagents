@@ -57,6 +57,11 @@ export function withPills(text: string, byId: Map<string, WFRFNode>): ReactNode[
   });
 }
 
+const approverText = (c: Record<string, unknown>) => {
+  const a = String(c.approver ?? 'Anyone in the workspace');
+  return a === 'Record owner' ? 'the record owner' : a === "Record owner's manager" ? "the owner's manager" : a === 'A specific person' ? String(c.approverEmail || 'a person') : 'someone';
+};
+
 const firstText = (s: unknown, n = 140) => {
   const t = String(s ?? '').replace(/\s+/g, ' ').trim();
   return t.length > n ? `${t.slice(0, n - 1)}…` : t;
@@ -83,7 +88,10 @@ function describe(n: WFRFNode, byId: Map<string, WFRFNode>, exitsElsewhere: bool
     case 'ai.agent': return (c.tools ?? []).length
       ? { title: 'AI researches in Salesforce', detail: P(c.prompt) }
       : { title: 'AI writes', detail: P(c.prompt) };
-    case 'logic.approval': return { title: 'Ask someone to approve', detail: P(c.message) };
+    case 'logic.wait': return c.mode === 'Until a date and time'
+      ? { title: <>Wait until {P(c.until)}</>, detail: 'Then carry on with the next step' }
+      : { title: <>Wait <b>{c.amount ?? 1} {c.unit ?? 'days'}</b></>, detail: 'Then carry on with the next step' };
+    case 'logic.approval': return { title: <>Ask {approverText(c)} to approve</>, detail: P(c.message) };
     case 'sf.createTask': return { title: <>Create a task: {P(c.subject || 'Follow up')}</>, detail: c.description ? P(c.description) : undefined };
     case 'sf.updateRecord': {
       let fields: Record<string, unknown> = {};
@@ -175,6 +183,7 @@ export function StepsView({ nodes, edges, selectedId, onSelect, onAdd, readOnly 
               <span className="step-text">
                 <span className="step-title">{d.title}</span>
                 {d.detail && <span className="step-detail">{d.detail}</span>}
+                {n.data.config?.askFirst === 'Yes' && <span className="step-ask">Asks {approverText(n.data.config)} first</span>}
               </span>
               {n.data.status && STATUS_ICON[n.data.status]}
             </button>

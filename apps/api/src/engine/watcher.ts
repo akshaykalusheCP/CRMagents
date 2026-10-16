@@ -2,8 +2,11 @@ import { NODE_DEF_BY_TYPE, type Workflow } from '@crmagents/shared';
 import { pool } from '../db.js';
 import { enableCdc, LOCK_ID as STREAM_LOCK, streamHealthy, syncStreams } from '../smart/stream.js';
 import { SalesforceClient } from '../salesforce/client.js';
+import { purgeOldRuns, recoverRuns } from '../trust/recovery.js';
+
+let lastPurge = 0;
 import { cachedInsights, snapshotDue } from '../insights/metrics.js';
-import { startRunAsync } from './service.js';
+import { startRunAsync, wakeRuns } from './service.js';
 
 // Server-side triggers without any Salesforce package: every minute, each live workflow asks its org for records
 // created (or changed) since the last check and starts a run per record. The cursor is stored, so restarts lose
@@ -133,6 +136,12 @@ async function tick() {
       for (const w of rows as LiveRow[]) {
         await tickWorkflow(w).catch((e) => pool.query('update workflows set watch_error=$2 where id=$1', [w.id, String(e instanceof Error ? e.message : e).slice(0, 500)]));
       }
+      // Wait steps that are over.
+      await wakeRuns().catch(() => undefined);
+      // Runs that stopped mid-way (restart, crash): resume when safe, otherwise mark them for an admin.
+      await recoverRuns({ error: () => {} }).catch(() => undefined);
+      // Hourly: clear old run details per each workspace's retention setting.
+      if (Date.now() - lastPurge > 3600_000) { lastPurge = Date.now(); await purgeOldRuns().catch(() => undefined); }
       // Once a day per org: record the key business numbers (no AI) so Insights can show trends.
       const { rows: orgs } = await db.query("select id from tenants where setup_status = 'ready'");
       for (const o of orgs) {

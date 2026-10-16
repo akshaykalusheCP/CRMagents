@@ -20,7 +20,7 @@ export function AgentsPage({ tenant, goConnections }: { tenant?: Tenant; goConne
   const [confirmUI, ask] = useConfirm();
   const [err, setErr] = useState('');
   const [input, setInput] = useState('');
-  const [out, setOut] = useState('');
+  const [thread, setThread] = useState<{ role: 'user' | 'assistant'; text: string }[]>([]);
   const [busy, setBusy] = useState(false);
 
   const load = () => tenant && api.agents(tenant.id).then(setAgents).catch((e) => setErr(e.message));
@@ -29,7 +29,7 @@ export function AgentsPage({ tenant, goConnections }: { tenant?: Tenant; goConne
 
   if (!tenant) return <Panel><Empty title="No org connected" body="Assistants work with a connected Salesforce org." action={<button className="sm" onClick={goConnections}>Connect Salesforce</button>} /></Panel>;
 
-  const pick = (a: Agent) => { setSel(a); setSaved(JSON.stringify(a)); setErr(''); setOut(''); };
+  const pick = (a: Agent) => { setSel(a); setSaved(JSON.stringify(a)); setErr(''); setThread([]); };
   const dirty = !!sel && JSON.stringify(sel) !== saved;
   const save = async () => {
     if (!sel) return;
@@ -47,9 +47,11 @@ export function AgentsPage({ tenant, goConnections }: { tenant?: Tenant; goConne
   };
   const run = async () => {
     if (!sel?.id || !input.trim()) return;
-    setBusy(true); setOut('');
-    try { setOut((await api.run(tenant.id, sel.id, input)).output); }
-    catch (e) { setOut('Error: ' + (e as Error).message); }
+    const q = input.trim();
+    const before = thread;
+    setThread([...before, { role: 'user', text: q }]); setInput(''); setBusy(true);
+    try { const r = await api.run(tenant.id, sel.id, q, before.slice(-20)); setThread((t) => [...t, { role: 'assistant', text: r.output }]); }
+    catch (e) { setThread((t) => [...t, { role: 'assistant', text: 'Error: ' + (e as Error).message }]); }
     setBusy(false);
   };
   const toggle = (n: string) => sel && setSel({ ...sel, tools: sel.tools.includes(n) ? sel.tools.filter((x) => x !== n) : [...sel.tools, n] });
@@ -95,12 +97,16 @@ export function AgentsPage({ tenant, goConnections }: { tenant?: Tenant; goConne
 
               {sel.id && (
                 <div className="try">
-                  <h3>Try it</h3>
+                  <div className="row between"><h3>Try it</h3>{thread.length > 0 && <button className="link-btn" onClick={() => setThread([])}>New conversation</button>}</div>
+                  {thread.length > 0 && (
+                    <div className="thread">{thread.map((m, i) => <div key={i} className={'msg ' + (m.role === 'user' ? 'me' : 'ai')}><div className="bubble">{m.text}</div></div>)}
+                      {busy && <div className="msg ai"><div className="bubble typing"><Loader2 size={14} className="spin" /> Looking it up…</div></div>}</div>
+                  )}
                   <div className="agent-start">
-                    <input id="as-q" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void run(); }} placeholder="e.g. How many open cases do we have by priority?" />
+                    <input id="as-q" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void run(); }} placeholder={thread.length ? 'Ask a follow-up…' : 'e.g. How many open cases do we have by priority?'} />
                     <button className="primary" disabled={busy || !input.trim()} onClick={() => void run()} aria-label="Ask">{busy ? <Loader2 size={15} className="spin" /> : <Send size={15} />}</button>
                   </div>
-                  {out && <pre className="output">{out}</pre>}
+
                 </div>
               )}
             </div>

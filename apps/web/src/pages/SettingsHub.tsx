@@ -9,7 +9,7 @@ import { SettingsPage } from './Settings';
 const SECTIONS = [
   { id: 'orgs', label: 'Salesforce orgs', desc: 'Connect orgs and check their status.' },
   { id: 'ai', label: 'AI & spending', desc: 'Your AI key, daily budget and answer reuse.' },
-  { id: 'rules', label: 'Rules', desc: 'Things agents must never do. Checked by code before every change, in every agent.' },
+  { id: 'rules', label: 'Rules', desc: 'Limits for every agent: things they must never do, or must ask a person about first. Checked by code before every change.' },
 ] as const;
 
 export function SettingsHub({ tenants, onChange, tenant }: { tenants: Tenant[]; onChange: () => void; tenant?: Tenant }) {

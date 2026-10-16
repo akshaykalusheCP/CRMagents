@@ -1,4 +1,4 @@
-import { validateWorkflow, type Workflow } from '@crmagents/shared';
+import { APPROVERS, validateWorkflow, type Workflow } from '@crmagents/shared';
 import { anthropicClient, createLlm, type Llm } from '../agent/llm.js';
 import { pool } from '../db.js';
 import { SalesforceClient } from '../salesforce/client.js';
@@ -10,6 +10,7 @@ import { dbResultCache } from '../agent/resultCache.js';
 import { execute, newState, type RunState } from './executor.js';
 import { examplesFor } from './learn.js';
 import { makeGuard } from '../smart/policies.js';
+import { runTrust } from '../trust/policy.js';
 
 export interface TriggerPayload {
   input?: string;
@@ -28,50 +29,150 @@ export interface RunSnapshot {
 }
 
 // The AI key is only needed when a workflow actually uses an AI block, so non-AI workflows run without it.
-async function makeEnv(tenantId: string, workflowId?: string) {
+async function makeEnv(tenantId: string, workflowId?: string, st?: RunState) {
   const sf = await SalesforceClient.forTenant(tenantId);
   const accountId = await accountOf(tenantId);
+  // Masking and limits: the placeholder map and the counters live on the run so they survive pauses.
+  const { masker, limits } = await runTrust(accountId, st ? (st.masks ??= {}) : undefined);
+  const counters = st ? (st.counters ??= { aiCalls: 0, toolCalls: 0, tokens: 0 }) : undefined;
   let real: Llm | undefined;
   const llm = async (): Promise<Llm> => {
     if (real) return real;
     const apiKey = await getSetting(accountId, 'anthropicKey');
     if (!apiKey) throw new Error('Anthropic API key is not configured. Add it in Settings.');
     const workspaceId = await getSetting(accountId, 'anthropicWorkspaceId');
-    return (real = createLlm(apiKey, sf, spendGuard(accountId), anthropicClient(apiKey, workspaceId), await dbResultCache(accountId)));
+    return (real = createLlm(apiKey, sf, spendGuard(accountId), anthropicClient(apiKey, workspaceId), await dbResultCache(accountId), { masker, limits, counters }));
   };
   const lazy: Llm = {
     agent: async (o) => (await llm()).agent(o),
     complete: async (o) => (await llm()).complete(o),
   };
-  const guard = await makeGuard(tenantId, sf);
-  return { sf, llm: lazy, guard, ...(workflowId ? { examples: examplesFor(workflowId) } : {}) };
+  const rules = await makeGuard(tenantId, sf);
+  const allowed = workflowId ? ((await pool.query('select allowed_fields from workflows where id=$1', [workflowId])).rows[0]?.allowed_fields ?? {}) as Record<string, string[]> : {};
+  const guard = Object.keys(allowed).length || rules
+    ? async (ctx: Parameters<NonNullable<typeof rules>>[0]) => {
+      checkAllowedFields(allowed, ctx);
+      await rules?.(ctx);
+    }
+    : undefined;
+  const unmask = masker ? <T,>(v: T): T => masker.unmaskValue(v) : undefined;
+  return { sf, llm: lazy, guard, unmask, ...(workflowId ? { examples: examplesFor(workflowId) } : {}) };
 }
 
-async function persist(runId: string, st: RunState, graph: Workflow, status: string, error?: string) {
-  const out = st.final ?? st.last ?? null;
+async function persist(runId: string, st: RunState, graph: Workflow, status: string, error?: string, unmask: <T>(v: T) => T = (v) => v) {
+  // What people see in the app gets the real values; only the AI saw placeholders.
+  const out = unmask(st.final ?? st.last ?? null);
   const text = error ?? (out == null ? '' : typeof out === 'string' ? out : JSON.stringify(out, null, 2));
   const u = st.usage ?? emptyUsage();
   await pool.query(
     `update runs set status=$2, output=$3, steps=$4, state=$5, input_tokens=$6, output_tokens=$7,
-       cache_read_tokens=$8, cache_write_tokens=$9, cost_usd=$10 where id=$1`,
-    [runId, status, text, JSON.stringify(st.steps), status === 'waiting' ? JSON.stringify({ st, graph }) : null,
+       cache_read_tokens=$8, cache_write_tokens=$9, cost_usd=$10 where id=$1 and status <> 'cancelled'`,
+    [runId, status, text, JSON.stringify(unmask(st.steps)), status === 'waiting' || status === 'sleeping' ? JSON.stringify({ st, graph }) : null,
       u.input, u.output, u.cacheRead, u.cacheWrite, u.costUsd],
   );
   return { runId, status, output: text, error, steps: st.steps, usage: u };
 }
 
+export class Cancelled extends Error {}
+
 async function drive(runId: string, tenantId: string, graph: Workflow, st: RunState, workflowId?: string) {
+  // "Still working" signal for the recovery check, plus a saved checkpoint after every finished step.
+  const beat = setInterval(() => { void pool.query('update runs set heartbeat_at=now() where id=$1', [runId]).catch(() => {}); }, 30_000);
   try {
-    const env = await makeEnv(tenantId, workflowId);
+    const env = {
+      ...(await makeEnv(tenantId, workflowId, st)),
+      checkpoint: async (snap: unknown) => {
+        const { rows } = await pool.query(
+          "update runs set state=$2, heartbeat_at=now() where id=$1 and status='running' returning id", [runId, JSON.stringify({ st: snap, graph })]);
+        if (!rows.length) throw new Cancelled('Run was cancelled');
+      },
+    };
     const outcome = await execute(graph, env, st);
-    const status = outcome.status === 'done' ? 'done' : outcome.status === 'waiting' ? 'waiting' : 'error';
-    return await persist(runId, st, graph, status, outcome.error);
+    const status = outcome.status === 'done' ? 'done' : outcome.status === 'waiting' ? 'waiting' : outcome.status === 'sleeping' ? 'sleeping' : 'error';
+    const saved = await persist(runId, st, graph, status, outcome.error, env.unmask);
+    if (status === 'sleeping') await pool.query('update runs set wake_at=$2 where id=$1', [runId, st.sleepUntil]);
+    if (status === 'waiting' && st.pending) {
+      const node = graph.nodes.find((n) => n.id === st.pending);
+      const who = await resolveApprover(tenantId, env.sf, node?.config ?? {}, st.scope.trigger ?? {}).catch(() => ({ email: null, label: 'Anyone in the workspace' }));
+      await pool.query('update runs set assigned_to=$2, assigned_label=$3 where id=$1', [runId, who.email, who.label]);
+    }
+    return saved;
   } catch (e) {
     return await persist(runId, st, graph, 'error', e instanceof Error ? e.message : String(e));
+  } finally {
+    clearInterval(beat);
   }
 }
 
-async function createRun(tenantId: string, workflowId: string, trigger: TriggerPayload) {
+/** Continue a stopped or recovered run from its last checkpoint. */
+export async function resumeRun(tenantId: string, runId: string) {
+  const { rows } = await pool.query('select status, state, workflow_id from runs where id=$1 and tenant_id=$2', [runId, tenantId]);
+  if (!rows[0]) throw Object.assign(new Error('run not found'), { statusCode: 404 });
+  if (!['stopped', 'running'].includes(rows[0].status)) throw new Error('Only stopped runs can be resumed');
+  const { st, graph } = (rows[0].state ?? {}) as { st?: RunState; graph?: Workflow };
+  await pool.query("update runs set status='running', heartbeat_at=now() where id=$1", [runId]);
+  if (!st || !graph) {
+    // Nothing ran yet: start it again from the beginning with the same input.
+    const { rows: r } = await pool.query('select input, w.graph from runs join workflows w on w.id = runs.workflow_id where runs.id=$1', [runId]);
+    return drive(runId, tenantId, r[0].graph, newState({ ...(r[0].input ?? {}) }), rows[0].workflow_id ?? undefined);
+  }
+  return drive(runId, tenantId, graph, st, rows[0].workflow_id ?? undefined);
+}
+
+/** Wake runs whose Wait step is over (called every minute). */
+export async function wakeRuns() {
+  const { rows } = await pool.query(
+    "update runs set status='running', heartbeat_at=now(), wake_at=null where status='sleeping' and wake_at <= now() returning id, tenant_id, state, workflow_id");
+  for (const r of rows) {
+    const { st, graph } = (r.state ?? {}) as { st?: RunState; graph?: Workflow };
+    if (!st || !graph) continue;
+    st.woke = st.pending; st.pending = undefined;
+    void drive(r.id, r.tenant_id, graph, st, r.workflow_id ?? undefined);
+  }
+  return rows.length;
+}
+
+export async function cancelRun(tenantId: string, runId: string, who: string) {
+  const { rows } = await pool.query(
+    `update runs set status='cancelled', output=$3, state=null where id=$1 and tenant_id=$2 and status in ('running','waiting','stopped','sleeping') returning id`,
+    [runId, tenantId, `Cancelled by ${who}. Steps that finished before this were kept.`]);
+  if (!rows.length) throw new Error('This run is not running, waiting or stopped.');
+  return { ok: true };
+}
+
+/** "This agent may only change Status and Priority on Case." Pure; tested. */
+export function checkAllowedFields(allowed: Record<string, string[]>, ctx: { action: string; object: string; values?: Record<string, unknown> }) {
+  if (ctx.action !== 'update' && ctx.action !== 'create') return;
+  const list = allowed[ctx.object];
+  if (!list?.length) return;
+  const bad = Object.keys(ctx.values ?? {}).filter((f) => !list.some((a) => a.toLowerCase() === f.toLowerCase()));
+  if (bad.length) throw new Error(`This agent may only change ${list.join(', ')} on ${ctx.object}; it tried ${bad.join(', ')}.`);
+}
+
+/** Who should approve: from the step's "Who approves" setting. Owner/manager come from Salesforce and are matched
+ * to people in the workspace by email; if they aren't users here, anyone may approve (and the label says so). */
+export async function resolveApprover(tenantId: string, sf: SalesforceClient, cfg: Record<string, unknown>, trigger: Record<string, unknown>): Promise<{ email: string | null; label: string }> {
+  const kind = String(cfg.approver ?? APPROVERS[0]);
+  const users = (await pool.query('select lower(u.email) email from users u join tenants t on t.account_id = u.account_id where t.id=$1', [tenantId])).rows.map((r) => r.email as string);
+  const known = (e?: string | null) => (e && users.includes(e.toLowerCase()) ? e.toLowerCase() : null);
+  if (kind === 'A specific person') {
+    const e = String(cfg.approverEmail ?? '').trim().toLowerCase();
+    return known(e) ? { email: e, label: e } : { email: null, label: `Anyone (${e || 'no email set'} is not in this workspace)` };
+  }
+  if (kind === 'Record owner' || kind === "Record owner's manager") {
+    const obj = String(trigger.objectApiName ?? ''), id = String(trigger.recordId ?? '');
+    if (!/^\w+$/.test(obj) || !/^[a-zA-Z0-9]{15,18}$/.test(id)) return { email: null, label: 'Anyone (no record to look up an owner)' };
+    const field = kind === 'Record owner' ? 'Owner.Email' : 'Owner.Manager.Email';
+    const r = await sf.query(`SELECT ${field} FROM ${obj} WHERE Id = '${id}'`);
+    const rec = r.records[0] as any;
+    const email = kind === 'Record owner' ? rec?.Owner?.Email : rec?.Owner?.Manager?.Email;
+    const who = kind === 'Record owner' ? 'record owner' : "owner's manager";
+    return known(email) ? { email: email.toLowerCase(), label: `${email} (${who})` } : { email: null, label: `Anyone (${who}${email ? ` ${email}` : ''} is not in this workspace)` };
+  }
+  return { email: null, label: 'Anyone in the workspace' };
+}
+
+async function createRun(tenantId: string, workflowId: string, trigger: TriggerPayload, startedBy?: string) {
   checkRunRate(await accountOf(tenantId));
   const { rows } = await pool.query('select graph from workflows where id=$1 and tenant_id=$2', [workflowId, tenantId]);
   if (!rows[0]) throw Object.assign(new Error('workflow not found'), { statusCode: 404 });
@@ -79,15 +180,15 @@ async function createRun(tenantId: string, workflowId: string, trigger: TriggerP
   validateWorkflow(graph);
   if (!graph.nodes.some((n) => n.type.startsWith('trigger.'))) throw new Error('Add a trigger node first');
   const { rows: r } = await pool.query(
-    'insert into runs (tenant_id, workflow_id, input, status) values ($1,$2,$3,$4) returning id',
-    [tenantId, workflowId, JSON.stringify(trigger), 'running'],
+    'insert into runs (tenant_id, workflow_id, input, status, started_by, heartbeat_at) values ($1,$2,$3,$4,$5,now()) returning id',
+    [tenantId, workflowId, JSON.stringify(trigger), 'running', startedBy ?? null],
   );
   return { runId: r[0].id as string, graph };
 }
 
 /** Run to completion (or until an approval pause) and return the result. */
-export async function startRun(tenantId: string, workflowId: string, trigger: TriggerPayload) {
-  const { runId, graph } = await createRun(tenantId, workflowId, trigger);
+export async function startRun(tenantId: string, workflowId: string, trigger: TriggerPayload, startedBy?: string) {
+  const { runId, graph } = await createRun(tenantId, workflowId, trigger, startedBy);
   return drive(runId, tenantId, graph, newState({ ...trigger }), workflowId);
 }
 
@@ -115,14 +216,22 @@ export async function getRun(tenantId: string, runId: string): Promise<RunSnapsh
   };
 }
 
-export async function decideRun(tenantId: string, runId: string, approve: boolean, note?: string) {
-  const { rows } = await pool.query('select status, state, workflow_id from runs where id=$1 and tenant_id=$2', [runId, tenantId]);
+export async function decideRun(tenantId: string, runId: string, approve: boolean, note?: string, who?: string, role?: string) {
+  const { rows } = await pool.query('select status, state, workflow_id, started_by, assigned_to from runs where id=$1 and tenant_id=$2', [runId, tenantId]);
   if (!rows[0]) throw Object.assign(new Error('run not found'), { statusCode: 404 });
+  if (who) {
+    const me = who.toLowerCase();
+    const { rows: n } = await pool.query('select count(*)::int c from users u join tenants t on t.account_id = u.account_id where t.id=$1', [tenantId]);
+    const team = n[0].c > 1;
+    // Separation of duties (only meaningful when there is someone else to ask).
+    if (team && rows[0].started_by && rows[0].started_by.toLowerCase() === me) throw Object.assign(new Error('You started this run, so someone else needs to approve it.'), { statusCode: 403 });
+    if (team && rows[0].assigned_to && rows[0].assigned_to !== me && role !== 'owner') throw Object.assign(new Error(`This approval is assigned to ${rows[0].assigned_to}.`), { statusCode: 403 });
+  }
   if (rows[0].status !== 'waiting' || !rows[0].state) throw new Error('Run is not waiting for approval');
   const { st, graph } = rows[0].state as { st: RunState; graph: Workflow };
   if (!st.pending) throw new Error('No pending approval');
   st.decision = { nodeId: st.pending, approve };
-  await pool.query("update runs set status='running', decision_note=$2, decided_at=now() where id=$1", [runId, note?.trim().slice(0, 500) || null]);
+  await pool.query("update runs set status='running', decision_note=$2, decided_at=now(), decided_by=$3, heartbeat_at=now() where id=$1", [runId, note?.trim().slice(0, 500) || null, who ?? null]);
   return drive(runId, tenantId, graph, st, rows[0].workflow_id ?? undefined);
 }
 

@@ -6,7 +6,7 @@
     "dev": "tsx watch --env-file=../../.env src/index.ts",
     "build": "tsc -p .",
     "typecheck": "tsc -p . --noEmit",
-    "test": "tsx --env-file=../../.env --test src/engine/engine.test.ts src/agent/tokens.test.ts src/salesforce/rotation.test.ts src/builder/builder.test.ts src/insights/insights.test.ts src/engine/watcher.test.ts src/smart/smart.test.ts"
+    "test": "tsx --env-file=../../.env --test src/engine/engine.test.ts src/agent/tokens.test.ts src/salesforce/rotation.test.ts src/builder/builder.test.ts src/insights/insights.test.ts src/engine/watcher.test.ts src/smart/smart.test.ts src/trust/mask.test.ts src/trust/trust.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",

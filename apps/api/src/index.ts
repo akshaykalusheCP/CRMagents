@@ -8,7 +8,7 @@ import { setupOrg } from './salesforce/setup.js';
 import { TOOLS } from './agent/tools.js';
 import { validateWorkflow, type Workflow } from '@crmagents/shared';
 import { runAgent } from './agent/runner.js';
-import { decideRun, previewWorkflow, startRun } from './engine/service.js';
+import { cancelRun, resumeRun, decideRun, previewWorkflow, startRun } from './engine/service.js';
 import { addExample, exampleCount } from './engine/learn.js';
 import { deployWorkflow, undeployWorkflow } from './salesforce/deploy.js';
 import { setLive, setRealtime, startWatcher } from './engine/watcher.js';
@@ -29,7 +29,7 @@ import { listOrgActions } from './salesforce/actions.js';
 import { config } from './config.js';
 import { migrate, pool } from './db.js';
 import { buildAuthorizeUrl, handleCallback, redirectUri, validateOwnApp } from './salesforce/oauth.js';
-import { getSetting, setSetting, SETTING_KEYS, type SettingName } from './settings.js';
+import { getSetting, PLAIN_SETTINGS, setSetting, SETTING_KEYS, type SettingName } from './settings.js';
 
 const app = Fastify({ logger: true });
 
@@ -101,7 +101,7 @@ app.get('/api/settings', async (req) => {
     const v = await getSetting(accountId, name);
     // sfClientId and loginUrl are not secret; show them so the form is editable.
     // Non-secret settings are returned as values so the form can show them.
-    out[name] = name === 'sfClientId' || name === 'sfLoginUrl' || name === 'dailyBudgetUsd' || name === 'anthropicWorkspaceId' || name === 'aiCacheHours' ? (v ?? '') : { set: !!v };
+    out[name] = PLAIN_SETTINGS.includes(name) ? (v ?? '') : { set: !!v };
   }
   return out;
 });
@@ -114,6 +114,12 @@ const settingsBody = z.object({
   anthropicWorkspaceId: z.string().regex(/^(wrkspc_[A-Za-z0-9]+)?$/, 'Workspace ID looks like wrkspc_…').optional(),
   aiCacheHours: z.string().regex(/^(\d+(\.\d+)?)?$/, 'Hours must be a number (0 turns reuse off)').optional(),
   dailyBudgetUsd: z.string().regex(/^(none|\d+(\.\d+)?)?$/i, 'Budget must be a number of dollars, or "none"').optional(),
+  maskPii: z.enum(['on', 'off', '']).optional(),
+  maskFields: z.string().max(2000).regex(/^[\w\s,.]*$/, 'Field names are API names separated by commas').optional(),
+  maxAiCalls: z.string().regex(/^(\d{1,4})?$/, 'A whole number').optional(),
+  maxToolCalls: z.string().regex(/^(\d{1,4})?$/, 'A whole number').optional(),
+  maxTokens: z.string().regex(/^(\d{1,8})?$/, 'A whole number').optional(),
+  retentionDays: z.string().regex(/^(\d{1,4})?$/, 'A whole number of days (0 keeps everything)').optional(),
 });
 
 app.put('/api/settings', async (req) => {
@@ -340,6 +346,15 @@ app.post('/api/tenants/:tenantId/workflows/:id/regression', async (req) => {
   return regression(tenantId, id, graph);
 });
 
+// Fields each agent may change, per object (empty = no limit beyond workspace rules).
+app.put('/api/tenants/:tenantId/workflows/:id/allowed-fields', async (req) => {
+  const { tenantId, id } = req.params as { tenantId: string; id: string };
+  const { allowed } = z.object({ allowed: z.record(z.array(z.string().regex(/^\w+$/)).max(200)) }).parse(req.body);
+  const clean = Object.fromEntries(Object.entries(allowed).filter(([o, f]) => /^\w+$/.test(o) && f.length));
+  await pool.query('update workflows set allowed_fields=$3 where id=$1 and tenant_id=$2', [id, tenantId, JSON.stringify(clean)]);
+  return { allowed: clean };
+});
+
 // Real-time trigger (Change Data Capture) instead of 1-minute checks.
 app.post('/api/tenants/:tenantId/workflows/:id/realtime', async (req) => {
   const { tenantId, id } = req.params as { tenantId: string; id: string };
@@ -440,7 +455,7 @@ app.delete('/api/tenants/:tenantId/agents/:agentId', async (req) => {
   return { ok: true };
 });
 
-const runBody = z.object({ input: z.string().min(1), context: z.unknown().optional() });
+const runBody = z.object({ input: z.string().min(1), context: z.unknown().optional(), history: z.array(z.object({ role: z.enum(['user', 'assistant']), text: z.string().max(20000) })).max(40).optional() });
 
 app.post('/api/tenants/:tenantId/agents/:agentId/run', async (req, reply) => {
   const { tenantId, agentId } = req.params as { tenantId: string; agentId: string };
@@ -455,6 +470,7 @@ app.post('/api/tenants/:tenantId/agents/:agentId/run', async (req, reply) => {
     { id: rows[0].id, systemPrompt: rows[0].system_prompt, tools: rows[0].tools },
     b.input,
     b.context,
+    b.history,
   );
 });
 
@@ -466,7 +482,7 @@ const wfBody = z.object({
 
 app.get('/api/tenants/:tenantId/workflows', async (req) => {
   const { rows } = await pool.query(
-    'select id, name, graph, updated_at, sf_flow_name, sf_deployed_at, live, live_since, watch_error, realtime from workflows where tenant_id=$1 order by updated_at desc',
+    'select id, name, graph, updated_at, sf_flow_name, sf_deployed_at, live, live_since, watch_error, realtime, allowed_fields from workflows where tenant_id=$1 order by updated_at desc',
     [(req.params as { tenantId: string }).tenantId],
   );
   return rows;
@@ -531,7 +547,7 @@ const triggerBody = z.object({
 
 app.post('/api/tenants/:tenantId/workflows/:id/run', async (req) => {
   const { tenantId, id } = req.params as { tenantId: string; id: string };
-  return startRun(tenantId, id, triggerBody.parse(req.body ?? {}));
+  return startRun(tenantId, id, triggerBody.parse(req.body ?? {}), req.user!.email);
 });
 
 // Dry run on recent records: AI runs for real, nothing is written to Salesforce.
@@ -583,14 +599,24 @@ app.delete('/api/tenants/:tenantId/workflows/:id/deploy', async (req) => {
 app.post('/api/tenants/:tenantId/runs/:runId/decision', async (req) => {
   const { tenantId, runId } = req.params as { tenantId: string; runId: string };
   const { approve, note } = z.object({ approve: z.boolean(), note: z.string().max(500).optional() }).parse(req.body);
-  return decideRun(tenantId, runId, approve, note);
+  return decideRun(tenantId, runId, approve, note, req.user!.email, req.user!.role);
+});
+
+// Stop a run (takes effect at the next step) or continue one that stopped mid-way.
+app.post('/api/tenants/:tenantId/runs/:runId/cancel', async (req) => {
+  const { tenantId, runId } = req.params as { tenantId: string; runId: string };
+  return cancelRun(tenantId, runId, req.user!.email);
+});
+app.post('/api/tenants/:tenantId/runs/:runId/resume', async (req) => {
+  const { tenantId, runId } = req.params as { tenantId: string; runId: string };
+  return resumeRun(tenantId, runId);
 });
 
 app.get('/api/tenants/:tenantId/runs', async (req) => {
   const { rows } = await pool.query(
     `select r.id, r.status, r.input, r.output, r.trace, r.steps, r.input_tokens, r.output_tokens,
             r.cache_read_tokens, r.cache_write_tokens, r.cost_usd::float as cost_usd, r.created_at,
-            coalesce(w.name, a.name, case when r.input ? 'builder' then 'AI builder' when r.input ? 'insights' then 'AI insights' end) as agent_name, r.workflow_id
+            coalesce(w.name, a.name, case when r.input ? 'builder' then 'AI builder' when r.input ? 'insights' then 'AI insights' end) as agent_name, r.workflow_id, r.decided_by, r.decision_note, r.decided_at, r.purged_at, r.started_by, r.assigned_to, r.assigned_label
      from runs r left join agents a on a.id = r.agent_id left join workflows w on w.id = r.workflow_id
      where r.tenant_id = $1 and ($2::text is null or r.status = $2) order by r.created_at desc limit 50`,
     [(req.params as { tenantId: string }).tenantId, (req.query as { status?: string }).status ?? null],

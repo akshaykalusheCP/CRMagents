@@ -42,7 +42,7 @@ export function compilePlan(plan: Plan): CompileResult {
 
   let x = 0;
   const add = (type: string, config: Record<string, unknown>, label?: string, y = 120): WFNode => {
-    const prefix = { 'trigger.salesforce': 'trigger', 'trigger.manual': 'trigger', 'sf.getRecord': 'sf_get', 'logic.branch': 'branch', 'logic.approval': 'approval', 'util.output': 'output', 'ai.classify': 'ai_classify', 'ai.extract': 'ai_extract', 'ai.agent': 'ai_agent', 'sf.query': 'sf_query', 'sf.createTask': 'sf_task', 'sf.updateRecord': 'sf_update', 'sf.createRecord': 'sf_create', 'notify.slack': 'slack', 'sf.action': 'sf_action' }[type] ?? 'node';
+    const prefix = { 'trigger.salesforce': 'trigger', 'trigger.manual': 'trigger', 'sf.getRecord': 'sf_get', 'logic.branch': 'branch', 'logic.approval': 'approval', 'util.output': 'output', 'ai.classify': 'ai_classify', 'ai.extract': 'ai_extract', 'ai.agent': 'ai_agent', 'sf.query': 'sf_query', 'sf.createTask': 'sf_task', 'sf.updateRecord': 'sf_update', 'sf.createRecord': 'sf_create', 'notify.slack': 'slack', 'sf.action': 'sf_action', 'logic.wait': 'wait' }[type] ?? 'node';
     const n: WFNode = { id: nextId(prefix), type, position: { x, y }, config, ...(label ? { label } : {}) };
     if (y === 120) x += 280;
     nodes.push(n);
@@ -239,6 +239,11 @@ export function compilePlan(plan: Plan): CompileResult {
         keys = 'any';
         result = result || `${actionLabel(s.org_action ?? '')}: done.`;
         break;
+      case 'wait':
+        if (inLoop) errors.push(`step ${i + 1}: a wait can't be inside a per-record loop`);
+        node = add('logic.wait', { mode: 'For a while', amount: Math.max(1, s.wait_amount ?? 1), unit: s.wait_unit ?? 'days' }, 'Wait');
+        keys = new Set(['waitedUntil']);
+        break;
       case 'notify_slack':
         node = add('notify.slack', { webhookUrl: '', text: convert(s.message, i) }, 'Slack');
         warnings.push('Paste your Slack webhook URL into the Slack block.');
@@ -331,6 +336,7 @@ function describe(s: PlanStep, plan: Plan): string {
     case 'create_record': return `Creates a ${s.object}${s.fields.length ? ` (${s.fields.map((f) => f.field).join(', ')})` : ''}`;
     case 'notify_slack': return 'Posts a Slack message';
     case 'run_action': return `${actionLabel(s.org_action ?? '')} (your org's own automation)`;
+    case 'wait': return `Waits ${s.wait_amount ?? 1} ${s.wait_unit ?? 'days'}`;
     default: return s.action;
   }
 }

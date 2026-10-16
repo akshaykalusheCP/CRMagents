@@ -13,7 +13,16 @@ export const SETTING_KEYS = {
   anthropicWorkspaceId: 'ANTHROPIC_WORKSPACE_ID',
   dailyBudgetUsd: 'DAILY_AI_BUDGET_USD',
   aiCacheHours: 'AI_CACHE_HOURS',
+  maskPii: 'MASK_PII',
+  maskFields: 'MASK_FIELDS',
+  maxAiCalls: 'MAX_AI_CALLS_PER_RUN',
+  maxToolCalls: 'MAX_TOOL_CALLS_PER_RUN',
+  maxTokens: 'MAX_TOKENS_PER_RUN',
+  retentionDays: 'RUN_RETENTION_DAYS',
 } as const;
+
+/** Settings shown as plain values in the UI (not secrets). */
+export const PLAIN_SETTINGS: SettingName[] = ['sfClientId', 'sfLoginUrl', 'dailyBudgetUsd', 'anthropicWorkspaceId', 'aiCacheHours', 'maskPii', 'maskFields', 'maxAiCalls', 'maxToolCalls', 'maxTokens', 'retentionDays'];
 export type SettingName = keyof typeof SETTING_KEYS;
 
 export async function getSetting(accountId: string, name: SettingName): Promise<string | undefined> {

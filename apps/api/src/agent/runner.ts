@@ -5,6 +5,7 @@ import { checkRunRate, spendGuard } from '../spend.js';
 import { accountOf } from '../tenants.js';
 import { anthropicClient, createLlm } from './llm.js';
 import { dbResultCache } from './resultCache.js';
+import { runTrust } from '../trust/policy.js';
 
 export interface AgentSpec {
   id?: string;
@@ -13,14 +14,15 @@ export interface AgentSpec {
 }
 
 // Standalone single-agent run (the "Single agents" page). Workflows use the engine instead.
-export async function runAgent(tenantId: string, agent: AgentSpec, userInput: string, context?: unknown) {
+export async function runAgent(tenantId: string, agent: AgentSpec, userInput: string, context?: unknown, history?: { role: 'user' | 'assistant'; text: string }[]) {
   const accountId = await accountOf(tenantId);
   checkRunRate(accountId);
   const apiKey = await getSetting(accountId, 'anthropicKey');
   if (!apiKey) throw new Error('Anthropic API key is not configured. Add it in Settings.');
   const sf = await SalesforceClient.forTenant(tenantId);
   const workspaceId = await getSetting(accountId, 'anthropicWorkspaceId');
-  const llm = createLlm(apiKey, sf, spendGuard(accountId), anthropicClient(apiKey, workspaceId), await dbResultCache(accountId));
+  const { masker, limits } = await runTrust(accountId);
+  const llm = createLlm(apiKey, sf, spendGuard(accountId), anthropicClient(apiKey, workspaceId), await dbResultCache(accountId), { masker, limits });
 
   const { rows } = await pool.query(
     'insert into runs (tenant_id, agent_id, input) values ($1,$2,$3) returning id',
@@ -32,13 +34,14 @@ export async function runAgent(tenantId: string, agent: AgentSpec, userInput: st
       system: agent.systemPrompt,
       prompt: context ? `${userInput}\n\nContext:\n${JSON.stringify(context)}` : userInput,
       tools: agent.tools,
+      history,
     });
     await pool.query(
       `update runs set status='done', output=$2, trace=$3, input_tokens=$4, output_tokens=$5,
          cache_read_tokens=$6, cache_write_tokens=$7, cost_usd=$8 where id=$1`,
-      [runId, r.text, JSON.stringify(r.trace), r.usage.input, r.usage.output, r.usage.cacheRead, r.usage.cacheWrite, r.usage.costUsd],
+      [runId, masker ? masker.unmaskText(r.text) : r.text, JSON.stringify(r.trace), r.usage.input, r.usage.output, r.usage.cacheRead, r.usage.cacheWrite, r.usage.costUsd],
     );
-    return { runId, output: r.text };
+    return { runId, output: masker ? masker.unmaskText(r.text) : r.text };
   } catch (e) {
     await pool.query(`update runs set status='error', output=$2 where id=$1`, [runId, e instanceof Error ? e.message : String(e)]);
     throw e;

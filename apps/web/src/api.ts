@@ -24,9 +24,11 @@ export interface Run {
   input_tokens: number; output_tokens: number; cache_read_tokens: number; cache_write_tokens: number;
   cost_usd: number; created_at: string;
   steps: Step[]; workflow_id: string | null;
+  decided_by?: string | null; decision_note?: string | null; decided_at?: string | null; purged_at?: string | null;
+  started_by?: string | null; assigned_to?: string | null; assigned_label?: string | null;
 }
 export interface Step {
-  nodeId: string; type: string; label: string; status: 'ok' | 'error' | 'waiting';
+  nodeId: string; type: string; label: string; status: 'ok' | 'error' | 'waiting'; ai?: { tokens: number; costUsd: number };
   output?: unknown; error?: string; ms: number; iteration?: number; reused?: boolean; trace?: { tool: string; ok: boolean; error?: string }[];
 }
 export interface RunUsage { input: number; cacheWrite: number; cacheRead: number; output: number; costUsd: number }
@@ -46,7 +48,7 @@ export interface AgentHealth {
   lastError?: string; rejectNotes: string[]; suggestion?: { kind: 'drop_approval' | 'review' | 'fix'; title: string; detail: string };
 }
 export interface Diagnosis { explanation: string; action?: 'reconnect' | 'settings' | 'edit' | 'data'; fix?: { nodeId: string; label: string; changes: Record<string, string>; summary: string }; costUsd: number }
-export interface RuleRow { id: string; text: string; enabled: boolean; created_at: string; rule: { summary: string; actions: string[]; objects: string[]; days: number[]; hours: { from: number; to: number } | null; timezone: string; when: { field: string; operator: string; value: string }[] } }
+export interface RuleRow { id: string; text: string; enabled: boolean; created_at: string; rule: { summary: string; effect?: 'block' | 'approve'; actions: string[]; objects: string[]; days: number[]; hours: { from: number; to: number } | null; timezone: string; when: { field: string; operator: string; value: string }[] } }
 export interface RegressionResult { checked: number; same: number; gone: number; changed: { runId: string; label: string; before: string; after: string }[]; costUsd: number }
 export interface ChatMsg { role: 'user' | 'assistant'; text: string; options?: string[]; draft?: Draft }
 export interface ChatReply { reply: string; question?: string; options?: string[]; request?: string; draft?: Draft; costUsd: number }
@@ -77,10 +79,11 @@ export interface TileData extends TileSpec { columns: string[]; rows: Record<str
 export interface DashDraft { name: string; description: string; questions: string[]; warnings: string[]; costUsd: number; tiles: TileData[] }
 export interface DashSummary { id: string; name: string; description: string; updated_at: string; tiles: number }
 export interface Dashboard { id: string; name: string; description: string; prompt: string; range: DashRange; tiles: TileData[] }
-export interface WorkflowRow { id: string; name: string; graph: Workflow; updated_at: string; sf_flow_name?: string | null; sf_deployed_at?: string | null; live?: boolean; live_since?: string | null; watch_error?: string | null; realtime?: boolean }
+export interface WorkflowRow { id: string; name: string; graph: Workflow; updated_at: string; sf_flow_name?: string | null; sf_deployed_at?: string | null; live?: boolean; live_since?: string | null; watch_error?: string | null; realtime?: boolean; allowed_fields?: Record<string, string[]> }
 export interface Settings {
   callbackUrl: string; sfClientId: string; sfLoginUrl: string;
   sfClientSecret: { set: boolean }; anthropicKey: { set: boolean }; dailyBudgetUsd: string; anthropicWorkspaceId: string; aiCacheHours: string;
+  maskPii?: string; maskFields?: string; maxAiCalls?: string; maxToolCalls?: string; maxTokens?: string; retentionDays?: string;
 }
 
 export interface Me { id: string; email: string; accountName: string; role: string }
@@ -108,8 +111,9 @@ export const api = {
   createAgent: (t: string, a: Omit<Agent, 'id'>) => req<{ id: string }>('POST', `/api/tenants/${t}/agents`, a),
   updateAgent: (t: string, a: Agent) => req('PUT', `/api/tenants/${t}/agents/${a.id}`, a),
   deleteAgent: (t: string, id: string) => req('DELETE', `/api/tenants/${t}/agents/${id}`),
-  run: (t: string, id: string, input: string) =>
-    req<{ runId: string; output: string }>('POST', `/api/tenants/${t}/agents/${id}/run`, { input }),
+  run: (t: string, id: string, input: string, history?: { role: 'user' | 'assistant'; text: string }[]) =>
+    req<{ runId: string; output: string }>('POST', `/api/tenants/${t}/agents/${id}/run`, { input, history }),
+  setAllowedFields: (t: string, id: string, allowed: Record<string, string[]>) => req<{ allowed: Record<string, string[]> }>('PUT', `/api/tenants/${t}/workflows/${id}/allowed-fields`, { allowed }),
   draftWorkflow: (t: string, request: string, plan?: unknown) => req<Draft>('POST', `/api/tenants/${t}/workflows/draft`, { request, plan }),
   suggestions: (t: string, refresh = false) => req<Suggestion[]>('GET', `/api/tenants/${t}/suggestions${refresh ? '?refresh=1' : ''}`),
   dismissSuggestion: (t: string, key: string) => req('POST', `/api/tenants/${t}/suggestions/${key}/dismiss`),
@@ -151,6 +155,8 @@ export const api = {
   saveWorkflow: (t: string, id: string, b: { name: string; graph: Workflow }) => req('PUT', `/api/tenants/${t}/workflows/${id}`, b),
   deleteWorkflow: (t: string, id: string) => req('DELETE', `/api/tenants/${t}/workflows/${id}`),
   runWorkflow: (t: string, id: string, trigger: Record<string, unknown>) => req<RunResult>('POST', `/api/tenants/${t}/workflows/${id}/run`, trigger),
+  cancelRun: (t: string, runId: string) => req('POST', `/api/tenants/${t}/runs/${runId}/cancel`),
+  resumeRun: (t: string, runId: string) => req('POST', `/api/tenants/${t}/runs/${runId}/resume`),
   decide: (t: string, runId: string, approve: boolean, note?: string) => req<RunResult>('POST', `/api/tenants/${t}/runs/${runId}/decision`, { approve, note }),
   runs: (t: string, status?: string) => req<Run[]>('GET', `/api/tenants/${t}/runs${status ? `?status=${status}` : ''}`),
 };

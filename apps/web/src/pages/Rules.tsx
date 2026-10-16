@@ -6,7 +6,7 @@ import { Empty, Panel, Status, Table, toast, type Column } from '../components/u
 // Workspace rules: write a sentence, the AI turns it into a check once, and code enforces it before every write.
 
 const DAY = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const EXAMPLES = ['Never email customers on weekends', "Don't change accounts owned by the Enterprise team", 'Never update closed cases', 'No Slack messages between 22:00 and 07:00'];
+const EXAMPLES = ['Never email customers on weekends', 'Ask before updating opportunities over 10,000', "Don't change accounts owned by the Enterprise team", 'No Slack messages between 22:00 and 07:00'];
 
 function scope(r: RuleRow['rule']) {
   const parts: string[] = [];
@@ -38,6 +38,7 @@ export function RulesPage({ tenant }: { tenant?: Tenant }) {
 
   const cols: Column<RuleRow>[] = [
     { key: 'rule', header: 'Rule', render: (r) => <div className="cell-main"><b>{r.rule.summary}</b><span className="cell-sub">{scope(r.rule)}</span></div> },
+    { key: 'effect', header: 'Effect', render: (r) => r.rule.effect === 'approve' ? <Status tone="warn">Needs approval</Status> : <Status tone="bad">Blocks</Status> },
     { key: 'on', header: 'Status', render: (r) => <button className="link-btn" onClick={() => void toggle(r)} title={r.enabled ? 'Turn off' : 'Turn on'}>{r.enabled ? <Status tone="ok">Enforced</Status> : <Status tone="neutral">Off</Status>}</button> },
     { key: 'x', header: '', align: 'right', render: (r) => <button className="ghost icon sm" onClick={() => void remove(r)} aria-label="Delete rule"><Trash2 size={14} /></button> },
   ];
