@@ -1,4 +1,5 @@
 import { PublicChatSettings } from '../components/PublicChat';
+import { AssistantTests, type TestDraft } from '../components/AssistantTests';
 import { Loader2, Plus, Send } from 'lucide-react';
 import { Markdown } from '../components/Markdown';
 import { useEffect, useState } from 'react';
@@ -23,6 +24,7 @@ export function AgentsPage({ tenant, goConnections }: { tenant?: Tenant; goConne
   const [err, setErr] = useState('');
   const [input, setInput] = useState('');
   const [thread, setThread] = useState<{ role: 'user' | 'assistant'; text: string }[]>([]);
+  const [testDraft, setTestDraft] = useState<TestDraft | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = () => tenant && api.agents(tenant.id).then(setAgents).catch((e) => setErr(e.message));
@@ -101,7 +103,12 @@ export function AgentsPage({ tenant, goConnections }: { tenant?: Tenant; goConne
                 <div className="try">
                   <div className="row between"><h3>Try it</h3>{thread.length > 0 && <button className="link-btn" onClick={() => setThread([])}>New conversation</button>}</div>
                   {thread.length > 0 && (
-                    <div className="thread">{thread.map((m, i) => <div key={i} className={'msg ' + (m.role === 'user' ? 'me' : 'ai')}>{m.role === 'user' ? <div className="bubble">{m.text}</div> : <Markdown className="bubble" text={m.text} />}</div>)}
+                    <div className="thread">{thread.map((m, i) => <div key={i} className={'msg ' + (m.role === 'user' ? 'me' : 'ai')}>{m.role === 'user' ? <div className="bubble">{m.text}</div> : <>
+                      <Markdown className="bubble" text={m.text} />
+                      {i > 0 && thread[i - 1].role === 'user' && !m.text.startsWith('Error:') && (
+                        <button className="link-btn save-test" onClick={() => setTestDraft({ question: thread[i - 1].text, expect: m.text, n: Date.now() })}>Save as a test</button>
+                      )}
+                    </>}</div>)}
                       {busy && <div className="msg ai"><div className="bubble typing"><Loader2 size={14} className="spin" /> Looking it up…</div></div>}</div>
                   )}
                   <div className="agent-start">
@@ -111,6 +118,7 @@ export function AgentsPage({ tenant, goConnections }: { tenant?: Tenant; goConne
 
                 </div>
               )}
+              {sel.id && <AssistantTests tenantId={tenant!.id} agentId={sel.id} draft={testDraft} />}
               {sel.id && <PublicChatSettings tenantId={tenant!.id} agentId={sel.id} />}
             </div>
           ) : (

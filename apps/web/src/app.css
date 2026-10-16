@@ -711,3 +711,33 @@ select.sm { height: 30px; padding: 0 28px 0 8px; font-size: 13px; width: auto; }
   .team-invite input { flex-basis: 100%; }
   .team-invite select { flex: 1; }
 }
+
+/* ---- Assistant tests ---- */
+:root .at .at-summary { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 12px; border-radius: 10px; font-size: 13.5px; border: 1px solid var(--border); }
+:root .at .at-summary.ok { background: color-mix(in srgb, var(--ok) 8%, transparent); border-color: color-mix(in srgb, var(--ok) 25%, transparent); }
+:root .at .at-summary.ok svg { color: var(--ok); }
+:root .at .at-summary.bad { background: color-mix(in srgb, var(--danger) 6%, transparent); border-color: color-mix(in srgb, var(--danger) 22%, transparent); }
+:root .at .at-summary.bad > svg { color: var(--danger); }
+:root .at .at-trend { margin-left: auto; display: inline-flex; gap: 6px; align-items: center; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; white-space: pre; }
+:root .at .at-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+:root .at .at-list > li + li { border-top: 1px solid var(--border); }
+:root:root .at .at-row { display: flex; align-items: center; gap: 10px; width: 100%; height: auto; min-height: 42px; padding: 10px 12px; border: 0; border-radius: 0; background: transparent; box-shadow: none; text-align: left; font-weight: 400; color: var(--text); white-space: normal; }
+:root:root .at .at-row:hover { background: var(--surface-2); }
+:root .at .at-row svg { flex: none; }
+:root .at .at-ok { color: var(--ok); } :root .at .at-bad { color: var(--danger); }
+:root .at .at-dot { width: 16px; height: 16px; flex: none; border-radius: 50%; border: 1.5px dashed var(--border-strong, var(--border)); }
+:root .at .at-q { flex: 1; min-width: 0; font-size: 14px; }
+:root .at .at-why { flex: 0 1 45%; min-width: 0; font-size: 12.5px; color: var(--danger); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:root .at .at-detail { display: flex; flex-direction: column; gap: 10px; padding: 4px 12px 14px 38px; font-size: 13.5px; }
+:root .at .at-detail small { display: block; color: var(--muted); font-size: 12px; margin-bottom: 2px; }
+:root .at .at-detail p { margin: 0; line-height: 1.5; white-space: pre-wrap; }
+:root .at .at-answer { padding: 8px 10px; background: var(--surface-2); border-radius: 8px; max-height: 220px; overflow: auto; }
+:root .at .at-words { display: flex; gap: 6px; flex-wrap: wrap; }
+:root .at .at-reasons { margin: 6px 0 0; padding-left: 18px; color: var(--danger); font-size: 13px; }
+:root .at .at-form { padding: 14px; border: 1px solid var(--border); border-radius: 10px; }
+:root .at .at-recent { display: flex; flex-direction: column; gap: 6px; }
+:root:root .at .at-pick { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; height: auto; padding: 8px 12px; text-align: left; font-weight: 400; white-space: normal; }
+:root .at .at-pick b { font-size: 13.5px; font-weight: 500; }
+:root .at .at-pick span { font-size: 12.5px; color: var(--muted); }
+@media (max-width: 640px) { :root .at .at-why { display: none; } :root .at .at-detail { padding-left: 12px; } }
+:root .msg.ai .save-test { align-self: flex-start; margin: 4px 0 0 2px; font-size: 12.5px; }

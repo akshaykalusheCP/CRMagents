@@ -70,7 +70,7 @@ async function window(tenantId: string, from: Date, to: Date, a: Assumptions) {
     `select r.id, r.status, r.workflow_id, r.agent_id, r.started_by, coalesce(w.name, ag.name) as name, r.steps, r.trace,
             r.cost_usd::float as cost, r.created_at, r.decided_at, r.input->>'sessionId' as sid
      from runs r left join workflows w on w.id = r.workflow_id left join agents ag on ag.id = r.agent_id
-     where r.tenant_id=$1 and r.created_at >= $2 and r.created_at < $3 order by r.created_at limit 50000`, [tenantId, from, to]);
+     where r.tenant_id=$1 and r.created_at >= $2 and r.created_at < $3 and coalesce(r.started_by, '') not like 'test:%' order by r.created_at limit 50000`, [tenantId, from, to]);
   const sug = (await pool.query(
     `select kind, status from suggestions where tenant_id=$1 and created_at >= $2 and created_at < $3`, [tenantId, from, to])).rows as { kind: string; status: string }[];
 

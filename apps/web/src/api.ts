@@ -53,6 +53,9 @@ export interface SelfService {
 }
 export interface PublicChat { enabled: boolean; origins: string; cases: boolean; greeting: string; snippet: string; selfService: SelfService }
 export interface Agent { id: string; name: string; systemPrompt: string; tools: string[] }
+export interface AssistantTest { id: string; question: string; expect: string; mustInclude: string[]; mustNot: string[] }
+export interface TestResult { testId: string; question: string; answer: string; pass: boolean; reasons: string[]; tools: string[]; costUsd: number; ms: number; error?: string }
+export interface TestRun { id: string; channel: 'internal' | 'website'; status: 'running' | 'done' | 'error'; passed: number; total: number; costUsd: number; results: TestResult[]; startedBy: string | null; createdAt: string; finishedAt: string | null }
 export interface ToolInfo { name: string; description: string; write: boolean }
 export interface Run {
   id: string; status: string; output: string | null; agent_name: string | null;
@@ -147,6 +150,11 @@ export const api = {
   acceptInvite: (token: string, password: string) => req('POST', '/api/auth/accept', { token, password }),
   changePassword: (current: string, password: string) => req('POST', '/api/auth/password', { current, password }),
   team: () => req<Team>('GET', '/api/team'),
+  tests: (t: string, a: string) => req<{ tests: AssistantTest[]; runs: TestRun[] }>('GET', `/api/tenants/${t}/agents/${a}/tests`),
+  recentQuestions: (t: string, a: string) => req<{ question: string; answer: string }[]>('GET', `/api/tenants/${t}/agents/${a}/tests/recent`),
+  saveTest: (t: string, a: string, b: Omit<AssistantTest, 'id'>, id?: string) => req<{ id: string }>(id ? 'PUT' : 'POST', `/api/tenants/${t}/agents/${a}/tests${id ? `/${id}` : ''}`, b),
+  deleteTest: (t: string, a: string, id: string) => req('DELETE', `/api/tenants/${t}/agents/${a}/tests/${id}`),
+  runTests: (t: string, a: string, channel: 'internal' | 'website') => req<{ id: string }>('POST', `/api/tenants/${t}/agents/${a}/tests/run`, { channel }),
   inviteUser: (email: string, role: string) => req<{ id: string; link: string; emailed: boolean }>('POST', '/api/team/invites', { email, role }),
   cancelInvite: (id: string) => req('DELETE', `/api/team/invites/${id}`),
   setUserRole: (id: string, role: string) => req('PUT', `/api/team/users/${id}`, { role }),

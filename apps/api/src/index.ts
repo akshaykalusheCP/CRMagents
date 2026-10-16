@@ -36,6 +36,7 @@ import { publicChatInfo, registerPublicChat, setPublicChat } from './agent/publi
 import { addToRecordPage, addToUtilityBar, listPages } from './salesforce/pages.js';
 import { impact, setAssumptions } from './insights/impact.js';
 import { config } from './config.js';
+import { deleteTest, listTestRuns, listTests, recentQuestions, saveTest, startTestRun } from './agent/tests.js';
 import { registerTeam } from './team.js';
 import { listAlerts, markAlertsRead } from './alerts.js';
 import { migrate, pool } from './db.js';
@@ -605,6 +606,50 @@ app.put('/api/tenants/:tenantId/agents/:agentId/public', async (req) => {
   const { tenantId, agentId } = req.params as { tenantId: string; agentId: string };
   const b = z.object({ enabled: z.boolean(), origins: z.string().max(2000).default(''), cases: z.boolean().default(true), greeting: z.string().max(300).default(''), selfService: z.unknown().optional() }).parse(req.body);
   return setPublicChat(tenantId, agentId, b);
+});
+
+// Test sets for an assistant.
+const ownAgent = async (tenantId: string, agentId: string) => {
+  const r = await pool.query('select 1 from agents where id=$1 and tenant_id=$2', [agentId, tenantId]);
+  if (!r.rowCount) throw Object.assign(new Error('Assistant not found'), { statusCode: 404 });
+};
+const testBody = z.object({
+  question: z.string().trim().min(1, 'Write the question').max(2000),
+  expect: z.string().max(4000).default(''),
+  mustInclude: z.array(z.string().max(200)).max(10).default([]),
+  mustNot: z.array(z.string().max(200)).max(10).default([]),
+});
+app.get('/api/tenants/:tenantId/agents/:agentId/tests', async (req) => {
+  const { tenantId, agentId } = req.params as { tenantId: string; agentId: string };
+  await ownAgent(tenantId, agentId);
+  const [tests, runs] = await Promise.all([listTests(agentId), listTestRuns(agentId)]);
+  return { tests, runs };
+});
+app.get('/api/tenants/:tenantId/agents/:agentId/tests/recent', async (req) => {
+  const { tenantId, agentId } = req.params as { tenantId: string; agentId: string };
+  await ownAgent(tenantId, agentId);
+  return recentQuestions(tenantId, agentId);
+});
+app.post('/api/tenants/:tenantId/agents/:agentId/tests', async (req) => {
+  const { tenantId, agentId } = req.params as { tenantId: string; agentId: string };
+  await ownAgent(tenantId, agentId);
+  return saveTest(agentId, testBody.parse(req.body));
+});
+app.put('/api/tenants/:tenantId/agents/:agentId/tests/:id', async (req) => {
+  const { tenantId, agentId, id } = req.params as { tenantId: string; agentId: string; id: string };
+  await ownAgent(tenantId, agentId);
+  return saveTest(agentId, testBody.parse(req.body), id);
+});
+app.delete('/api/tenants/:tenantId/agents/:agentId/tests/:id', async (req) => {
+  const { tenantId, agentId, id } = req.params as { tenantId: string; agentId: string; id: string };
+  await ownAgent(tenantId, agentId);
+  await deleteTest(agentId, id);
+  return { ok: true };
+});
+app.post('/api/tenants/:tenantId/agents/:agentId/tests/run', async (req) => {
+  const { tenantId, agentId } = req.params as { tenantId: string; agentId: string };
+  const b = z.object({ channel: z.enum(['internal', 'website']).default('internal') }).parse(req.body ?? {});
+  return startTestRun(tenantId, agentId, b.channel, req.user!.email);
 });
 
 const runBody = z.object({ input: z.string().min(1), context: z.unknown().optional(), history: z.array(z.object({ role: z.enum(['user', 'assistant']), text: z.string().max(20000) })).max(40).optional() });

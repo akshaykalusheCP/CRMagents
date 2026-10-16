@@ -14,6 +14,8 @@ function route(method: string, url: URL, body: any): Response {
   if (p === '/api/team/invites') return json({ id: 'i9', link: `${location.origin}/?invite=demo-link`, emailed: false });
   if (/^\/api\/team\/users\/[^/]+\/reset-link$/.test(p)) return json({ link: `${location.origin}/?reset=demo-link`, emailed: true });
   if (p === '/api/alerts') return json(DEMO_ALERTS);
+  if (/^\/t\/agents\/[^/]+\/tests$/.test(p) && method === 'GET') return json(DEMO_TESTS);
+  if (/^\/t\/agents\/[^/]+\/tests\/recent$/.test(p)) return json([{ question: 'Which accounts have more than 3 open cases?', answer: 'Two accounts: Acme Corp (5) and Globex (4).' }]);
   if (p === '/t/insights') return json((fx.insights as Record<string, unknown>)[url.searchParams.get('period') ?? '30'] ?? fx.insights['30']);
   if (p === '/t/insights/summary') return json(fx.brief);
   if (p === '/t/builder/chat') return json(demoChat(body));
@@ -207,5 +209,21 @@ const DEMO_ALERTS = {
   alerts: [
     { id: 'a1', kind: 'failing', title: '"Fill missing account data" is failing', body: 'The agent "Fill missing account data" failed its last 3 runs. It will be paused after 5 failures in a row.\n\nLast error: Required field missing: Industry', tenantId: 't', workflowId: 'w', readAt: null, createdAt: ago(2) },
     { id: 'a2', kind: 'paused', title: '"Old lead router" was paused', body: 'The agent failed 5 times in a row, so CRMagents paused it.', tenantId: 't', workflowId: 'w2', readAt: ago(30), createdAt: ago(48) },
+  ],
+};
+
+const DEMO_TESTS = {
+  tests: [
+    { id: 'x1', question: 'How many open cases are there?', expect: 'Gives the number of cases that are not closed.', mustInclude: [], mustNot: ['I cannot'] },
+    { id: 'x2', question: 'How long do refunds take?', expect: 'Refunds reach the card in 5-7 business days after the item arrives.', mustInclude: ['5-7 business days'], mustNot: ['guarantee'] },
+    { id: 'x3', question: 'Create a follow-up task for case 00001042', expect: 'Confirms a task was created on case 00001042.', mustInclude: ['00001042'], mustNot: [] },
+  ],
+  runs: [
+    { id: 'r1', channel: 'internal', status: 'done', passed: 2, total: 3, costUsd: 0.0184, startedBy: 'owner@demo-company.com', createdAt: ago(0.3), finishedAt: ago(0.29), results: [
+      { testId: 'x1', question: 'How many open cases are there?', answer: 'There are **14 open cases** right now.', pass: true, reasons: [], tools: ['soql_query'], costUsd: 0.006, ms: 4200 },
+      { testId: 'x2', question: 'How long do refunds take?', answer: 'Refunds take 5-7 business days once we receive the returned item.', pass: true, reasons: [], tools: ['search_knowledge'], costUsd: 0.004, ms: 3100 },
+      { testId: 'x3', question: 'Create a follow-up task for case 00001042', answer: 'Which case do you mean? Please send the Case ID.', pass: false, reasons: ['Missing "00001042"', 'It asked for the case again instead of creating the task.'], tools: [], costUsd: 0.008, ms: 3900 },
+    ] },
+    { id: 'r0', channel: 'internal', status: 'done', passed: 3, total: 3, costUsd: 0.017, startedBy: 'owner@demo-company.com', createdAt: ago(30), finishedAt: ago(30), results: [] },
   ],
 };

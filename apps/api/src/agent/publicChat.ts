@@ -97,17 +97,23 @@ export function registerPublicChat(app: FastifyInstance) {
       const cfg = normalizeConfig(a.public_config);
       const transcript = msgs.map((m) => `${m.role === 'user' ? 'Visitor' : a.name}: ${m.text}`).join('\n\n');
       const exec = selfServiceExec({ agentId: a.id, sessionId: b.data.sessionId ?? null, config: cfg, sf: () => SalesforceClient.forTenant(a.tenant_id), transcript, companyName: a.company || 'account' });
-      const r = await runAgent(a.tenant_id, {
-        id: a.id,
-        systemPrompt: [a.system_prompt, PUBLIC_RULES, selfServicePrompt(cfg)].filter(Boolean).join('\n\n'),
-        tools: ['search_knowledge', ...(a.public_cases ? ['open_case', 'case_status'] : []), ...selfServiceTools(cfg)],
-      }, last.text, undefined, msgs.slice(0, -1), { startedBy: 'website', exec, meta: { channel: 'website', sessionId: b.data.sessionId ?? null } });
+      const r = await runAgent(a.tenant_id, websiteSpec(a), last.text, undefined, msgs.slice(0, -1), { startedBy: 'website', exec, meta: { channel: 'website', sessionId: b.data.sessionId ?? null } });
       return { answer: r.output };
     } catch (e) {
       req.log.warn({ err: String(e) }, 'public chat failed');
       return reply.code(503).send({ error: 'Sorry, I can\'t answer right now. Please try again later.' });
     }
   });
+}
+
+/** The assistant as website visitors get it: public rules on top of its own, and only public tools. */
+export function websiteSpec(a: { id: string; system_prompt: string; public_cases: boolean; public_config: unknown }) {
+  const cfg = normalizeConfig(a.public_config);
+  return {
+    id: a.id,
+    systemPrompt: [a.system_prompt, PUBLIC_RULES, selfServicePrompt(cfg)].filter(Boolean).join('\n\n'),
+    tools: ['search_knowledge', ...(a.public_cases ? ['open_case', 'case_status'] : []), ...selfServiceTools(cfg)],
+  };
 }
 
 /** Turn website chat on/off for an assistant; the key is created on first use. */
