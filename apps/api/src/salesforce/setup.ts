@@ -28,7 +28,12 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 async function ensurePackage(tenantId: string, sf: SalesforceClient) {
   const { rows } = await pool.query('select sf_org_id from tenants where id=$1', [tenantId]);
-  if (config.sourceOrgIds.includes(rows[0]?.sf_org_id)) return;
+  if (config.sourceOrgIds.includes(rows[0]?.sf_org_id)) {
+    // The package's own development org can't install it; the components must be deployed there from source.
+    const has = await sf.toolingQuery("SELECT Id FROM LightningComponentBundle WHERE DeveloperName = 'crmAgentsPanel' LIMIT 1");
+    if (!has.records.length) throw new Error('This is the org the CRMagents package is built in, so it cannot be installed here. Deploy the package source to it (sf project deploy start --source-dir force-app), then click Retry setup.');
+    return;
+  }
   const installed = await sf.toolingQuery<{ SubscriberPackageVersion?: { Id: string } }>(
     `SELECT SubscriberPackageVersion.Id FROM InstalledSubscriberPackage WHERE SubscriberPackageId = '${config.subscriberPackageId}'`,
   );
