@@ -2,6 +2,7 @@ import { LayoutTemplate, Plus, Sparkles, Upload, Workflow as WorkflowIcon, X } f
 import { useEffect, useRef, useState } from 'react';
 import { TEMPLATES, type Workflow } from '@crmagents/shared';
 import { AgentBuilder } from '../components/AgentBuilder';
+import { UseCaseLibrary } from '../components/UseCaseLibrary';
 import { Empty, FilterTabs, PageHeader, Panel, SkeletonRows, Status, Table, toast, type Column } from '../components/ui';
 import { Ribbon } from '../components/Ribbon';
 import { api, type AgentHealth, type Draft as AiDraft, type Tenant, type WorkflowRow } from '../api';
@@ -72,6 +73,7 @@ export function WorkflowsPage({ tenant, goConnections, incoming, onIncomingOpene
   const [cur, setCur] = useState<Draft | null>(null);
   const [detail, setDetail] = useState<WorkflowRow | null>(null);
   const [picker, setPicker] = useState(false);
+  const [library, setLibrary] = useState(false);
   const [err, setErr] = useState('');
   const [request, setRequest] = useState('');
   const [builder, setBuilder] = useState<{ first?: string } | null>(null);
@@ -178,7 +180,7 @@ export function WorkflowsPage({ tenant, goConnections, incoming, onIncomingOpene
           title="Agents"
           description={<>Automations run by themselves in <b style={{ color: 'var(--text)', fontWeight: 500 }}>{tenant.sf_username ?? tenant.sf_org_id}</b>; assistants answer questions when you ask.</>}
           actions={<>
-            <button onClick={() => setPicker(true)}><LayoutTemplate size={15} /> Templates</button>
+            <button onClick={() => setLibrary(true)}><LayoutTemplate size={15} /> Use cases</button>
             <button onClick={() => importRef.current?.click()} title="Add an agent from a .crmagents.json file (exported from another org)"><Upload size={15} /> Import</button>
               <input ref={importRef} type="file" accept=".json,application/json" hidden onChange={async (e) => {
                 const f = e.target.files?.[0];
@@ -233,6 +235,8 @@ export function WorkflowsPage({ tenant, goConnections, incoming, onIncomingOpene
         </>}
       </div>
       {picker && <TemplatePicker onPick={create} onClose={() => setPicker(false)} />}
+      {library && <UseCaseLibrary onClose={() => setLibrary(false)} onTemplates={() => { setLibrary(false); setPicker(true); }}
+        onPick={(request) => { setLibrary(false); setSection('automations'); setBuilder({ first: request }); }} />}
     </div>
   );
 }

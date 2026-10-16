@@ -29,6 +29,20 @@ export interface RecordSuggestion {
   status: 'new' | 'helpful' | 'not_helpful' | 'dismissed' | 'sent'; agentName: string | null; decidedBy: string | null; createdAt: string;
   kind?: string; meta?: { to?: string; subject?: string };
 }
+export interface ImpactAssumptions { hourlyRate: number; minutes: { change: number; aiStep: number; replySent: number; suggestionUsed: number; answer: number; chat: number } }
+export interface Impact {
+  days: number; from: string; to: string; assumptions: ImpactAssumptions;
+  hoursSaved: number; valueUsd: number; costUsd: number; roi: number | null;
+  previous: { hoursSaved: number; runs: number; costUsd: number; changes: number };
+  runs: { total: number; ok: number; failed: number; waiting: number };
+  work: { changes: number; aiSteps: number; repliesSent: number; answers: number };
+  cost: { agents: number; other: number; perRun: number };
+  website: { conversations: number; handedOff: number; resolvedRate: number | null };
+  suggestions: { total: number; used: number; helpful: number; notHelpful: number; repliesSuggested: number; repliesSentByPeople: number };
+  approvals: { approved: number; rejected: number; medianMinutes: number | null };
+  agents: { id: string; name: string; kind: 'agent' | 'assistant'; runs: number; ok: number; changes: number; hours: number; value: number; cost: number }[];
+  series: { date: string; runs: number; hours: number }[];
+}
 export interface SfPage { id: string; label: string; managed: boolean }
 export interface SelfService {
   verify: boolean;
@@ -142,6 +156,8 @@ export const api = {
   sfPages: (t: string, object?: string) => req<{ utilityBars: SfPage[]; recordPages: SfPage[] }>('GET', `/api/tenants/${t}/salesforce/pages${object ? `?object=${encodeURIComponent(object)}` : ''}`),
   addToUtilityBar: (t: string, pageId: string) => req<{ changed: boolean; label: string }>('POST', `/api/tenants/${t}/salesforce/pages/utility`, { pageId }),
   addToRecordPage: (t: string, object: string, pageId?: string) => req<{ changed: boolean; id: string; label: string; activateUrl: string | null }>('POST', `/api/tenants/${t}/salesforce/pages/record`, { object, pageId }),
+  impact: (t: string, days: number) => req<Impact>('GET', `/api/tenants/${t}/impact?days=${days}`),
+  saveImpactAssumptions: (a: ImpactAssumptions) => req('PUT', '/api/impact/assumptions', a),
   webhook: (t: string, id: string) => req<{ url: string; secret: string }>('GET', `/api/tenants/${t}/workflows/${id}/webhook`),
   rotateWebhook: (t: string, id: string) => req<{ url: string; secret: string }>('POST', `/api/tenants/${t}/workflows/${id}/webhook/rotate`, {}),
   backfill: (t: string, id: string, days: number, limit: number) => req<{ queued: number; objects: { object: string; found: number }[] }>('POST', `/api/tenants/${t}/workflows/${id}/backfill`, { days, limit }),

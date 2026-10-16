@@ -22,6 +22,8 @@ export async function runAgent(
     onStarted?: (runId: string) => void;
     /** Salesforce tools run inside Salesforce as the person asking. */ inOrg?: boolean;
     startedBy?: string;
+    /** Stored with the run (not shown to the AI), e.g. the website conversation it belongs to. */
+    meta?: Record<string, unknown>;
     /** Runs some tools itself (website chat self-service); undefined = the normal tool. */
     exec?: (name: string, input: unknown) => Promise<unknown> | undefined;
   } = {},
@@ -36,7 +38,7 @@ export async function runAgent(
 
   const { rows } = await pool.query(
     'insert into runs (tenant_id, agent_id, input, started_by) values ($1,$2,$3,$4) returning id',
-    [tenantId, agent.id ?? null, JSON.stringify({ userInput, context }), opts.startedBy ?? null],
+    [tenantId, agent.id ?? null, JSON.stringify({ userInput, context, ...(opts.meta ?? {}) }), opts.startedBy ?? null],
   );
   const runId = rows[0].id as string;
   if (opts.inOrg) remote.exec = remoteExecutor(runId);

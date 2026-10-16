@@ -110,7 +110,7 @@ export function registerPublicChat(app: FastifyInstance) {
         id: a.id,
         systemPrompt: [a.system_prompt, PUBLIC_RULES, selfServicePrompt(cfg)].filter(Boolean).join('\n\n'),
         tools: ['search_knowledge', ...(a.public_cases ? ['open_case', 'case_status'] : []), ...selfServiceTools(cfg)],
-      }, last.text, undefined, msgs.slice(0, -1), { startedBy: 'website', exec });
+      }, last.text, undefined, msgs.slice(0, -1), { startedBy: 'website', exec, meta: { channel: 'website', sessionId: b.data.sessionId ?? null } });
       return { answer: r.output };
     } catch (e) {
       req.log.warn({ err: String(e) }, 'public chat failed');

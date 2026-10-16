@@ -653,3 +653,76 @@ export const TEMPLATES: Template[] = [
     },
   },
 ];
+
+// ---- Use-case library ----
+// Proven jobs businesses hand to CRM agents, as plain-English requests for the AI builder: it adapts each one to
+// the org's own objects, fields and picklist values instead of shipping a fixed graph.
+
+export type UseCaseArea = 'Service' | 'Sales' | 'Operations' | 'Leadership';
+export interface UseCase {
+  id: string;
+  area: UseCaseArea;
+  title: string;
+  /** The problem in the customer's words. */
+  problem: string;
+  /** What the builder is asked to build. */
+  request: string;
+  /** What it relies on beyond a connected org. */
+  needs?: ('knowledge' | 'package' | 'slack')[];
+  /** Typical AI cost per run. */
+  cost: string;
+}
+
+export const USE_CASES: UseCase[] = [
+  { id: 'case-triage', area: 'Service', title: 'Triage new cases', cost: '< $0.01',
+    problem: 'New cases sit unsorted until someone reads them.',
+    request: 'When a new Case is created, read the subject and description, set the Type and Priority, and add a one-line reason as a case comment task. Ask for approval before changing the case.' },
+  { id: 'case-fix-from-guides', area: 'Service', title: 'Suggest fixes from your guides', cost: '~ $0.02', needs: ['knowledge', 'package'],
+    problem: 'Agents search manuals for the same answers every day.',
+    request: 'When a new Case is created, look up our support guides using the case subject and description, write short troubleshooting steps for the support agent, and show them as a suggestion on the case.' },
+  { id: 'email-replies', area: 'Service', title: 'Draft replies to customer emails', cost: '~ $0.02', needs: ['knowledge', 'package'],
+    problem: 'Replying to every customer email by hand is slow.',
+    request: 'When a customer emails on a case (a new incoming EmailMessage), read the email conversation, check our support guides, and draft a short, friendly reply that answers them. Put it on the case for a person to check and send.' },
+  { id: 'waiting-on-customer', area: 'Service', title: 'Chase cases waiting on the customer', cost: '~ $0.01', needs: ['package'],
+    problem: 'Cases stall when customers stop replying.',
+    request: 'Every day at 9:00, find open Cases with Status "Waiting on Customer" not modified in the last 3 days. For each one, read the email conversation and draft a polite follow-up email asking for the missing information, for a person to check and send.' },
+  { id: 'escalation-watch', area: 'Service', title: 'Flag urgent cases nobody picked up', cost: 'free', needs: ['slack'],
+    problem: 'High-priority cases get missed.',
+    request: 'Every hour, find open Cases with Priority High that are still New and were created more than 4 hours ago. For each, create a task for the case owner to pick it up now, and post the list to Slack.' },
+  { id: 'case-close-summary', area: 'Service', title: 'Summarise cases when they close', cost: '~ $0.01',
+    problem: 'Nobody writes down how a case was solved.',
+    request: 'When a Case is updated and its Status changes to Closed, read the case and its email conversation, write a 3-line summary of the problem and the fix, and save it in the case description after the existing text. Ask for approval first.' },
+
+  { id: 'lead-scoring', area: 'Sales', title: 'Qualify and score new leads', cost: '< $0.01',
+    problem: 'Reps waste time on leads that will never buy.',
+    request: 'When a new Lead is created, score how well it fits our ideal customer from 0 to 100 using company, title, industry and lead source, set the Rating to Hot, Warm or Cold from the score, and add the reason in a task for the owner. Ask for approval first.' },
+  { id: 'lead-research', area: 'Sales', title: 'Research new leads on the web', cost: '~ $0.05',
+    problem: 'Reps go into first calls knowing nothing about the company.',
+    request: 'When a new Lead is created, research the lead\'s company on the web: what they do, size, recent news and funding. Create a task for the lead owner with a short briefing and two talking points.' },
+  { id: 'stale-deals', area: 'Sales', title: 'Nudge owners on stale deals', cost: '~ $0.01',
+    problem: 'Deals go quiet and slip out of the quarter.',
+    request: 'Every Monday at 8:00, find open Opportunities with no activity in the last 14 days. For each, create a task for the owner with a suggested next step based on the stage and amount.' },
+  { id: 'past-close-date', area: 'Sales', title: 'Clean up past-due close dates', cost: 'free',
+    problem: 'Forecasts are wrong because close dates are in the past.',
+    request: 'Every day at 8:00, find open Opportunities whose Close Date is in the past and create a task for each owner to update the close date or close the deal.' },
+  { id: 'pipeline-digest', area: 'Sales', title: 'Weekly pipeline digest', cost: '~ $0.02', needs: ['slack'],
+    problem: 'Managers build the same pipeline update by hand every week.',
+    request: 'Every Monday at 8:00, look at open Opportunities by stage, deals that moved this week, deals closing this month and the biggest risks, and write a short pipeline digest. Post it to Slack.' },
+  { id: 'renewal-risk', area: 'Sales', title: 'Spot renewals at risk', cost: '~ $0.02',
+    problem: 'Unhappy customers renew late or churn without warning.',
+    request: 'Every week, find Opportunities closing in the next 60 days whose Account has open high-priority Cases. For each, write a short risk note and create a task for the opportunity owner to call the customer.' },
+
+  { id: 'duplicates', area: 'Operations', title: 'Find duplicate leads and contacts', cost: 'free',
+    problem: 'Duplicates confuse reps and inflate reports.',
+    request: 'Every Monday, find Leads and Contacts that share the same email address, and create one task for the data owner listing each duplicate group with record links.' },
+  { id: 'fill-missing-data', area: 'Operations', title: 'Fill in missing account details', cost: '~ $0.05',
+    problem: 'Half the accounts have no industry or size.',
+    request: 'When an Account is created with an empty Industry, research the company on the web and set Industry, Number of Employees and Website from what you find. Ask for approval first.' },
+  { id: 'lead-routing', area: 'Operations', title: 'Route leads to the right owner', cost: 'free',
+    problem: 'Leads wait in a queue until someone assigns them.',
+    request: 'When a new Lead is created, assign it to an owner based on its Country: India to the India team owner, United States and Canada to the North America owner, everyone else to the international owner. Ask me for the owners\' names if you need them.' },
+
+  { id: 'monday-briefing', area: 'Leadership', title: 'Monday business briefing', cost: '~ $0.03', needs: ['slack'],
+    problem: 'Leaders start the week without a clear picture.',
+    request: 'Every Monday at 7:30, summarise last week: new and won deals with amounts, pipeline change, new and closed cases, and the three things that need attention this week. Post it to Slack.' },
+];

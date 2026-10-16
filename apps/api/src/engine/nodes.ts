@@ -244,6 +244,11 @@ export const EXECUTORS: Record<string, Executor> = {
     let body = render(node.config.body, scope).trim();
     if (!recordId || !body) throw new Error('A case and the reply text are needed');
     if (env.unmask) body = env.unmask(body);
+    // Started by an email we sent (our own reply, a person's reply)? Never answer it: that would loop.
+    if (recordId.startsWith('02s')) {
+      const e = await env.sf.query(`SELECT Incoming FROM EmailMessage WHERE Id = '${recordId.replace(/\W/g, '')}'`);
+      if ((e.records[0] as { Incoming?: boolean } | undefined)?.Incoming === false) return { output: { sent: false, skipped: 'Not a customer email: nothing to answer' } };
+    }
     const t = await emailThread(env.sf, recordId, 3);
     const to = cfg(node, 'to', scope) || t.lastFrom;
     const subject = cfg(node, 'subject', scope) || (t.lastSubject ? (/^re:/i.test(t.lastSubject) ? t.lastSubject : `Re: ${t.lastSubject}`) : '');

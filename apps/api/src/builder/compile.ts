@@ -120,6 +120,10 @@ export function compilePlan(plan: Plan): CompileResult {
   let getNode: WFNode | undefined;
   if (needsRecord) link((getNode = add('sf.getRecord', { sobject: plan.trigger_object, id: '{{trigger.recordId}}', fields: '' }, `Get ${plan.trigger_object}`)));
 
+  // Agents started by emails only ever answer the customer's incoming ones: our own replies are emails too.
+  if (isRecord && plan.trigger_object === 'EmailMessage' && !plan.conditions.some((c) => c.field === 'Incoming')) {
+    plan = { ...plan, conditions: [...plan.conditions.filter((c) => !(c.field === 'Id' && c.operator === 'not_empty')), { field: 'Incoming', operator: 'equals', value: 'true' }] };
+  }
   for (const c of plan.conditions) {
     if (!isRecord) { errors.push('conditions need a record trigger'); break; }
     recordFields.add(c.field);

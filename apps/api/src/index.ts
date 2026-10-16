@@ -34,6 +34,7 @@ import { registerWebhooks, webhookSecret, webhookUrl } from './engine/webhook.js
 import { backfill, exportAgent, importAgent, listVersions, restoreVersion, saveVersion } from './engine/admin.js';
 import { publicChatInfo, registerPublicChat, setPublicChat } from './agent/publicChat.js';
 import { addToRecordPage, addToUtilityBar, listPages } from './salesforce/pages.js';
+import { impact, setAssumptions } from './insights/impact.js';
 import { config } from './config.js';
 import { migrate, pool } from './db.js';
 import { buildAuthorizeUrl, handleCallback, redirectUri, validateOwnApp } from './salesforce/oauth.js';
@@ -442,6 +443,18 @@ app.post('/api/tenants/:tenantId/provision', async (req) => provisionOrg((req.pa
 
 app.post('/api/tenants/:tenantId/setup', async (req) => {
   void setupOrg((req.params as { tenantId: string }).tenantId);
+  return { ok: true };
+});
+
+// ---- Impact: time saved, value and cost ----
+app.get('/api/tenants/:tenantId/impact', async (req) => {
+  const { days } = z.object({ days: z.coerce.number().int().refine((d) => [7, 30, 90].includes(d), '7, 30 or 90 days').default(30) }).parse(req.query);
+  return impact((req.params as { tenantId: string }).tenantId, req.user!.accountId, days);
+});
+app.put('/api/impact/assumptions', async (req) => {
+  const n = z.number().min(0).max(600);
+  const b = z.object({ hourlyRate: z.number().min(1).max(10_000), minutes: z.object({ change: n, aiStep: n, replySent: n, suggestionUsed: n, answer: n, chat: n }) }).parse(req.body);
+  await setAssumptions(req.user!.accountId, b);
   return { ok: true };
 });
 

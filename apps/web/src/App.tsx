@@ -1,4 +1,4 @@
-import { BarChart3, BookOpen, Bot, ChevronRight, PanelLeft, PanelTop, Sparkles, Check, ChevronsUpDown, History, House, Inbox, LayoutDashboard, LogOut, Moon, Plus, Search, Settings as SettingsIcon, Sun } from 'lucide-react';
+import { BarChart3, BookOpen, Bot, TrendingUp, ChevronRight, PanelLeft, PanelTop, Sparkles, Check, ChevronsUpDown, History, House, Inbox, LayoutDashboard, LogOut, Moon, Plus, Search, Settings as SettingsIcon, Sun } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { api, type Draft, type Me, type Tenant, type WorkflowRow } from './api';
 import { CommandPalette, Menu, Toaster, type Command } from './components/ui';
@@ -6,6 +6,7 @@ import { ApprovalsPage } from './pages/Approvals';
 import { HomePage } from './pages/Home';
 import { InsightsPage } from './pages/Insights';
 import { KnowledgePage } from './pages/Knowledge';
+import { ImpactPage } from './pages/Impact';
 import { Ribbon } from './components/Ribbon';
 import { SettingsHub } from './pages/SettingsHub';
 import { AuthPage } from './pages/Auth';
@@ -14,7 +15,7 @@ import { WorkflowsPage } from './pages/Workflows';
 
 const PAGE_FRESH_MS = 2 * 60_000;
 
-type Tab = 'home' | 'insights' | 'dashboards' | 'agents' | 'approvals' | 'activity' | 'knowledge' | 'settings';
+type Tab = 'home' | 'impact' | 'insights' | 'dashboards' | 'agents' | 'approvals' | 'activity' | 'knowledge' | 'settings';
 
 const NAV: { group?: string; items: { key: Tab; label: string; icon: ReactNode }[] }[] = [
   { items: [
@@ -27,11 +28,12 @@ const NAV: { group?: string; items: { key: Tab; label: string; icon: ReactNode }
     { key: 'knowledge', label: 'Knowledge', icon: <BookOpen size={17} /> },
   ] },
   { group: 'Analyze', items: [
+    { key: 'impact', label: 'Impact', icon: <TrendingUp size={17} /> },
     { key: 'insights', label: 'Insights', icon: <BarChart3 size={17} /> },
     { key: 'dashboards', label: 'Dashboards', icon: <LayoutDashboard size={17} /> },
   ] },
 ];
-const LABEL: Record<Tab, string> = { home: 'Home', approvals: 'Approvals', agents: 'Agents', activity: 'Activity', knowledge: 'Knowledge', insights: 'Insights', dashboards: 'Dashboards', settings: 'Settings' };
+const LABEL: Record<Tab, string> = { home: 'Home', approvals: 'Approvals', agents: 'Agents', activity: 'Activity', knowledge: 'Knowledge', impact: 'Impact', insights: 'Insights', dashboards: 'Dashboards', settings: 'Settings' };
 
 function useTheme() {
   const initial = (): 'light' | 'dark' => {
@@ -214,6 +216,7 @@ export function App() {
           {/* Silk ribbon behind the top of every page, like stripe.com's hero. */}
           <Ribbon className="app-ribbon" strands={260} angle={0.6} width={0.3} />
           {pane('home', <HomePage me={me} tenant={tenant} go={setTab} newAgent={newAgent} />)}
+          {pane('impact', <ImpactPage tenant={tenant} />)}
           {pane('insights', <InsightsPage key="ins" fixedView="overview" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
           {pane('dashboards', <InsightsPage key="dash" fixedView="dashboards" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
           {pane('agents', <WorkflowsPage tenant={tenant} goConnections={() => setTab('settings')} incoming={incoming} onIncomingOpened={() => setIncoming(null)} prefill={prefill} onPrefillUsed={() => setPrefill(null)} />)}
@@ -302,6 +305,7 @@ export function App() {
 
         <main ref={mainRef} onScroll={onMainScroll} className={tab === 'agents' ? 'full' : ''}>
           {pane('home', <HomePage me={me} tenant={tenant} go={setTab} newAgent={newAgent} />)}
+          {pane('impact', <ImpactPage tenant={tenant} />)}
           {pane('insights', <InsightsPage key="ins" fixedView="overview" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
           {pane('dashboards', <InsightsPage key="dash" fixedView="dashboards" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
           {pane('agents', <WorkflowsPage tenant={tenant} goConnections={() => setTab('settings')} incoming={incoming} onIncomingOpened={() => setIncoming(null)} prefill={prefill} onPrefillUsed={() => setPrefill(null)} />)}

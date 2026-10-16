@@ -42,6 +42,7 @@ test('email reply runs: reads the thread from the email that started it, then se
     sf: {
       getRecord: async () => ({ Incoming: true }),
       query: async (soql: string) => {
+        if (soql.includes('SELECT Incoming FROM EmailMessage')) return { records: [{ Incoming: true }] };
         if (soql.includes('SELECT ParentId FROM EmailMessage')) return { records: [{ ParentId: '500CASE' }] };
         return { records: [
           { Id: '02sB', FromAddress: 'ana@example.com', Incoming: true, MessageDate: '2026-10-16T10:00:00Z', Subject: 'Printer offline', TextBody: 'It stopped.\n> quoted' },
@@ -63,4 +64,26 @@ test('email reply runs: reads the thread from the email that started it, then se
   const [kind, name, inputs] = actions[0];
   assert.deepEqual([kind, name, inputs.caseId, inputs.toAddress, inputs.subject, inputs.inReplyToId], ['apex', 'CRMCaseEmail', '500CASE', 'ana@example.com', 'Re: Printer offline', '02sB000000000AB']);
   assert.equal(inputs.htmlBody, '<p>Hi Ana, please check the cable.</p>');
+});
+
+test('email agents only answer incoming emails, even when the plan forgot to say so', async () => {
+  const p = plan(false);
+  p.conditions = [{ field: 'Id', operator: 'not_empty', value: '' }];
+  const c = compilePlan(p);
+  const branch = c.workflow.nodes.find((n) => n.type === 'logic.branch')!;
+  assert.equal(branch.config.left, '{{sf_get_1.record.Incoming}}');
+  assert.equal(branch.config.right, 'true');
+  // And the reply step itself refuses to answer an outgoing email.
+  const env = {
+    sf: { query: async () => ({ records: [{ Incoming: false }] }), runAction: async () => { throw new Error('must not send'); } },
+    llm: {}, run: { tenantId: 't', runId: 'r' },
+  } as unknown as Env;
+  const wf = { nodes: [
+    { id: 't', type: 'trigger.salesforce', position: { x: 0, y: 0 }, config: { objectApiName: 'EmailMessage' } },
+    { id: 'r', type: 'sf.emailReply', position: { x: 0, y: 0 }, config: { recordId: '{{trigger.recordId}}', body: 'Hi', mode: 'send' } },
+  ], edges: [{ id: 'e', source: 't', target: 'r' }] };
+  const st = newState({ recordId: '02sOUT000000000AA' });
+  const out = await execute(wf, env, st);
+  assert.equal(out.status, 'done');
+  assert.match(JSON.stringify(st.steps), /Not a customer email/);
 });

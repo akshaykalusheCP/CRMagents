@@ -21,6 +21,7 @@ function route(method: string, url: URL, body: any): Response {
     selfService: { verify: true, handoff: true, updatable: ['Phone', 'MailingStreet', 'MailingCity'],
       records: [{ object: 'Case', label: 'Your cases', match: 'contact', fields: ['CaseNumber', 'Subject', 'Status'] }, { object: 'Order', label: 'Your orders', match: 'account', fields: ['OrderNumber', 'Status', 'TotalAmount', 'EffectiveDate'] }],
       actions: [{ key: 'flow:Start_Return', label: 'Start a return', description: 'For delivered orders under 30 days old' }] } });
+  if (p === '/t/impact') return json(demoImpact(Number(url.searchParams.get('days') || 30)));
   if (p === '/api/knowledge' && method === 'GET') return json(DEMO_DOCS);
   if (p === '/api/knowledge/search') return json(DEMO_HITS);
   if (p === '/t/record-suggestions' && method === 'GET') return json(DEMO_RECORD_SUGGESTIONS);
@@ -155,3 +156,34 @@ const DEMO_RECORD_SUGGESTIONS = [
   { id: 's2', recordId: '500Qy00000gaK1aIAE', objectName: 'Case', title: 'Troubleshooting steps', agentName: 'Case suggestions from guides', status: 'new', decidedBy: null, createdAt: ago(3), body: 'VPN error 809 from home: check UDP ports 500 and 4500 are open on the router [1].', sources: [] },
   { id: 's3', recordId: '500Qy00000gaK2bIAE', objectName: 'Case', title: 'Troubleshooting steps', agentName: 'Case suggestions from guides', status: 'not_helpful', decidedBy: 'agent@demo-company.com', createdAt: ago(26), body: 'Reset the Outlook profile and re-add the mailbox [1].', sources: [] },
 ];
+
+function demoImpact(days: number) {
+  const k = days / 30;
+  const series = Array.from({ length: days }, (_, i) => {
+    const d = new Date(Date.now() - (days - 1 - i) * 86_400_000);
+    const weekend = d.getDay() === 0 || d.getDay() === 6;
+    const base = weekend ? 0.6 : 2.2 + (i / days) * 1.6;
+    return { date: d.toISOString().slice(0, 10), runs: Math.round(base * 18), hours: +(base + Math.sin(i * 1.7) * 0.4).toFixed(2) };
+  });
+  const hoursSaved = series.reduce((a, s) => a + s.hours, 0);
+  return {
+    days, from: series[0].date, to: series[series.length - 1].date,
+    assumptions: { hourlyRate: 30, minutes: { change: 2, aiStep: 4, replySent: 6, suggestionUsed: 8, answer: 3, chat: 6 } },
+    hoursSaved, valueUsd: hoursSaved * 30, costUsd: 18.4 * k, roi: (hoursSaved * 30) / (18.4 * k),
+    previous: { hoursSaved: hoursSaved * 0.78, runs: Math.round(1180 * k), costUsd: 15.1 * k, changes: Math.round(640 * k) },
+    runs: { total: Math.round(1432 * k), ok: Math.round(1391 * k), failed: Math.round(29 * k), waiting: 12 },
+    work: { changes: Math.round(812 * k), aiSteps: Math.round(1105 * k), repliesSent: Math.round(46 * k), answers: Math.round(214 * k) },
+    cost: { agents: 15.9 * k, other: 2.5 * k, perRun: 0.011 },
+    website: { conversations: Math.round(388 * k), handedOff: Math.round(71 * k), resolvedRate: 0.82 },
+    suggestions: { total: Math.round(402 * k), used: Math.round(287 * k), helpful: Math.round(161 * k), notHelpful: Math.round(23 * k), repliesSuggested: Math.round(158 * k), repliesSentByPeople: Math.round(126 * k) },
+    approvals: { approved: Math.round(94 * k), rejected: Math.round(6 * k), medianMinutes: 18 },
+    agents: [
+      { id: 'a1', name: 'Case triage', kind: 'agent', runs: Math.round(612 * k), ok: Math.round(608 * k), changes: Math.round(598 * k), hours: 31.2 * k, value: 936 * k, cost: 1.9 * k },
+      { id: 'a2', name: 'Email replies from guides', kind: 'agent', runs: Math.round(204 * k), ok: Math.round(199 * k), changes: 0, hours: 24.6 * k, value: 738 * k, cost: 4.8 * k },
+      { id: 'a3', name: 'Website help', kind: 'assistant', runs: Math.round(388 * k), ok: Math.round(381 * k), changes: 0, hours: 19.4 * k, value: 582 * k, cost: 5.2 * k },
+      { id: 'a4', name: 'Lead research', kind: 'agent', runs: Math.round(96 * k), ok: Math.round(94 * k), changes: Math.round(96 * k), hours: 9.6 * k, value: 288 * k, cost: 3.1 * k },
+      { id: 'a5', name: 'Stale deal follow-ups', kind: 'agent', runs: Math.round(118 * k), ok: Math.round(113 * k), changes: Math.round(118 * k), hours: 4.7 * k, value: 141 * k, cost: 0.9 * k },
+    ],
+    series,
+  };
+}

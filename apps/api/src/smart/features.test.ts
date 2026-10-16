@@ -43,3 +43,19 @@ test('scanned PDFs are recognised; article HTML becomes text', () => {
   assert.equal(looksScanned('## Page 1\n\nRestart the router and check the cables before calling support.'), false);
   assert.equal(stripHtml('<h2>Fix</h2><p>Restart&nbsp;it</p><ul><li>Step one</li></ul>'), '## Fix\nRestart it\n- Step one');
 });
+
+test('impact counts real work only: previews, rejected and skipped steps do not count', async () => {
+  const { countSteps } = await import('../insights/impact.js');
+  const c = countSteps([
+    { type: 'trigger.salesforce', status: 'ok', output: {} },
+    { type: 'ai.classify', status: 'ok', output: { category: 'Billing' } },
+    { type: 'logic.approval', status: 'ok', output: { approved: true } },
+    { type: 'sf.updateRecord', status: 'ok', output: { success: true } },
+    { type: 'sf.createTask', status: 'ok', output: { wouldDo: 'Create Task' } },
+    { type: 'sf.updateRecord', status: 'ok', output: { approved: false, skipped: true } },
+    { type: 'sf.emailReply', status: 'ok', output: { sent: true } },
+    { type: 'sf.emailReply', status: 'ok', output: { sent: false, suggestionId: 'x' } },
+    { type: 'sf.createRecord', status: 'error', output: {} },
+  ]);
+  assert.deepEqual(c, { changes: 1, aiSteps: 1, repliesSent: 1, approved: 1, rejected: 0 });
+});
