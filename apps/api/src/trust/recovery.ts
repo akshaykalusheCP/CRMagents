@@ -1,4 +1,5 @@
-import { topoOrder, type Workflow } from '@crmagents/shared';
+import { topoOrder, WRITE_NODE_TYPES, type Workflow } from '@crmagents/shared';
+import { TOOLS } from '../agent/tools.js';
 import { pool } from '../db.js';
 import type { RunState } from '../engine/executor.js';
 import { resumeRun } from '../engine/service.js';
@@ -8,16 +9,25 @@ import { resumeRun } from '../engine/service.js';
 // changes data, it might already have happened, so the run is marked "stopped" for an admin to resume or cancel.
 
 export const STALE_MS = 5 * 60_000;
-export const WRITE_TYPES = new Set(['sf.createRecord', 'sf.updateRecord', 'sf.createTask', 'sf.action', 'notify.slack', 'http.request']);
+// Every step that changes something outside the run (a record, an email to a customer, a Slack message), plus a
+// saved suggestion (people are told about it). Kept in step with the node list so new write steps are covered.
+export const WRITE_TYPES = new Set([...WRITE_NODE_TYPES, 'crm.suggest']);
+
+/** A step that may have changed something: a write step, or an AI agent step allowed to use a write tool. */
+function writes(n: { type: string; config?: Record<string, unknown> }) {
+  if (WRITE_TYPES.has(n.type)) return true;
+  const tools = n.type === 'ai.agent' && Array.isArray(n.config?.tools) ? (n.config!.tools as string[]) : [];
+  return tools.some((t) => TOOLS[t]?.write);
+}
 
 /** The next step a resumed run would execute, or null if none is left. Pure; tested. */
-export function nextStep(graph: Workflow, st: Pick<RunState, 'cursor' | 'active'>): { id: string; type: string; label: string } | null {
+export function nextStep(graph: Workflow, st: Pick<RunState, 'cursor' | 'active'>): { id: string; type: string; label: string; config?: Record<string, unknown> } | null {
   const order = topoOrder(graph);
   const nodes = new Map(graph.nodes.map((n) => [n.id, n]));
   for (let i = st.cursor; i < order.length; i++) {
     const n = nodes.get(order[i])!;
     const active = n.type.startsWith('trigger.') ? false : graph.edges.some((e) => e.target === n.id && st.active.includes(e.id));
-    if (active) return { id: n.id, type: n.type, label: n.label ?? n.type };
+    if (active) return { id: n.id, type: n.type, label: n.label ?? n.type, config: n.config };
   }
   return null;
 }
@@ -26,10 +36,10 @@ export function nextStep(graph: Workflow, st: Pick<RunState, 'cursor' | 'active'
 export function safeToResume(graph: Workflow, st: Pick<RunState, 'cursor' | 'active'>): { safe: boolean; step?: string } {
   const n = nextStep(graph, st);
   if (!n) return { safe: true };
-  if (WRITE_TYPES.has(n.type)) return { safe: false, step: n.label };
+  if (writes(n)) return { safe: false, step: n.label };
   if (n.type === 'logic.loop') {
     // A loop may have been part-way through its records; anything inside that writes makes it unsafe.
-    if (graph.nodes.some((x) => WRITE_TYPES.has(x.type))) return { safe: false, step: n.label };
+    if (graph.nodes.some(writes)) return { safe: false, step: n.label };
   }
   return { safe: true };
 }

@@ -21,6 +21,18 @@ test('recovery: resumes after reads and AI, stops before a step that changes dat
   assert.equal(nextStep(flow, { cursor: 5, active: [] }), null);
 });
 
+test('recovery: an email reply, a delete, or an AI agent with write tools is never repeated without a person', () => {
+  const at = (type: string, config: Record<string, unknown> = {}) => {
+    const f: Workflow = { nodes: [n('t', 'trigger.salesforce'), { ...n('x', type), config }], edges: [e('t', 'x')] };
+    return safeToResume(f, { cursor: 1, active: ['t->x'] }).safe;
+  };
+  assert.equal(at('sf.emailReply'), false);
+  assert.equal(at('sf.deleteRecord'), false);
+  assert.equal(at('sf.upsertRecord'), false);
+  assert.equal(at('ai.agent', { tools: ['soql_query', 'update_record'] }), false);
+  assert.equal(at('ai.agent', { tools: ['soql_query', 'search_knowledge'] }), true);
+});
+
 const fakeClient = (reply: (body: any) => any) => {
   const calls: any[] = [];
   return { calls, client: { messages: { create: async (b: any) => { calls.push(b); return reply(b); } } } as any };
