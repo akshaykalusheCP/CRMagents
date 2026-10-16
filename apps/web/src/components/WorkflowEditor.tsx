@@ -211,8 +211,8 @@ function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDe
     return { refs: list, inLoop: nodes.some((n) => anc.has(n.id) && n.data.type === 'logic.loop') };
   }, [selected, nodes, edges]);
 
-  const save = async (): Promise<string | null> => {
-    const body = { name: name.trim() || 'Untitled workflow', graph: fromRF(nodes, edges, meta) };
+  const save = async (graphOverride?: Workflow): Promise<string | null> => {
+    const body = { name: name.trim() || 'Untitled workflow', graph: graphOverride ?? fromRF(nodes, edges, meta) };
     setSaving(true);
     try {
       let wid = id;
@@ -323,7 +323,28 @@ function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDe
   };
   const whenText = schedule ? `every ${schedule.every ?? 'day'}${schedule.every === 'hour' ? '' : ` at ${schedule.at || '08:00'} UTC`}` : `for every ${triggerObject} that is ${triggerEvent} in Salesforce (checked every minute)`;
   // Turn on = CRMagents checks Salesforce every minute for matching records. Nothing is installed in the org.
+  // On-demand agents have nothing to "turn on": offer to run them on a schedule instead.
+  const manualTrigger = nodes.find((n) => n.data.type === 'trigger.manual');
+  const [sched, setSched] = useState<{ every: 'hour' | 'day' | 'week'; at: string } | null>(null);
+  const scheduleAndTurnOn = async () => {
+    if (!sched || !manualTrigger) return;
+    const config = { every: sched.every, at: sched.at };
+    const next = nodes.map((n) => (n.id === manualTrigger.id ? { ...n, data: { ...n.data, type: 'trigger.schedule', label: 'Schedule', config } } : n));
+    setDeploying(true); setMsg('');
+    try {
+      const wid = await save(fromRF(next, edges, meta));
+      if (!wid) return;
+      setNodes(next);
+      await api.setLive(tenantId, wid, true);
+      setLive(true);
+      setSched(null);
+      toast(`Turned on: runs every ${sched.every}${sched.every === 'hour' ? '' : ` at ${sched.at} UTC`}`);
+    } catch (e) { setMsg((e as Error).message); }
+    finally { setDeploying(false); }
+  };
+
   const turnOn = async () => {
+    if (!canTurnOn && manualTrigger) { setSched({ every: 'week', at: '08:00' }); return; }
     if (!(await ask({ title: `Turn on "${name}"?`, body: <>From now on it runs {whenText}. Changes still wait for approval if the agent has an approval step.</>, confirm: 'Turn on' }))) return;
     setDeploying(true); setMsg('');
     try {
@@ -419,7 +440,7 @@ function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDe
           {live ? (
             <button onClick={() => void turnOff()} disabled={deploying} title={`Runs ${whenText}${realtime ? ' (real-time)' : ''}. Click to turn off.`}><span className="dot ok" /> On</button>
           ) : (
-            <button onClick={() => void turnOn()} disabled={deploying || !canTurnOn} title={canTurnOn ? `Run automatically ${whenText}` : 'Needs a Salesforce record trigger or a schedule'}>
+            <button onClick={() => void turnOn()} disabled={deploying || (!canTurnOn && !manualTrigger)} title={canTurnOn ? `Run automatically ${whenText}` : manualTrigger ? 'Runs when you ask. Turn on to run it on a schedule.' : 'Needs a trigger first'}>
               {deploying ? <Loader2 size={14} className="spin" /> : <Power size={14} />} Turn on
             </button>
           )}
@@ -431,6 +452,27 @@ function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDe
         </div>
       </div>
       {confirmUI}
+      {sched && (
+        <div className="modal" onClick={() => setSched(null)}>
+          <div className="confirm-card" role="dialog" aria-labelledby="sched-title" onClick={(e) => e.stopPropagation()}>
+            <h2 id="sched-title">How often should it run?</h2>
+            <div className="confirm-body">"{name}" runs only when someone runs it. To run it by itself, pick a schedule. You can still run it by hand any time.</div>
+            <div className="seg" role="radiogroup" aria-label="How often" style={{ alignSelf: 'flex-start' }}>
+              {(['hour', 'day', 'week'] as const).map((e) => <button key={e} role="radio" aria-checked={sched.every === e} className={sched.every === e ? 'on' : ''} onClick={() => setSched({ ...sched, every: e })}>Every {e}</button>)}
+            </div>
+            {sched.every !== 'hour' && (
+              <label className="row" style={{ gap: 10, fontSize: 14 }}>At
+                <input id="sched-at" type="time" value={sched.at} onChange={(e) => setSched({ ...sched, at: e.target.value || '08:00' })} style={{ width: 130 }} />
+                <span className="muted small">UTC{sched.every === 'week' ? ', on Mondays' : ''}</span>
+              </label>
+            )}
+            <div className="confirm-actions">
+              <button onClick={() => setSched(null)}>Cancel</button>
+              <button className="primary" autoFocus disabled={deploying} onClick={() => void scheduleAndTurnOn()}>{deploying ? <Loader2 size={14} className="spin" /> : <Power size={14} />} Turn on</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className={'builder-body' + (view === 'steps' ? ' steps-mode' : '')}>
         {view === 'canvas' && <div className="palette">
