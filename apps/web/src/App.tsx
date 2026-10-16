@@ -1,4 +1,4 @@
-import { BarChart3, BookOpen, Bot, PanelLeft, PanelTop, Sparkles, Check, ChevronsUpDown, History, House, Inbox, LayoutDashboard, LogOut, Moon, Plus, Search, Settings as SettingsIcon, Sun } from 'lucide-react';
+import { BarChart3, BookOpen, Bot, ChevronRight, PanelLeft, PanelTop, Sparkles, Check, ChevronsUpDown, History, House, Inbox, LayoutDashboard, LogOut, Moon, Plus, Search, Settings as SettingsIcon, Sun } from 'lucide-react';
 import { useEffect, useState, type ReactNode } from 'react';
 import { api, type Draft, type Me, type Tenant, type WorkflowRow } from './api';
 import { CommandPalette, Menu, Toaster, type Command } from './components/ui';
@@ -169,6 +169,7 @@ export function App() {
               ) : (
                 <button className="primary sm" onClick={() => openSettings('orgs', true)}>Connect Salesforce</button>
               )}
+              <button className="primary tnav-cta" onClick={() => newAgent()}>New agent <ChevronRight size={14} /></button>
               <Menu align="right" className="acct-menu" trigger={() => (
                 <button className="acct" title={me.email} aria-label="Account"><span className="ws-mark">{initials(me.accountName || me.email)}</span></button>
               )}>
