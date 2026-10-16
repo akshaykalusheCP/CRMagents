@@ -4,12 +4,13 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
-  ArrowLeft, Check, ChevronDown, ChevronUp, CloudUpload, FlaskConical, GitCompare, History, LayoutList, Network, Loader2, MousePointerClick, Play, Save, Search, Sparkles, Trash2, X, Zap,
+  ArrowLeft, Check, ChevronDown, ChevronUp, CloudUpload, FlaskConical, GitCompare, History, LayoutList, MoreHorizontal, Network, Loader2, MousePointerClick, Play, Power, Save, Search, Sparkles, Trash2, X, Zap,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CATEGORY_COLORS, NODE_DEFS, NODE_DEF_BY_TYPE, type Category, type Workflow, type WFNode } from '@crmagents/shared';
 import { api, type BacktestResult, type Draft, type Preview, type RegressionResult, type RunResult, type ToolInfo } from '../api';
 import { BacktestView, RegressionView, ResultModal, Working } from './Smart';
+import { Menu, toast, useConfirm } from './ui';
 import { Inspector } from './Inspector';
 import { StepsView } from './StepsView';
 import { NodeTile } from './nodeIcons';
@@ -82,6 +83,7 @@ function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDe
   const [previewing, setPreviewing] = useState(false);
   const [previewErr, setPreviewErr] = useState('');
   const [live, setLive] = useState<boolean>(!!initialLive);
+  const [confirmUI, ask] = useConfirm();
   const [realtime, setRealtimeOn] = useState<boolean>(!!initialRealtime);
   const [bt, setBt] = useState<BacktestResult | 'loading' | { error: string } | null>(null);
   const [reg, setReg] = useState<RegressionResult | 'loading' | { error: string } | null>(null);
@@ -270,7 +272,7 @@ function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDe
   const refine = async () => {
     const plan = ai?.plan ?? meta?.plan;
     if (!change.trim() || !plan) return;
-    if (handEdited && !confirm('This rebuilds the workflow from the AI plan and replaces your manual changes on the canvas. Continue?')) return;
+    if (handEdited && !(await ask({ title: 'Rebuild from the AI plan?', body: 'This replaces your manual changes on the canvas.', confirm: 'Rebuild' }))) return;
     setRefining(true); setAiErr('');
     try {
       const d = await api.draftWorkflow(tenantId, change.trim(), plan);
@@ -322,29 +324,30 @@ function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDe
   const whenText = schedule ? `every ${schedule.every ?? 'day'}${schedule.every === 'hour' ? '' : ` at ${schedule.at || '08:00'} UTC`}` : `for every ${triggerObject} that is ${triggerEvent} in Salesforce (checked every minute)`;
   // Turn on = CRMagents checks Salesforce every minute for matching records. Nothing is installed in the org.
   const turnOn = async () => {
-    if (!confirm(`Turn on "${name}"?\n\nFrom now on it runs ${whenText}. Changes still wait for approval if the agent has an approval step.`)) return;
+    if (!(await ask({ title: `Turn on "${name}"?`, body: <>From now on it runs {whenText}. Changes still wait for approval if the agent has an approval step.</>, confirm: 'Turn on' }))) return;
     setDeploying(true); setMsg('');
     try {
       const wid = dirty || !id ? await save() : id;
       if (!wid) return;
       await api.setLive(tenantId, wid, true);
       setLive(true);
+      toast('Agent turned on');
     } catch (e) { setMsg((e as Error).message); }
     finally { setDeploying(false); }
   };
   const turnOff = async () => {
-    if (!id || !confirm('Turn this agent off? It stops reacting to new records; nothing else changes.')) return;
+    if (!id || !(await ask({ title: 'Turn this agent off?', body: 'It stops reacting to new records. Nothing else changes, and you can turn it back on any time.', confirm: 'Turn off' }))) return;
     setDeploying(true);
-    try { await api.setLive(tenantId, id, false); setLive(false); }
+    try { await api.setLive(tenantId, id, false); setLive(false); toast('Agent turned off', 'info'); }
     catch (e) { setMsg((e as Error).message); }
     finally { setDeploying(false); }
   };
 
   const remove = async () => {
-    if (id && confirm('Delete this workflow?')) { await api.deleteWorkflow(tenantId, id); onDeleted(); }
+    if (id && await ask({ title: `Delete "${name}"?`, body: 'The agent is removed. Its past runs stay in Activity.', confirm: 'Delete agent', danger: true })) { await api.deleteWorkflow(tenantId, id); toast('Agent deleted', 'info'); onDeleted(); }
   };
 
-  const back = () => { if (!dirty || confirm('Leave without saving your changes?')) onBack(); };
+  const back = async () => { if (!dirty || await ask({ title: 'Leave without saving?', body: 'Your changes to this agent will be lost.', confirm: 'Leave', danger: true })) onBack(); };
 
   const q = query.trim().toLowerCase();
   const visibleDefs = NODE_DEFS.filter((d) => !q || d.label.toLowerCase().includes(q) || d.description.toLowerCase().includes(q));
@@ -386,61 +389,48 @@ function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDe
 
   return (
     <div className="builder">
-      <div className="builder-top">
-        <button className="ghost icon" onClick={back} title="Back to workflows"><ArrowLeft size={16} /></button>
-        <div className="crumb">
-          <span>Agents</span><span>/</span>
-          <input className="wf-name" value={name} onChange={(e) => { setName(e.target.value); touch(); }} aria-label="Workflow name" />
+      <div className="ed-top">
+        <div className="ed-title">
+          <button className="ghost icon" onClick={() => void back()} title="Back" aria-label="Back"><ArrowLeft size={16} /></button>
+          <input className="wf-name" value={name} onChange={(e) => { setName(e.target.value); touch(); }} aria-label="Agent name" />
+          <span className={'save-state' + (dirty ? ' dirty' : '')}>
+            {saving ? <><Loader2 size={13} className="spin" /> Saving…</> : msg ? <span className="err">{msg}</span> : dirty ? <>● Unsaved</> : id ? <><Check size={13} /> Saved</> : 'Not saved yet'}
+          </span>
         </div>
-        <span className="save-state">
-          {saving ? <><Loader2 size={13} className="spin" /> Saving…</>
-            : msg ? <span className="err">{msg}</span>
-            : dirty ? <>● Unsaved changes</>
-            : <><Check size={13} /> Saved</>}
-        </span>
-        <div className="spacer" />
-        <div className="journey" aria-label="Progress">
-          <span className={'journey-step' + (id && !dirty ? ' done' : ' now')}>{id && !dirty ? <Check size={13} /> : <b>1</b>} Build</span>
-          <span className="journey-bar" />
-          <span className={'journey-step' + (tested ? ' done' : id && !dirty ? ' now' : '')}>{tested ? <Check size={13} /> : <b>2</b>} Test</span>
-          <span className="journey-bar" />
-          <span className={'journey-step' + (live ? ' done' : tested ? ' now' : '')}>{live ? <Check size={13} /> : <b>3</b>} Turn on</span>
+        <div className="ed-actions">
+          <div className="seg" role="tablist" aria-label="View">
+            <button role="tab" aria-selected={view === 'steps'} className={view === 'steps' ? 'on' : ''} onClick={() => setView('steps')} title="Plain-English steps"><LayoutList size={14} /> Steps</button>
+            <button role="tab" aria-selected={view === 'canvas'} className={view === 'canvas' ? 'on' : ''} onClick={() => setView('canvas')} title="Free-form canvas (advanced)"><Network size={14} /> Canvas</button>
+          </div>
+          <span className="ed-sep" />
+          <Menu align="right" trigger={() => (
+            <button disabled={previewing || running || bt === 'loading'}>
+              {previewing || running || bt === 'loading' ? <Loader2 size={14} className="spin" /> : <FlaskConical size={14} />} Test <ChevronDown size={14} />
+            </button>
+          )}>
+            {(close) => <>
+              <button className="mi" disabled={!hasRecordTrigger} onClick={() => { close(); void tryOnRecords(); }}><FlaskConical size={15} /><span>Try on 10 records<small>Newest records, nothing written</small></span></button>
+              <button className="mi" disabled={!canTurnOn} onClick={() => { close(); void replay(); }}><History size={15} /><span>Replay last 30 days<small>What it would have done last month</small></span></button>
+              <button className="mi" disabled={nodes.length === 0} onClick={() => { close(); void doRun(); }}><Play size={15} /><span>Test run<small>One real run, with approval if it has one</small></span></button>
+            </>}
+          </Menu>
+          {id && dirty && <button onClick={() => void checkEdit()} title="Compare this edit with the agent's recent real runs"><GitCompare size={14} /> Check changes</button>}
+          <button className={dirty || !id ? 'primary' : ''} onClick={() => void save()} disabled={(!dirty && !!id) || saving}><Save size={14} /> Save</button>
+          {live ? (
+            <button onClick={() => void turnOff()} disabled={deploying} title={`Runs ${whenText}${realtime ? ' (real-time)' : ''}. Click to turn off.`}><span className="dot ok" /> On</button>
+          ) : (
+            <button onClick={() => void turnOn()} disabled={deploying || !canTurnOn} title={canTurnOn ? `Run automatically ${whenText}` : 'Needs a Salesforce record trigger or a schedule'}>
+              {deploying ? <Loader2 size={14} className="spin" /> : <Power size={14} />} Turn on
+            </button>
+          )}
+          {id && (
+            <Menu align="right" trigger={() => <button className="ghost icon" aria-label="More"><MoreHorizontal size={16} /></button>}>
+              {(close) => <button className="mi danger" onClick={() => { close(); void remove(); }}><Trash2 size={15} /> Delete agent</button>}
+            </Menu>
+          )}
         </div>
-        <div className="spacer" />
-        <div className="seg" role="tablist" aria-label="View">
-          <button className={view === 'steps' ? 'on' : ''} onClick={() => setView('steps')} title="Plain-English steps"><LayoutList size={14} /> Steps</button>
-          <button className={view === 'canvas' ? 'on' : ''} onClick={() => setView('canvas')} title="Free-form canvas (advanced)"><Network size={14} /> Canvas</button>
-        </div>
-        {id && <button className="ghost icon danger" onClick={remove} title="Delete workflow"><Trash2 size={15} /></button>}
-        {id && dirty && <button onClick={() => void checkEdit()} title="Compare this edit with the agent's recent real runs before saving"><GitCompare size={14} /> Check changes</button>}
-        <button onClick={() => void save()} disabled={!dirty || saving}><Save size={14} /> Save</button>
-        <button
-          onClick={tryOnRecords} disabled={previewing || !hasRecordTrigger}
-          title={hasRecordTrigger ? 'Run on your 10 newest records without changing anything' : 'Needs a Salesforce record trigger with an object'}
-        >
-          {previewing ? <Loader2 size={14} className="spin" /> : <FlaskConical size={14} />} Try on 10 records
-        </button>
-        <button onClick={() => void replay()} disabled={bt === 'loading' || !canTurnOn} title={canTurnOn ? 'See what it would have done over the last 30 days (nothing is written)' : 'Needs a record trigger or a schedule'}>
-          {bt === 'loading' ? <Loader2 size={14} className="spin" /> : <History size={14} />} Replay 30 days
-        </button>
-        <button onClick={doRun} disabled={running || nodes.length === 0}>
-          {running ? <Loader2 size={14} className="spin" /> : <Play size={14} />} Test run
-        </button>
-        {live && hasRecordTrigger && (
-          <button onClick={() => void toggleRealtime()} title={realtime ? 'Starts within seconds of a change in Salesforce. Click to go back to 1-minute checks.' : 'Start within seconds of a change instead of checking every minute'}>
-            <Zap size={14} /> {realtime ? 'Real-time' : 'Every minute'}
-          </button>
-        )}
-        {live ? (
-          <button onClick={turnOff} disabled={deploying} title={`Runs ${whenText}. Click to turn off.`}>
-            <span className="dot ok" /> On
-          </button>
-        ) : (
-          <button className="primary" onClick={turnOn} disabled={deploying || !canTurnOn} title={canTurnOn ? `Run automatically ${whenText}` : 'Needs a Salesforce record trigger or a schedule'}>
-            {deploying ? <Loader2 size={14} className="spin" /> : <CloudUpload size={14} />} Turn on
-          </button>
-        )}
       </div>
+      {confirmUI}
 
       <div className={'builder-body' + (view === 'steps' ? ' steps-mode' : '')}>
         {view === 'canvas' && <div className="palette">
@@ -492,7 +482,7 @@ function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDe
               onNodesChange={(c) => { onNodesChange(c); if (c.some((x) => x.type === 'position' || x.type === 'remove')) touch(); }}
               onEdgesChange={(c) => { onEdgesChange(c); if (c.some((x) => x.type === 'remove')) touch(); }}
               onConnect={onConnect} isValidConnection={isValidConnection}
-              fitView fitViewOptions={{ maxZoom: 1, padding: 0.25 }} deleteKeyCode={['Backspace', 'Delete']}
+              fitView fitViewOptions={{ maxZoom: 1, minZoom: 0.6, padding: 0.25 }} deleteKeyCode={['Backspace', 'Delete']}
               defaultEdgeOptions={EDGE_DEFAULTS} proOptions={{ hideAttribution: true }}
             >
               <Background variant={BackgroundVariant.Dots} gap={18} size={1.4} color="var(--canvas-dot)" />

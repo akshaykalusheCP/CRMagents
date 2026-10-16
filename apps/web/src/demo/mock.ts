@@ -14,6 +14,8 @@ function route(method: string, url: URL, body: any): Response {
   if (p === '/t/insights/summary') return json(fx.brief);
   if (p === '/t/builder/chat') return json(demoChat(body));
   if (p === '/t/workflows' && method === 'GET') return json(DEMO_AGENTS);
+  if (p === '/t/agents' && method === 'GET') return json(DEMO_ASSISTANTS);
+  if (p === '/api/tools') return json(DEMO_TOOLS);
   if (p === '/t/suggestions') return json(DEMO_SUGGESTIONS);
   if (/^\/t\/suggestions\/.+\/dismiss$/.test(p)) return json({ ok: true });
   if (p === '/t/agent-health') return json(DEMO_HEALTH);
@@ -111,3 +113,15 @@ const DEMO_BACKTEST = {
     { recordId: '500C', label: '00001031 · Closed duplicate', status: 'done', result: 'Skipped: only runs when Status is not Closed.', wouldDo: [], decisions: [], costUsd: 0 },
   ],
 };
+
+const DEMO_ASSISTANTS = [
+  { id: 'a1', name: 'Support analyst', systemPrompt: 'You help the support team. Look up cases and accounts and answer briefly with numbers.', tools: ['soql_query', 'get_record', 'describe_object'] },
+  { id: 'a2', name: 'Pipeline coach', systemPrompt: 'Review open opportunities and suggest the next best step for each deal owner.', tools: ['soql_query', 'get_record', 'create_task'] },
+];
+const DEMO_TOOLS = [
+  { name: 'soql_query', description: 'Run a read-only SOQL query.', write: false },
+  { name: 'get_record', description: 'Read one record by Id.', write: false },
+  { name: 'describe_object', description: 'List the fields of an object.', write: false },
+  { name: 'create_task', description: 'Create a follow-up Task.', write: true },
+  { name: 'update_record', description: 'Update fields on a record.', write: true },
+];

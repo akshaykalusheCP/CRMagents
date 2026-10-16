@@ -1,4 +1,5 @@
 import { ArrowLeft, LayoutDashboard, Loader2, MoreVertical, Plus, Sparkles, Trash2, X } from 'lucide-react';
+import { useConfirm } from '../components/ui';
 import { useEffect, useMemo, useState } from 'react';
 import { api, type ChartKind, type DashRange, type DashSummary, type Tenant, type TileData, type TileSpec } from '../api';
 import { BarChart } from '../components/viz/Charts';
@@ -69,6 +70,7 @@ export function DashboardsPage({ tenant }: { tenant: Tenant }) {
   const [adding, setAdding] = useState(false);
   const [drill, setDrill] = useState<{ tile: TileData; label: string; columns: string[]; rows: Record<string, unknown>[] } | null>(null);
   const [focus, setFocus] = useState<TileData | null>(null);
+  const [confirmUI, ask] = useConfirm();
   const t = tenant.id;
 
   const refreshList = () => api.dashboards(t).then(setList).catch((e) => setErr(e.message));
@@ -115,7 +117,7 @@ export function DashboardsPage({ tenant }: { tenant: Tenant }) {
     setNote('Saved.');
   });
 
-  const remove = () => open?.id && confirm(`Delete "${open.name}"?`) && guard('Deleting…', async () => {
+  const remove = async () => open?.id && await ask({ title: `Delete "${open.name}"?`, body: 'The dashboard and its tiles are removed. Your Salesforce data is not touched.', confirm: 'Delete', danger: true }) && guard('Deleting…', async () => {
     await api.deleteDashboard(t, open.id!);
     setOpen(null);
     await refreshList();
@@ -185,8 +187,9 @@ export function DashboardsPage({ tenant }: { tenant: Tenant }) {
   // ---------- One dashboard ----------
   return (
     <div className="dash">
+      {confirmUI}
       <div className="dash-head">
-        <button className="ghost icon" onClick={() => { if (!open.dirty || confirm('Leave without saving?')) { setOpen(null); setNote(''); } }} title="All dashboards"><ArrowLeft size={16} /></button>
+        <button className="ghost icon" onClick={async () => { if (!open.dirty || await ask({ title: 'Leave without saving?', body: 'Your changes to this dashboard will be lost.', confirm: 'Leave', danger: true })) { setOpen(null); setNote(''); } }} title="All dashboards"><ArrowLeft size={16} /></button>
         <div className="dash-title">
           <input value={open.name} onChange={(e) => setOpen({ ...open, name: e.target.value, dirty: true })} aria-label="Dashboard name" />
           {open.description && <span className="muted small">{open.description}</span>}

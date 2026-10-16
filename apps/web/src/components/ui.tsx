@@ -242,3 +242,30 @@ export function SkeletonRows({ rows = 4, cols = 3 }: { rows?: number; cols?: num
     </div>
   );
 }
+
+// ---- Confirm dialog (replaces the browser's confirm()): `if (!(await ask({...}))) return;` ----
+export interface AskOptions { title: string; body?: ReactNode; confirm: string; danger?: boolean }
+export function useConfirm(): [ReactNode, (o: AskOptions) => Promise<boolean>] {
+  const [state, setState] = useState<(AskOptions & { resolve: (v: boolean) => void }) | null>(null);
+  const ask = (o: AskOptions) => new Promise<boolean>((resolve) => setState({ ...o, resolve }));
+  const close = (v: boolean) => { state?.resolve(v); setState(null); };
+  useEffect(() => {
+    if (!state) return;
+    const k = (e: KeyboardEvent) => { if (e.key === 'Escape') close(false); };
+    window.addEventListener('keydown', k);
+    return () => window.removeEventListener('keydown', k);
+  });
+  const ui = state && (
+    <div className="modal" onClick={() => close(false)}>
+      <div className="confirm-card" role="alertdialog" aria-labelledby="confirm-title" onClick={(e) => e.stopPropagation()}>
+        <h2 id="confirm-title">{state.title}</h2>
+        {state.body && <div className="confirm-body">{state.body}</div>}
+        <div className="confirm-actions">
+          <button onClick={() => close(false)}>Cancel</button>
+          <button className={state.danger ? 'danger-solid' : 'primary'} autoFocus onClick={() => close(true)}>{state.confirm}</button>
+        </div>
+      </div>
+    </div>
+  );
+  return [ui, ask];
+}
