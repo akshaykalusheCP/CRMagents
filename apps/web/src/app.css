@@ -585,3 +585,24 @@
 :root .app .tnav-inner { gap: 32px; }
 :root .app .tnav-right .org-btn .n { max-width: 120px; }
 @media (max-width: 1400px) { :root .app .tnav-links { gap: 18px; } :root .app .tnav-inner { gap: 24px; } :root .app .tnav-right .org-btn .n { max-width: 90px; } }
+
+/* ---- Motion: smooth, cheap (transform/opacity only), off for people who prefer less motion ---- */
+@keyframes ribbon-sway { from { transform: translate3d(0, 0, 0) rotate(0deg); } to { transform: translate3d(-14px, 8px, 0) rotate(-1.2deg); } }
+:root .ribbon { will-change: transform; animation: ribbon-sway 14s ease-in-out infinite alternate; transform-origin: 70% 30%; }
+@keyframes page-in { from { opacity: 0; transform: translate3d(0, 6px, 0); } to { opacity: 1; transform: none; } }
+:root .app .page-in { animation: page-in .22s cubic-bezier(.2, .7, .2, 1) both; }
+@keyframes pop-in { from { opacity: 0; transform: translate3d(0, -4px, 0) scale(.98); } to { opacity: 1; transform: none; } }
+:root .mnu-pop, :root .confirm-card, :root .cmdk { animation: pop-in .14s ease-out both; }
+:root .app button, :root .app .tnav-link, :root .app .nav2, :root .app input, :root .app select, :root .app textarea, :root .app .tbl tr, :root .app .panel, :root .app .inbox-item, :root .app .chip {
+  transition: background-color .15s ease, border-color .15s ease, color .15s ease, box-shadow .18s ease, opacity .15s ease;
+}
+:root .app main { scroll-behavior: auto; overscroll-behavior: contain; }
+@media (prefers-reduced-motion: reduce) {
+  :root .ribbon, :root .app .page-in, :root .mnu-pop, :root .confirm-card, :root .cmdk { animation: none !important; }
+}
+:root .app .tab-pane[hidden] { display: none !important; }
+:root .app main.full > .tab-pane.fill { height: 100%; }
+:root .app-main > main.full > .tab-pane { height: 100%; }
+:root .brief-skel { display: flex; flex-direction: column; gap: 16px; padding-top: 6px; }
+:root .brief-skel .brief-cols > div { display: flex; flex-direction: column; gap: 12px; }
+:root .brief-skel .skel-line { height: 12px; }

@@ -139,7 +139,16 @@ export function InsightsPage({ tenant, goSettings, onAutomate, fixedView }: { te
           {brief && <span className="muted small" style={{ marginLeft: 'auto' }}>{brief.reused ? 'Up to date' : `$${brief.costUsd.toFixed(3)}`}</span>}
         </div>
         {!brief ? (
-          <div className="muted row">{briefing || loading ? <><Loader2 size={14} className="spin" /> Reading your numbers…</> : 'No briefing yet.'}</div>
+          briefing || loading ? (
+            // Same shape as the briefing, so nothing below jumps when it arrives.
+            <div className="brief-skel" aria-label="Reading your numbers">
+              <span className="skel skel-line" style={{ width: '62%', height: 18 }} />
+              <div className="brief-cols">
+                <div>{[90, 75, 82].map((w, i) => <span key={i} className="skel skel-line" style={{ width: `${w}%` }} />)}</div>
+                <div>{[70, 85, 60].map((w, i) => <span key={i} className="skel skel-line" style={{ width: `${w}%` }} />)}</div>
+              </div>
+            </div>
+          ) : <div className="muted row">No briefing yet.</div>
         ) : (
           <>
             <p className="headline">{brief.headline}</p>

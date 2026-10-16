@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react';
 
 // Decorative silk ribbon: hundreds of thin translucent strands along one curved band, coloured blue → violet →
-// pink → orange across the band. Drawn on a canvas (cheap, crisp at any DPI); a slow sway unless the viewer
-// prefers reduced motion. Purely decorative: aria-hidden, pointer-events none.
+// pink → orange across the band. Drawn once on a canvas (crisp at any DPI) and redrawn only when its size changes;
+// the slow sway is a CSS transform the GPU composites, so it costs no drawing per frame (redrawing every frame
+// made pages stutter). Purely decorative: aria-hidden, pointer-events none.
 
 const STOPS = ['#6aa8ff', '#8f6bff', '#c45cf0', '#ff5fa8', '#ff7a45', '#ffb03a'];
 
@@ -13,18 +14,17 @@ export function Ribbon({ className = '', strands = 420, angle = 0.62, width = 0.
     if (!c) return;
     const ctx = c.getContext('2d');
     if (!ctx) return;
-    const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
     // Fixed per-strand jitter so the ribbon doesn't shimmer between frames.
     const jitter = Array.from({ length: strands }, (_, i) => Math.sin(i * 12.9898) * 43758.5453 % 1);
     let raf = 0;
-    const draw = (t: number) => {
+    const draw = () => {
       const dpr = Math.min(window.devicePixelRatio || 1, 2);
       const w = c.clientWidth, h = c.clientHeight;
       if (c.width !== Math.round(w * dpr) || c.height !== Math.round(h * dpr)) { c.width = Math.round(w * dpr); c.height = Math.round(h * dpr); }
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       ctx.clearRect(0, 0, w, h);
       const band = Math.max(w, h) * width;
-      const sway = still ? 0 : Math.sin(t / 2600) * 0.03;
+      const sway = 0;
       const grad = ctx.createLinearGradient(w * 0.35, 0, w, h * 0.4);
       STOPS.forEach((s, i) => grad.addColorStop(i / (STOPS.length - 1), s));
       const curve = (u: number, i: number) => {
@@ -58,12 +58,13 @@ export function Ribbon({ className = '', strands = 420, angle = 0.62, width = 0.
         ctx.stroke();
       }
       ctx.globalAlpha = 1;
-      if (!still) raf = requestAnimationFrame(draw);
     };
-    raf = requestAnimationFrame(draw);
-    const onVis = () => { cancelAnimationFrame(raf); if (!document.hidden) raf = requestAnimationFrame(draw); };
-    document.addEventListener('visibilitychange', onVis);
-    return () => { cancelAnimationFrame(raf); document.removeEventListener('visibilitychange', onVis); };
+    // Redraw only when the canvas changes size (one frame later, so a resize burst draws once).
+    const schedule = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(draw); };
+    schedule();
+    const ro = new ResizeObserver(schedule);
+    ro.observe(c);
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); };
   }, [strands, angle, width]);
   return <canvas ref={ref} className={'ribbon ' + className} aria-hidden="true" />;
 }

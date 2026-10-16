@@ -1,5 +1,5 @@
 import { BarChart3, BookOpen, Bot, ChevronRight, PanelLeft, PanelTop, Sparkles, Check, ChevronsUpDown, History, House, Inbox, LayoutDashboard, LogOut, Moon, Plus, Search, Settings as SettingsIcon, Sun } from 'lucide-react';
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { api, type Draft, type Me, type Tenant, type WorkflowRow } from './api';
 import { CommandPalette, Menu, Toaster, type Command } from './components/ui';
 import { ApprovalsPage } from './pages/Approvals';
@@ -11,6 +11,8 @@ import { SettingsHub } from './pages/SettingsHub';
 import { AuthPage } from './pages/Auth';
 import { RunsPage } from './pages/Runs';
 import { WorkflowsPage } from './pages/Workflows';
+
+const PAGE_FRESH_MS = 2 * 60_000;
 
 type Tab = 'home' | 'insights' | 'dashboards' | 'agents' | 'approvals' | 'activity' | 'knowledge' | 'settings';
 
@@ -56,6 +58,26 @@ export function App() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [tenantId, setTenantId] = useState<string>(() => { try { return localStorage.getItem('tenantId') ?? ''; } catch { return ''; } });
   const [theme, toggleTheme] = useTheme();
+  // Pages stay mounted once visited: switching back is instant (no reload flash) and keeps scroll position.
+  // A page left alone for a couple of minutes reloads on return, so its numbers are fresh.
+  const mainRef = useRef<HTMLElement>(null);
+  const scrolls = useRef<Record<string, number>>({});
+  const leftAt = useRef<Record<string, number>>({});
+  const prevTab = useRef(tab);
+  const [seen, setSeen] = useState<Set<string>>(() => new Set([tab]));
+  const [paneKeys, setPaneKeys] = useState<Record<string, number>>({});
+  useLayoutEffect(() => {
+    const prev = prevTab.current;
+    if (prev !== tab) { leftAt.current[prev] = Date.now(); prevTab.current = tab; }
+    const left = leftAt.current[tab];
+    if (left && Date.now() - left > PAGE_FRESH_MS) { setPaneKeys((k) => ({ ...k, [tab]: (k[tab] ?? 0) + 1 })); scrolls.current[tab] = 0; }
+    setSeen((x) => (x.has(tab) ? x : new Set(x).add(tab)));
+    if (mainRef.current) mainRef.current.scrollTop = scrolls.current[tab] ?? 0;
+  }, [tab]);
+  const onMainScroll = (e: React.UIEvent<HTMLElement>) => { scrolls.current[tab] = e.currentTarget.scrollTop; };
+  const pane = (key: Tab, node: ReactNode) => (seen.has(key) || tab === key) && (
+    <div key={`${key}-${paneKeys[key] ?? 0}`} className={'tab-pane page-in' + (key === 'agents' ? ' fill' : '')} hidden={tab !== key}>{node}</div>
+  );
   // Stripe-style top navigation by default; the sidebar is still there for people who prefer it.
   const [layout, setLayout] = useState<'top' | 'side'>(() => { try { return localStorage.getItem('layout') === 'side' ? 'side' : 'top'; } catch { return 'top'; } });
   const switchLayout = () => { const next = layout === 'top' ? 'side' : 'top'; setLayout(next); try { localStorage.setItem('layout', next); } catch { /* ignore */ } };
@@ -188,17 +210,17 @@ export function App() {
             </div>
           </div>
         </header>
-        <main className={'stripe-main' + (tab === 'agents' ? ' full' : '')}>
+        <main ref={mainRef} onScroll={onMainScroll} className={'stripe-main' + (tab === 'agents' ? ' full' : '')}>
           {/* Silk ribbon behind the top of every page, like stripe.com's hero. */}
           <Ribbon className="app-ribbon" strands={260} angle={0.6} width={0.3} />
-          {tab === 'home' && <HomePage me={me} tenant={tenant} go={setTab} newAgent={newAgent} />}
-          {tab === 'insights' && <InsightsPage key="ins" fixedView="overview" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />}
-          {tab === 'dashboards' && <InsightsPage key="dash" fixedView="dashboards" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />}
-          {tab === 'agents' && <WorkflowsPage tenant={tenant} goConnections={() => setTab('settings')} incoming={incoming} onIncomingOpened={() => setIncoming(null)} prefill={prefill} onPrefillUsed={() => setPrefill(null)} />}
-          {tab === 'approvals' && <ApprovalsPage tenant={tenant} onChange={refreshWaiting} me={me.email} />}
-          {tab === 'knowledge' && <KnowledgePage tenant={tenant} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />}
-          {tab === 'activity' && <RunsPage tenant={tenant} goSettings={() => setTab('settings')} />}
-          {tab === 'settings' && <SettingsHub key={settingsAt.n} section={settingsAt.section} focusConnect={settingsAt.connect} tenants={tenants} tenant={tenant} onChange={reload} />}
+          {pane('home', <HomePage me={me} tenant={tenant} go={setTab} newAgent={newAgent} />)}
+          {pane('insights', <InsightsPage key="ins" fixedView="overview" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
+          {pane('dashboards', <InsightsPage key="dash" fixedView="dashboards" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
+          {pane('agents', <WorkflowsPage tenant={tenant} goConnections={() => setTab('settings')} incoming={incoming} onIncomingOpened={() => setIncoming(null)} prefill={prefill} onPrefillUsed={() => setPrefill(null)} />)}
+          {pane('approvals', <ApprovalsPage tenant={tenant} onChange={refreshWaiting} me={me.email} />)}
+          {pane('knowledge', <KnowledgePage tenant={tenant} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
+          {pane('activity', <RunsPage tenant={tenant} goSettings={() => setTab('settings')} />)}
+          {pane('settings', <SettingsHub key={settingsAt.n} section={settingsAt.section} focusConnect={settingsAt.connect} tenants={tenants} tenant={tenant} onChange={reload} />)}
         </main>
         <CommandPalette open={cmdk} onClose={() => setCmdk(false)} commands={commands} />
         <Toaster />
@@ -278,15 +300,15 @@ export function App() {
           </div>
         </header>
 
-        <main className={tab === 'agents' ? 'full' : ''}>
-          {tab === 'home' && <HomePage me={me} tenant={tenant} go={setTab} newAgent={newAgent} />}
-          {tab === 'insights' && <InsightsPage key="ins" fixedView="overview" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />}
-          {tab === 'dashboards' && <InsightsPage key="dash" fixedView="dashboards" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />}
-          {tab === 'agents' && <WorkflowsPage tenant={tenant} goConnections={() => setTab('settings')} incoming={incoming} onIncomingOpened={() => setIncoming(null)} prefill={prefill} onPrefillUsed={() => setPrefill(null)} />}
-          {tab === 'approvals' && <ApprovalsPage tenant={tenant} onChange={refreshWaiting} me={me.email} />}
-          {tab === 'knowledge' && <KnowledgePage tenant={tenant} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />}
-          {tab === 'activity' && <RunsPage tenant={tenant} goSettings={() => setTab('settings')} />}
-          {tab === 'settings' && <SettingsHub key={settingsAt.n} section={settingsAt.section} focusConnect={settingsAt.connect} tenants={tenants} tenant={tenant} onChange={reload} />}
+        <main ref={mainRef} onScroll={onMainScroll} className={tab === 'agents' ? 'full' : ''}>
+          {pane('home', <HomePage me={me} tenant={tenant} go={setTab} newAgent={newAgent} />)}
+          {pane('insights', <InsightsPage key="ins" fixedView="overview" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
+          {pane('dashboards', <InsightsPage key="dash" fixedView="dashboards" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
+          {pane('agents', <WorkflowsPage tenant={tenant} goConnections={() => setTab('settings')} incoming={incoming} onIncomingOpened={() => setIncoming(null)} prefill={prefill} onPrefillUsed={() => setPrefill(null)} />)}
+          {pane('approvals', <ApprovalsPage tenant={tenant} onChange={refreshWaiting} me={me.email} />)}
+          {pane('knowledge', <KnowledgePage tenant={tenant} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
+          {pane('activity', <RunsPage tenant={tenant} goSettings={() => setTab('settings')} />)}
+          {pane('settings', <SettingsHub key={settingsAt.n} section={settingsAt.section} focusConnect={settingsAt.connect} tenants={tenants} tenant={tenant} onChange={reload} />)}
         </main>
       </div>
       <CommandPalette open={cmdk} onClose={() => setCmdk(false)} commands={commands} />
