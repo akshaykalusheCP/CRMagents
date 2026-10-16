@@ -6,7 +6,7 @@ import type { Plan, PlanStep } from './plan.js';
 
 const WRITES = new Set(['create_task', 'update_record', 'create_record', 'run_action', 'delete_record', 'attach_file']);
 // Rough per-run cost of each AI action (USD), from typical prompt sizes at current prices.
-const COST: Record<string, number> = { classify: 0.0003, extract: 0.004, ai_write: 0.01, research: 0.03 };
+const COST: Record<string, number> = { classify: 0.0003, extract: 0.004, ai_write: 0.01, research: 0.03, web_research: 0.05 };
 const KNOWLEDGE_RULES = 'Base the steps on the knowledge sections given and cite them like [1]. If they do not cover the problem, say so in one line and give general guidance. Be concise.';
 const CLASSIFY_MODEL = 'claude-haiku-5-5'; // matched Opus on real cases at ~2% of the cost (evals/model-eval.mts)
 const READ_TOOLS = ['soql_query', 'get_record', 'describe_object'];
@@ -286,6 +286,16 @@ export function compilePlan(plan: Plan): CompileResult {
         result = result || text;
         break;
       }
+      case 'web_research':
+        node = add('ai.agent', {
+          instructions: 'Research this on the web. Report only what you found, briefly, and say when something could not be found. Cite sources.',
+          prompt: convert(s.instruction, i),
+          tools: ['web_search'],
+        }, 'Web research');
+        if (!s.instruction.trim()) errors.push(`step ${i + 1}: web_research needs an instruction`);
+        keys = new Set(['text']);
+        result = `{{${node.id}.text}}`;
+        break;
       case 'read_files':
         if (!isRecord && !inLoop) errors.push(`step ${i + 1}: read_files needs a record trigger or a per-record query before it`);
         node = add('sf.readFiles', { recordId: inLoop ? '{{item.Id}}' : '{{trigger.recordId}}', maxFiles: 5 }, 'Read files');
@@ -408,6 +418,7 @@ function describe(s: PlanStep, plan: Plan): string {
     case 'search_knowledge': return 'Looks up your uploaded guides (no AI)';
     case 'delete_record': return `Deletes the ${plan.trigger_object} (Recycle Bin)`;
     case 'read_files': return 'Reads the files attached to the record (no AI)';
+    case 'web_research': return `AI researches on the web: ${cut(s.instruction)}`;
     case 'attach_file': return `Attaches "${cut(s.subject || 'CRMagents note', 40)}" as a file on the record`;
     case 'suggest': return `Shows "${cut(s.subject || 'Suggestion', 40)}" on the record in Salesforce (changes nothing)`;
     default: return s.action;

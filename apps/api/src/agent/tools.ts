@@ -6,8 +6,10 @@ import { hitsToText, searchKnowledge } from '../knowledge/store.js';
 import { actionContext, actionKey, listOrgActions, parseActionKey, rankActions } from '../salesforce/actions.js';
 
 export interface Tool {
-  def: Anthropic.Tool;
+  def: Anthropic.ToolUnion;
   write: boolean; // writes need to be explicitly enabled on the agent
+  /** Runs on Anthropic's side (web search): nothing to execute here. */
+  server?: boolean;
   /** Only for website chat (never offered to internal assistants). */
   publicOnly?: boolean;
   run(sf: SalesforceClient, input: any): Promise<unknown>;
@@ -146,6 +148,42 @@ export const TOOLS: Record<string, Tool> = {
       return fileText(sf, { versionId: String(versionId), title: String(title ?? 'file'), extension: String(extension ?? 'pdf').toLowerCase().replace(/^\./, ''), size: 0 });
     },
   },
+  send_code: {
+    write: true,
+    publicOnly: true,
+    def: { name: 'send_code', description: 'Email the visitor a 6-digit code to prove their email address. Use before showing or changing anything about them.', input_schema: { type: 'object', properties: { email: { type: 'string' } }, required: ['email'] } },
+    async run() { throw new Error('Only in website chat'); },
+  },
+  verify_code: {
+    write: true,
+    publicOnly: true,
+    def: { name: 'verify_code', description: 'Check the 6-digit code the visitor received by email. Only after it succeeds may you show or change their information.', input_schema: { type: 'object', properties: { code: { type: 'string' } }, required: ['code'] } },
+    async run() { throw new Error('Only in website chat'); },
+  },
+  my_records: {
+    write: true,
+    publicOnly: true,
+    def: { name: 'my_records', description: "The verified visitor's own records of one kind (for example their cases or orders). Only works after verify_code.", input_schema: { type: 'object', properties: { kind: { type: 'string', description: 'Which records, e.g. "Your cases"' } }, required: ['kind'] } },
+    async run() { throw new Error('Only in website chat'); },
+  },
+  update_my_details: {
+    write: true,
+    publicOnly: true,
+    def: { name: 'update_my_details', description: "Change the verified visitor's own contact details (only the allowed fields). Confirm the new values first.", input_schema: { type: 'object', properties: { fields: { type: 'object', description: 'Field API name to new value' } }, required: ['fields'] } },
+    async run() { throw new Error('Only in website chat'); },
+  },
+  run_customer_action: {
+    write: true,
+    publicOnly: true,
+    def: { name: 'run_customer_action', description: 'Do one of the allowed things for the verified visitor (for example start a return). Confirm first. Their identity is added automatically.', input_schema: { type: 'object', properties: { action: { type: 'string', description: 'The action key' }, inputs: { type: 'object' } }, required: ['action'] } },
+    async run() { throw new Error('Only in website chat'); },
+  },
+  talk_to_person: {
+    write: true,
+    publicOnly: true,
+    def: { name: 'talk_to_person', description: 'Hand the conversation to a person: opens a case with the chat so far; the team replies by email. Use when asked for a person or when you cannot help.', input_schema: { type: 'object', properties: { summary: { type: 'string' }, email: { type: 'string', description: 'Only if the visitor has not verified their email in this chat' } }, required: ['summary'] } },
+    async run() { throw new Error('Only in website chat'); },
+  },
   open_case: {
     write: true,
     publicOnly: true,
@@ -185,6 +223,15 @@ export const TOOLS: Record<string, Tool> = {
       // Same answer whether the case doesn't exist or the email doesn't match: nothing to learn by guessing.
       if (!c || ![c.SuppliedEmail, c.ContactEmail].some((e) => e && e.toLowerCase() === mail)) return 'No case found with that number and email.';
       return { caseNumber: c.CaseNumber, subject: c.Subject, status: c.Status, lastUpdated: c.LastModifiedDate };
+    },
+  },
+  web_search: {
+    write: false,
+    server: true,
+    // Anthropic's web search: Claude searches, reads the results and cites them. $10 per 1,000 searches.
+    def: { type: 'web_search_20260209', name: 'web_search', max_uses: 5 } as Anthropic.ToolUnion,
+    async run() {
+      throw new Error('web_search runs on the AI provider');
     },
   },
   find_org_actions: {

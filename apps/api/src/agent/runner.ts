@@ -18,7 +18,13 @@ export interface AgentSpec {
 // Standalone single-agent run (the "Single agents" page). Workflows use the engine instead.
 export async function runAgent(
   tenantId: string, agent: AgentSpec, userInput: string, context?: unknown, history?: { role: 'user' | 'assistant'; text: string }[],
-  opts: { onStarted?: (runId: string) => void; /** Salesforce tools run inside Salesforce as the person asking. */ inOrg?: boolean; startedBy?: string } = {},
+  opts: {
+    onStarted?: (runId: string) => void;
+    /** Salesforce tools run inside Salesforce as the person asking. */ inOrg?: boolean;
+    startedBy?: string;
+    /** Runs some tools itself (website chat self-service); undefined = the normal tool. */
+    exec?: (name: string, input: unknown) => Promise<unknown> | undefined;
+  } = {},
 ) {
   const accountId = await accountOf(tenantId);
   checkRunRate(accountId);
@@ -34,6 +40,7 @@ export async function runAgent(
   );
   const runId = rows[0].id as string;
   if (opts.inOrg) remote.exec = remoteExecutor(runId);
+  else if (opts.exec) remote.exec = opts.exec;
   opts.onStarted?.(runId);
   try {
     const r = await llm.agent({

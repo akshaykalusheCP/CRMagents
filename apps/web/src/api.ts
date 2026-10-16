@@ -29,7 +29,14 @@ export interface RecordSuggestion {
   status: 'new' | 'helpful' | 'not_helpful' | 'dismissed'; agentName: string | null; decidedBy: string | null; createdAt: string;
 }
 export interface SfPage { id: string; label: string; managed: boolean }
-export interface PublicChat { enabled: boolean; origins: string; cases: boolean; greeting: string; snippet: string }
+export interface SelfService {
+  verify: boolean;
+  records: { object: string; label: string; match: 'contact' | 'account' | 'email'; emailField?: string; fields: string[] }[];
+  actions: { key: string; label: string; description?: string }[];
+  updatable: string[];
+  handoff: boolean;
+}
+export interface PublicChat { enabled: boolean; origins: string; cases: boolean; greeting: string; snippet: string; selfService: SelfService }
 export interface Agent { id: string; name: string; systemPrompt: string; tools: string[] }
 export interface ToolInfo { name: string; description: string; write: boolean }
 export interface Run {

@@ -12,6 +12,13 @@ export const WIDGET_JS = String.raw`(function () {
   var store = 'crmagents-chat-' + key;
   var msgs = [];
   try { msgs = JSON.parse(sessionStorage.getItem(store) || '[]'); } catch (e) { msgs = []; }
+  // This conversation's id: a verified email stays verified for it until the tab is closed.
+  var sid = null;
+  try { sid = sessionStorage.getItem(store + '-sid'); } catch (e) {}
+  if (!sid) {
+    sid = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) { var r = Math.random() * 16 | 0; return (c === 'x' ? r : (r & 3 | 8)).toString(16); });
+    try { sessionStorage.setItem(store + '-sid', sid); } catch (e) {}
+  }
 
   var host = document.createElement('div');
   host.style.cssText = 'position:fixed;right:20px;bottom:20px;z-index:2147483000';
@@ -76,7 +83,7 @@ export const WIDGET_JS = String.raw`(function () {
     render(text, 'u');
     var t = render('Typing…', 'a typing');
     send.disabled = true;
-    fetch(api, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: msgs.slice(-20) }) })
+    fetch(api, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ messages: msgs.slice(-20), sessionId: sid }) })
       .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, j: j }; }); })
       .then(function (x) {
         t.remove();

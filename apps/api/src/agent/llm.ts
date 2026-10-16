@@ -120,6 +120,21 @@ export function createLlm(
     const messages: Anthropic.MessageParam[] = [...past, { role: 'user', content: mask(o.prompt) }];
     const trace: ToolTrace[] = [];
     let usage = emptyUsage();
+    // The answer's text (kept across paused turns) and the web pages it cited.
+    let answer: string[] = [];
+    const cited = new Map<string, string>();
+    const collectText = (content: Anthropic.ContentBlock[]) => {
+      for (const b of content) {
+        if (b.type !== 'text') continue;
+        answer.push(b.text);
+        for (const c of b.citations ?? []) if (c.type === 'web_search_result_location' && c.url) cited.set(c.url, c.title ?? c.url);
+      }
+    };
+    const finalText = () => {
+      const text = answer.join('');
+      if (!cited.size) return text;
+      return `${text}\n\nSources: ${[...cited].slice(0, 6).map(([url, title]) => `[${title.replace(/[[\]]/g, '')}](${url})`).join(' · ')}`;
+    };
 
     for (let turn = 0; turn < MAX_TURNS; turn++) {
       await guard?.(spent);
@@ -129,7 +144,7 @@ export function createLlm(
         max_tokens: 16000, // backstop only; thinking counts toward it
         system: [{ type: 'text', text: systemText, cache_control: { type: 'ephemeral' } }],
         cache_control: { type: 'ephemeral' },
-        ...(defs.length ? { tools: defs.map((t) => t.def) } : {}),
+        ...(defs.length ? { tools: defs.map((t) => serverToolFor(t.def, model)) } : {}),
         ...outputConfig(o),
         messages,
       });
@@ -139,10 +154,16 @@ export function createLlm(
       if (res.stop_reason === 'refusal') throw new Error('The AI model declined this request.');
       // Append the response unchanged: the conversation stays append-only, which keeps the cache valid.
       messages.push({ role: 'assistant', content: res.content });
+      const searches = res.usage.server_tool_use?.web_search_requests ?? 0;
+      if (searches) trace.push({ tool: 'web_search', input: { searches }, ok: true });
+      collectText(res.content);
+      // A long web search can pause the turn: send it back as it is and the server carries on.
+      if (res.stop_reason === 'pause_turn') continue;
       const uses = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
       if (res.stop_reason !== 'tool_use' || uses.length === 0) {
-        return { text: res.content.map((b) => (b.type === 'text' ? b.text : '')).join(''), usage, trace };
+        return { text: finalText(), usage, trace };
       }
+      answer = []; // text before tool calls is narration, not the answer
       const results: Anthropic.ToolResultBlockParam[] = [];
       for (const use of uses) {
         try {
@@ -171,6 +192,12 @@ export function createLlm(
     agent,
     complete: single,
   };
+}
+
+/** The web search version the model supports (dynamic filtering needs a current Opus or Sonnet). */
+function serverToolFor(def: Anthropic.ToolUnion, model: string): Anthropic.ToolUnion {
+  if ((def as { type?: string }).type === 'web_search_20260209' && /haiku/i.test(model)) return { ...def, type: 'web_search_20250305' } as Anthropic.ToolUnion;
+  return def;
 }
 
 export function parseJsonLoose(text: string): any {

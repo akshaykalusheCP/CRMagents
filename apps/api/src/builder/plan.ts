@@ -2,7 +2,7 @@
 // so the model only spends tokens on understanding the request, not on wiring blocks together.
 
 export const OPERATORS = ['equals', 'not_equals', 'contains', 'greater_than', 'less_than', 'is_empty', 'not_empty'] as const;
-export const ACTIONS = ['classify', 'extract', 'ai_write', 'research', 'query', 'create_task', 'update_record', 'create_record', 'notify_slack', 'run_action', 'wait', 'search_knowledge', 'suggest', 'delete_record', 'read_files', 'attach_file'] as const;
+export const ACTIONS = ['classify', 'extract', 'ai_write', 'research', 'query', 'create_task', 'update_record', 'create_record', 'notify_slack', 'run_action', 'wait', 'search_knowledge', 'suggest', 'delete_record', 'read_files', 'attach_file', 'web_research'] as const;
 
 export type Action = (typeof ACTIONS)[number];
 
@@ -135,6 +135,7 @@ Steps run in order. Actions:
 - wait: pause before the next steps (wait_amount, wait_unit), e.g. "if no reply in 3 days" = wait 3 days, then a query/only_if that checks the record again.
 - search_knowledge: find matching sections in the company's uploaded documents (support guides, policies). instruction = what to look up, usually the record's own words, e.g. "{record.Subject} {record.Description}". No AI, free. Output: text (numbered sections), sources. A later ai_write automatically gets these sections; tell it what to write (e.g. "troubleshooting steps for this case").
 - suggest: show advice on the record's page in Salesforce (subject = short title, message = the text, usually {stepN.text} of an ai_write). Changes nothing in Salesforce, so it needs no approval. Prefer it over update_record when the admin wants a recommendation, suggested reply or next steps "on the case/record".
+- web_research: AI searches the internet (company or person background, news, funding, competitors) and writes what it found with sources. instruction = what to find out, e.g. "What does {record.Company} do, how big is it and any recent news?". Output: text. Costs about $0.05 per run.
 - read_files: the text of the files attached to the triggering record (PDF, Word, text). No AI. A later ai_write automatically gets it.
 - attach_file: save text as a file on the triggering record (subject = file name, message = content, usually {stepN.text}).
 - delete_record: delete the triggering record (or the current record inside a per_record query). It goes to the Recycle Bin.

@@ -524,7 +524,11 @@ app.post('/api/tenants/:tenantId/record-suggestions/:id', async (req) => {
 
 // ---- Tools catalog ----
 app.get('/api/tools', async () =>
-  Object.values(TOOLS).filter((t) => !t.publicOnly).map((t) => ({ name: t.def.name, description: t.def.description, write: t.write })),
+  Object.entries(TOOLS).filter(([, t]) => !t.publicOnly).map(([name, t]) => ({
+    name,
+    description: 'description' in t.def && t.def.description ? t.def.description : 'Search the internet and read pages (company and person research, news, competitors). Answers cite their sources. About $0.01 per search.',
+    write: t.write,
+  })),
 );
 
 // ---- Agents ----
@@ -577,7 +581,7 @@ app.get('/api/tenants/:tenantId/agents/:agentId/public', async (req) => {
 });
 app.put('/api/tenants/:tenantId/agents/:agentId/public', async (req) => {
   const { tenantId, agentId } = req.params as { tenantId: string; agentId: string };
-  const b = z.object({ enabled: z.boolean(), origins: z.string().max(2000).default(''), cases: z.boolean().default(true), greeting: z.string().max(300).default('') }).parse(req.body);
+  const b = z.object({ enabled: z.boolean(), origins: z.string().max(2000).default(''), cases: z.boolean().default(true), greeting: z.string().max(300).default(''), selfService: z.unknown().optional() }).parse(req.body);
   return setPublicChat(tenantId, agentId, b);
 });
 

@@ -39,6 +39,7 @@ export function usageFrom(model: string, u: {
   cache_read_input_tokens?: number | null;
   /** Set by the adapter for other AI providers, which price differently. */
   cost_usd?: number;
+  server_tool_use?: { web_search_requests?: number } | null;
 }): Usage {
   const input = u.input_tokens;
   const cacheWrite = u.cache_creation_input_tokens ?? 0;
@@ -46,7 +47,9 @@ export function usageFrom(model: string, u: {
   const long = model === 'claude-haiku-5-5' && input + cacheWrite + cacheRead > 100_000;
   const r = long ? HAIKU_LONG : (RATES[model] ?? FALLBACK);
   const output = u.output_tokens;
-  const costUsd = typeof u.cost_usd === 'number' ? u.cost_usd : (input * r.input + cacheWrite * r.cacheWrite5m + cacheRead * r.cacheRead + output * r.output) / 1_000_000;
+  const tokens = typeof u.cost_usd === 'number' ? u.cost_usd : (input * r.input + cacheWrite * r.cacheWrite5m + cacheRead * r.cacheRead + output * r.output) / 1_000_000;
+  // Web search: $10 per 1,000 searches.
+  const costUsd = tokens + (u.server_tool_use?.web_search_requests ?? 0) * 0.01;
   return { input, cacheWrite, cacheRead, output, costUsd };
 }
 

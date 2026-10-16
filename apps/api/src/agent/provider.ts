@@ -77,7 +77,8 @@ export function toChat(req: any, o: Pick<CompatOptions, 'model' | 'fastModel'>) 
     model: fast ? o.fastModel : o.model,
     messages,
     max_completion_tokens: req.max_tokens,
-    ...(req.tools?.length ? { tools: req.tools.map((t: any) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } })) } : {}),
+    // Claude's own server tools (web search) have no equivalent here and are left out.
+    ...(req.tools?.some((t: any) => t.input_schema) ? { tools: req.tools.filter((t: any) => t.input_schema).map((t: any) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } })) } : {}),
     ...(schema ? { response_format: { type: 'json_schema', json_schema: { name: 'answer', schema, strict: false } } } : {}),
   };
 }
