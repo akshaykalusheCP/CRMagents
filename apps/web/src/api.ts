@@ -115,16 +115,20 @@ export interface TileData extends TileSpec { columns: string[]; rows: Record<str
 export interface DashDraft { name: string; description: string; questions: string[]; warnings: string[]; costUsd: number; tiles: TileData[] }
 export interface DashSummary { id: string; name: string; description: string; updated_at: string; tiles: number }
 export interface Dashboard { id: string; name: string; description: string; prompt: string; range: DashRange; tiles: TileData[] }
-export interface WorkflowRow { id: string; name: string; graph: Workflow; updated_at: string; sf_flow_name?: string | null; sf_deployed_at?: string | null; live?: boolean; live_since?: string | null; watch_error?: string | null; realtime?: boolean; allowed_fields?: Record<string, string[]> }
+export interface WorkflowRow { id: string; name: string; graph: Workflow; updated_at: string; sf_flow_name?: string | null; sf_deployed_at?: string | null; live?: boolean; live_since?: string | null; watch_error?: string | null; paused_reason?: string | null; realtime?: boolean; allowed_fields?: Record<string, string[]> }
 export interface Settings {
   callbackUrl: string; sfClientId: string; sfLoginUrl: string;
   sfClientSecret: { set: boolean }; anthropicKey: { set: boolean }; dailyBudgetUsd: string; anthropicWorkspaceId: string; aiCacheHours: string;
   maskPii?: string; maskFields?: string; maxAiCalls?: string; maxToolCalls?: string; maxTokens?: string; retentionDays?: string;
   aiProvider?: string; providerKey?: { set: boolean }; aiBaseUrl?: string; aiModel?: string; aiFastModel?: string; aiPriceIn?: string; aiPriceOut?: string;
-  auditInSalesforce?: string;
+  auditInSalesforce?: string; alertEmails?: string; autoPauseAfter?: string;
 }
 
 export interface Me { id: string; email: string; accountName: string; role: string }
+export interface TeamUser { id: string; email: string; role: string; createdAt: string; lastLoginAt: string | null }
+export interface TeamInvite { id: string; email: string; role: string; invitedBy: string | null; expiresAt: string; createdAt: string }
+export interface Team { me: string; canManage: boolean; users: TeamUser[]; invites: TeamInvite[] }
+export interface Alert { id: string; kind: string; title: string; body: string; tenantId: string | null; workflowId: string | null; readAt: string | null; createdAt: string }
 
 export interface UsageSummary {
   runs: number; costUsd: number; budgetUsd: number | null; cacheHitRate: number | null;
@@ -137,6 +141,19 @@ export const api = {
   me: () => req<Me>('GET', '/api/auth/me'),
   login: (email: string, password: string) => req('POST', '/api/auth/login', { email, password }),
   signup: (b: { accountName: string; email: string; password: string }) => req('POST', '/api/auth/signup', b),
+  forgot: (email: string) => req('POST', '/api/auth/forgot', { email }),
+  resetPassword: (token: string, password: string) => req('POST', '/api/auth/reset', { token, password }),
+  invite: (token: string) => req<{ email: string; role: string; invitedBy: string | null; accountName: string }>('GET', `/api/auth/invite/${encodeURIComponent(token)}`),
+  acceptInvite: (token: string, password: string) => req('POST', '/api/auth/accept', { token, password }),
+  changePassword: (current: string, password: string) => req('POST', '/api/auth/password', { current, password }),
+  team: () => req<Team>('GET', '/api/team'),
+  inviteUser: (email: string, role: string) => req<{ id: string; link: string; emailed: boolean }>('POST', '/api/team/invites', { email, role }),
+  cancelInvite: (id: string) => req('DELETE', `/api/team/invites/${id}`),
+  setUserRole: (id: string, role: string) => req('PUT', `/api/team/users/${id}`, { role }),
+  removeUser: (id: string) => req('DELETE', `/api/team/users/${id}`),
+  resetLink: (id: string) => req<{ link: string; emailed: boolean }>('POST', `/api/team/users/${id}/reset-link`, {}),
+  alerts: () => req<{ alerts: Alert[]; unread: number }>('GET', '/api/alerts'),
+  readAlerts: () => req('POST', '/api/alerts/read', {}),
   logout: () => req('POST', '/api/auth/logout', {}),
   settings: () => req<Settings>('GET', '/api/settings'),
   saveSettings: (b: Record<string, string>) => req('PUT', '/api/settings', b),

@@ -29,10 +29,12 @@ export const SETTING_KEYS = {
   auditInSalesforce: 'AUDIT_IN_SALESFORCE',
   impactHourlyRate: 'IMPACT_HOURLY_RATE',
   impactMinutes: 'IMPACT_MINUTES',
+  alertEmails: 'ALERT_EMAILS',
+  autoPauseAfter: 'AUTO_PAUSE_AFTER',
 } as const;
 
 /** Settings shown as plain values in the UI (not secrets). */
-export const PLAIN_SETTINGS: SettingName[] = ['sfClientId', 'sfLoginUrl', 'dailyBudgetUsd', 'anthropicWorkspaceId', 'aiCacheHours', 'maskPii', 'maskFields', 'maxAiCalls', 'maxToolCalls', 'maxTokens', 'retentionDays', 'aiProvider', 'aiBaseUrl', 'aiModel', 'aiFastModel', 'aiPriceIn', 'aiPriceOut', 'auditInSalesforce', 'impactHourlyRate', 'impactMinutes'];
+export const PLAIN_SETTINGS: SettingName[] = ['sfClientId', 'sfLoginUrl', 'dailyBudgetUsd', 'anthropicWorkspaceId', 'aiCacheHours', 'maskPii', 'maskFields', 'maxAiCalls', 'maxToolCalls', 'maxTokens', 'retentionDays', 'aiProvider', 'aiBaseUrl', 'aiModel', 'aiFastModel', 'aiPriceIn', 'aiPriceOut', 'auditInSalesforce', 'impactHourlyRate', 'impactMinutes', 'alertEmails', 'autoPauseAfter'];
 export type SettingName = keyof typeof SETTING_KEYS;
 
 export async function getSetting(accountId: string, name: SettingName): Promise<string | undefined> {

@@ -1,27 +1,56 @@
 import { ArrowUpRight, ChevronRight, ShieldCheck, Sparkles } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { api } from '../api';
 import { Ribbon } from '../components/Ribbon';
 
 // Signed-out home: hero with the sign-in card, then three small, real-looking previews of what the product does.
 
+type Mode = 'login' | 'signup' | 'forgot' | 'reset' | 'invite';
+const ROLE_NAME: Record<string, string> = { admin: 'an admin', builder: 'a builder', approver: 'an approver', owner: 'an owner' };
+
+/** Removes ?invite= / ?reset= from the address once used, so a refresh doesn't reuse the link. */
+const dropToken = () => { const u = new URL(location.href); u.searchParams.delete('invite'); u.searchParams.delete('reset'); history.replaceState(null, '', u.pathname + (u.search ? u.search : '')); };
+
 export function AuthPage({ onDone }: { onDone: () => void }) {
-  const [mode, setMode] = useState<'login' | 'signup'>('login');
+  const q = new URLSearchParams(location.search);
+  const token = q.get('invite') ?? q.get('reset') ?? '';
+  const [mode, setMode] = useState<Mode>(q.get('invite') ? 'invite' : q.get('reset') ? 'reset' : 'login');
   const [f, setF] = useState({ accountName: '', email: '', password: '' });
   const [err, setErr] = useState('');
+  const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
+  const [invite, setInvite] = useState<{ email: string; role: string; invitedBy: string | null; accountName: string } | null>(null);
+
+  useEffect(() => {
+    if (mode !== 'invite' || !token) return;
+    api.invite(token).then(setInvite).catch((e) => setErr((e as Error).message));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setBusy(true); setErr('');
+    setBusy(true); setErr(''); setNote('');
     try {
       if (mode === 'login') await api.login(f.email, f.password);
-      else await api.signup(f);
+      else if (mode === 'signup') await api.signup(f);
+      else if (mode === 'forgot') {
+        await api.forgot(f.email);
+        setNote('If that email has a CRMagents login, a reset link is on its way. It works for 2 hours. No email? Ask an admin in your company for a reset link.');
+        setBusy(false);
+        return;
+      } else if (mode === 'reset') { await api.resetPassword(token, f.password); dropToken(); }
+      else { await api.acceptInvite(token, f.password); dropToken(); }
       onDone();
     } catch (e) { setErr((e as Error).message); }
     setBusy(false);
   };
-  const go = (m: 'login' | 'signup') => { setMode(m); setErr(''); document.getElementById('auth-email')?.focus(); };
+  const go = (m: Mode) => { if (m === 'login' || m === 'signup') dropToken(); setMode(m); setErr(''); setNote(''); document.getElementById('auth-email')?.focus(); };
+  const title = { login: 'Log in to your workspace', signup: 'Create your workspace', forgot: 'Reset your password', reset: 'Choose a new password', invite: invite ? `Join ${invite.accountName}` : 'Join your team' }[mode];
+  const action = { login: 'Log in', signup: 'Create account', forgot: 'Send reset link', reset: 'Save password', invite: 'Join workspace' }[mode];
+  const needsEmail = mode === 'login' || mode === 'signup' || mode === 'forgot';
+  // A dead invitation link: say so, and offer only the way back.
+  const deadInvite = mode === 'invite' && !invite && !!err;
+  const needsPassword = mode !== 'forgot' && !deadInvite;
+  const newPassword = mode !== 'login';
 
   return (
     <div className="landing">
@@ -53,20 +82,36 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
             </div>
           </div>
 
-          <form className="land-card" onSubmit={submit} aria-label={mode === 'login' ? 'Log in' : 'Create account'}>
-            <h2>{mode === 'login' ? 'Log in to your workspace' : 'Create your workspace'}</h2>
+          <form className="land-card" onSubmit={submit} aria-label={title}>
+            <h2>{title}</h2>
+            {mode === 'invite' && invite && (
+              <p className="auth-lede">{invite.invitedBy ?? 'Your team'} invited <b>{invite.email}</b> to join as {ROLE_NAME[invite.role] ?? invite.role}. Choose a password to get started.</p>
+            )}
+            {mode === 'reset' && <p className="auth-lede">Choose a new password. You'll be signed out on your other devices.</p>}
+            {mode === 'forgot' && <p className="auth-lede">Enter the email you log in with and we'll send you a link to choose a new password.</p>}
             {mode === 'signup' && (
               <label>Company name<input id="auth-company" value={f.accountName} onChange={(e) => setF({ ...f, accountName: e.target.value })} required /></label>
             )}
-            <label>Email<input id="auth-email" type="email" autoComplete="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} required /></label>
-            <label>Password<input id="auth-password" type="password" autoComplete={mode === 'login' ? 'current-password' : 'new-password'} minLength={10} value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} required />
-              {mode === 'signup' && <span className="muted small">At least 10 characters.</span>}
-            </label>
+            {needsEmail && <label>Email<input id="auth-email" type="email" autoComplete="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} required /></label>}
+            {needsPassword && (
+              <label>
+                <span className="auth-label-row">{newPassword ? 'New password' : 'Password'}
+                  {mode === 'login' && <button type="button" className="auth-forgot" onClick={() => go('forgot')}>Forgot password?</button>}
+                </span>
+                <input id="auth-password" type="password" autoComplete={newPassword ? 'new-password' : 'current-password'} minLength={10} value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} required />
+                {newPassword && <span className="muted small">At least 10 characters.</span>}
+              </label>
+            )}
             {err && <div className="err">{err}</div>}
-            <button className="land-btn primary wide" disabled={busy}>{mode === 'login' ? 'Log in' : 'Create account'} <ChevronRight size={15} /></button>
-            <button type="button" className="land-switch" onClick={() => go(mode === 'login' ? 'signup' : 'login')}>
-              {mode === 'login' ? 'New here? Create an account' : 'Already have an account? Log in'}
-            </button>
+            {note && <div className="auth-note">{note}</div>}
+            {!deadInvite && <button className="land-btn primary wide" disabled={busy || (mode === 'invite' && !invite)}>{action} <ChevronRight size={15} /></button>}
+            {mode === 'login' || mode === 'signup' ? (
+              <button type="button" className="land-switch" onClick={() => go(mode === 'login' ? 'signup' : 'login')}>
+                {mode === 'login' ? 'New here? Create an account' : 'Already have an account? Log in'}
+              </button>
+            ) : (
+              <button type="button" className="land-switch" onClick={() => go('login')}>Back to log in</button>
+            )}
           </form>
         </div>
       </section>

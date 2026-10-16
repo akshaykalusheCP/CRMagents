@@ -36,6 +36,8 @@ import { publicChatInfo, registerPublicChat, setPublicChat } from './agent/publi
 import { addToRecordPage, addToUtilityBar, listPages } from './salesforce/pages.js';
 import { impact, setAssumptions } from './insights/impact.js';
 import { config } from './config.js';
+import { registerTeam } from './team.js';
+import { listAlerts, markAlertsRead } from './alerts.js';
 import { migrate, pool } from './db.js';
 import { buildAuthorizeUrl, handleCallback, redirectUri, validateOwnApp } from './salesforce/oauth.js';
 import { getSetting, PLAIN_SETTINGS, setSetting, SETTING_KEYS, type SettingName } from './settings.js';
@@ -48,6 +50,7 @@ registerSfBridge(app);
 registerWebhooks(app);
 registerPublicChat(app);
 registerAuth(app);
+registerTeam(app);
 
 app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
   const code = err instanceof z.ZodError ? 400 : (err.statusCode ?? 500);
@@ -138,6 +141,8 @@ const settingsBody = z.object({
   aiModel: z.string().max(100).regex(/^[\w.:/-]*$/, 'Model name, e.g. gpt-5').optional(),
   aiFastModel: z.string().max(100).regex(/^[\w.:/-]*$/, 'Model name').optional(),
   aiPriceIn: z.string().regex(/^(\d+(\.\d+)?)?$/, 'USD per million tokens').optional(),
+  alertEmails: z.enum(['on', 'off', '']).optional(),
+  autoPauseAfter: z.string().regex(/^(\d{1,2})?$/, 'A whole number of failures in a row (0 never pauses)').optional(),
   aiPriceOut: z.string().regex(/^(\d+(\.\d+)?)?$/, 'USD per million tokens').optional(),
   auditInSalesforce: z.enum(['on', 'off', '']).optional(),
 });
@@ -451,6 +456,10 @@ app.get('/api/tenants/:tenantId/impact', async (req) => {
   const { days } = z.object({ days: z.coerce.number().int().refine((d) => [7, 30, 90].includes(d), '7, 30 or 90 days').default(30) }).parse(req.query);
   return impact((req.params as { tenantId: string }).tenantId, req.user!.accountId, days);
 });
+// ---- Alerts (agents failing, orgs disconnected) ----
+app.get('/api/alerts', async (req) => listAlerts(req.user!.accountId));
+app.post('/api/alerts/read', async (req) => { await markAlertsRead(req.user!.accountId); return { ok: true }; });
+
 app.put('/api/impact/assumptions', async (req) => {
   const n = z.number().min(0).max(600);
   const b = z.object({ hourlyRate: z.number().min(1).max(10_000), minutes: z.object({ change: n, aiStep: n, replySent: n, suggestionUsed: n, answer: n, chat: n }) }).parse(req.body);
@@ -625,7 +634,7 @@ const wfBody = z.object({
 
 app.get('/api/tenants/:tenantId/workflows', async (req) => {
   const { rows } = await pool.query(
-    'select id, name, graph, updated_at, sf_flow_name, sf_deployed_at, live, live_since, watch_error, realtime, allowed_fields from workflows where tenant_id=$1 order by updated_at desc',
+    'select id, name, graph, updated_at, sf_flow_name, sf_deployed_at, live, live_since, watch_error, paused_reason, realtime, allowed_fields from workflows where tenant_id=$1 order by updated_at desc',
     [(req.params as { tenantId: string }).tenantId],
   );
   return rows;

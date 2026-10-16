@@ -10,6 +10,10 @@ function route(method: string, url: URL, body: any): Response {
   const p = url.pathname.replace(/^\/api\/tenants\/[^/]+/, '/t');
   if (p === '/api/auth/me') return json({ id: 'demo', email: 'owner@demo-company.com', accountName: 'Demo Company', role: 'owner' });
   if (p === '/api/tenants') return json([fx.tenant]);
+  if (p === '/api/team') return json(DEMO_TEAM);
+  if (p === '/api/team/invites') return json({ id: 'i9', link: `${location.origin}/?invite=demo-link`, emailed: false });
+  if (/^\/api\/team\/users\/[^/]+\/reset-link$/.test(p)) return json({ link: `${location.origin}/?reset=demo-link`, emailed: true });
+  if (p === '/api/alerts') return json(DEMO_ALERTS);
   if (p === '/t/insights') return json((fx.insights as Record<string, unknown>)[url.searchParams.get('period') ?? '30'] ?? fx.insights['30']);
   if (p === '/t/insights/summary') return json(fx.brief);
   if (p === '/t/builder/chat') return json(demoChat(body));
@@ -80,7 +84,7 @@ const DEMO_AGENTS = [
   { id: 'w1', name: 'Case triage', live: true, live_since: ago(300), watch_error: null, updated_at: ago(5), allowed_fields: { Case: ['Status', 'Priority'] }, graph: g(['trigger.salesforce', 'sf.getRecord', 'ai.classify', 'logic.approval', 'sf.updateRecord', 'sf.createTask', 'util.output'], { objectApiName: 'Case' }) },
   { id: 'w2', name: 'Stale deal follow-ups', live: true, live_since: ago(200), watch_error: null, updated_at: ago(30), graph: g(['trigger.schedule', 'sf.query', 'logic.loop', 'sf.createTask', 'util.output'], { every: 'week', at: '08:00' }) },
   { id: 'w3', name: 'Escalated case follow-up', live: true, live_since: ago(50), watch_error: 'Salesforce session expired. Reconnect the org.', updated_at: ago(52), graph: g(['trigger.salesforce', 'logic.branch', 'sf.action', 'sf.createTask', 'util.output'], { objectApiName: 'Case' }) },
-  { id: 'w4', name: 'Lead scoring', live: false, live_since: null, watch_error: null, updated_at: ago(80), graph: g(['trigger.salesforce', 'sf.getRecord', 'ai.extract', 'sf.updateRecord', 'util.output'], { objectApiName: 'Lead' }) },
+  { id: 'w4', name: 'Lead scoring', live: false, live_since: null, watch_error: null, paused_reason: 'Paused after 5 failed runs in a row. Last error: Required field missing: Industry', updated_at: ago(80), graph: g(['trigger.salesforce', 'sf.getRecord', 'ai.extract', 'sf.updateRecord', 'util.output'], { objectApiName: 'Lead' }) },
   { id: 'w5', name: 'Account summary', live: false, live_since: null, watch_error: null, updated_at: ago(400), graph: g(['trigger.manual', 'ai.agent', 'util.output'], {}) },
 ];
 const names = ['Case triage', 'Stale deal follow-ups', 'Escalated case follow-up', 'Lead scoring'];
@@ -187,3 +191,21 @@ function demoImpact(days: number) {
     series,
   };
 }
+
+const DEMO_TEAM = {
+  me: 'demo', canManage: true,
+  users: [
+    { id: 'demo', email: 'owner@demo-company.com', role: 'owner', createdAt: ago(900), lastLoginAt: ago(0.1) },
+    { id: 'u2', email: 'priya@demo-company.com', role: 'admin', createdAt: ago(600), lastLoginAt: ago(20) },
+    { id: 'u3', email: 'marco@demo-company.com', role: 'builder', createdAt: ago(300), lastLoginAt: ago(50) },
+    { id: 'u4', email: 'support-lead@demo-company.com', role: 'approver', createdAt: ago(120), lastLoginAt: ago(3) },
+  ],
+  invites: [{ id: 'i1', email: 'sam@demo-company.com', role: 'approver', invitedBy: 'owner@demo-company.com', expiresAt: ago(-140), createdAt: ago(28) }],
+};
+const DEMO_ALERTS = {
+  unread: 1,
+  alerts: [
+    { id: 'a1', kind: 'failing', title: '"Fill missing account data" is failing', body: 'The agent "Fill missing account data" failed its last 3 runs. It will be paused after 5 failures in a row.\n\nLast error: Required field missing: Industry', tenantId: 't', workflowId: 'w', readAt: null, createdAt: ago(2) },
+    { id: 'a2', kind: 'paused', title: '"Old lead router" was paused', body: 'The agent failed 5 times in a row, so CRMagents paused it.', tenantId: 't', workflowId: 'w2', readAt: ago(30), createdAt: ago(48) },
+  ],
+};

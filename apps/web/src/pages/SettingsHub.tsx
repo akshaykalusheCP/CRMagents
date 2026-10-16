@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { RulesPage } from './Rules';
-import type { Tenant } from '../api';
+import type { Me, Tenant } from '../api';
+import { TeamPage } from './Team';
 import { PageHeader } from '../components/ui';
 import { ConnectionsPage } from './Connections';
 import { SettingsPage } from './Settings';
@@ -9,11 +10,14 @@ import { SettingsPage } from './Settings';
 const SECTIONS = [
   { id: 'orgs', label: 'Salesforce orgs', desc: 'Connect orgs and check their status.' },
   { id: 'ai', label: 'AI & spending', desc: 'Your AI key, daily budget and answer reuse.' },
+  { id: 'team', label: 'Team', desc: 'Who can sign in, and what each person may do. Invite people by email.' },
   { id: 'rules', label: 'Rules', desc: 'Limits for every agent: things they must never do, or must ask a person about first. Checked by code before every change.' },
 ] as const;
 
-export function SettingsHub({ tenants, onChange, tenant, section, focusConnect }: { tenants: Tenant[]; onChange: () => void; tenant?: Tenant; section?: 'orgs' | 'ai' | 'rules'; focusConnect?: boolean }) {
-  const [tab, setTab] = useState<'orgs' | 'ai' | 'rules'>(section ?? 'orgs');
+export type SettingsSection = 'orgs' | 'ai' | 'team' | 'rules';
+
+export function SettingsHub({ tenants, onChange, tenant, section, focusConnect, me }: { tenants: Tenant[]; onChange: () => void; tenant?: Tenant; section?: SettingsSection; focusConnect?: boolean; me: Me }) {
+  const [tab, setTab] = useState<SettingsSection>(section ?? 'orgs');
   const cur = SECTIONS.find((s) => s.id === tab)!;
   return (
     <div className="pg">
@@ -24,7 +28,7 @@ export function SettingsHub({ tenants, onChange, tenant, section, focusConnect }
         </nav>
         <div>
           <div className="ph-text" style={{ marginBottom: 16 }}><h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>{cur.label}</h2><p className="ph-desc">{cur.desc}</p></div>
-          {tab === 'orgs' ? <ConnectionsPage tenants={tenants} onChange={onChange} goSettings={() => setTab('ai')} focusConnect={focusConnect} /> : tab === 'ai' ? <SettingsPage /> : <RulesPage tenant={tenant} />}
+          {tab === 'orgs' ? <ConnectionsPage tenants={tenants} onChange={onChange} goSettings={() => setTab('ai')} focusConnect={focusConnect} /> : tab === 'ai' ? <SettingsPage /> : tab === 'team' ? <TeamPage me={me} /> : <RulesPage tenant={tenant} />}
         </div>
       </div>
     </div>

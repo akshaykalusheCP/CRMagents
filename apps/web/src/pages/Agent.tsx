@@ -57,7 +57,7 @@ export function AgentPage({ tenant, row, onBack, onEdit, onChanged, onDeleted }:
     setBusy(label); setErr('');
     try { await fn(); } catch (e) { setErr((e as Error).message); } finally { setBusy(''); }
   };
-  const toggleLive = () => act('live', async () => { const r = await api.setLive(t, row.id, !row.live); onChanged({ live: r.live, watch_error: null }); toast(r.live ? 'Agent turned on' : 'Agent turned off'); });
+  const toggleLive = () => act('live', async () => { const r = await api.setLive(t, row.id, !row.live); onChanged({ live: r.live, watch_error: null, paused_reason: null }); toast(r.live ? 'Agent turned on' : 'Agent turned off'); });
   const letItAct = () => act('trust', async () => { const r = await api.dropApproval(t, row.id); onChanged({ graph: r.graph }); setHealth((h) => h && { ...h, suggestion: undefined }); toast('Approval step removed: it now acts on its own'); });
   const remove = () => act('delete', async () => { await api.deleteWorkflow(t, row.id); toast('Agent deleted', 'info'); onDeleted(); });
   // Objects this agent writes (where a field limit makes sense).
@@ -71,7 +71,7 @@ export function AgentPage({ tenant, row, onBack, onEdit, onChanged, onDeleted }:
   });
   const replay = async () => { setBt('loading'); try { setBt(await api.backtest(t, row.id)); } catch (e) { setBt({ error: (e as Error).message }); } };
 
-  const status = row.live ? (row.watch_error ? <Status tone="bad" title={row.watch_error}>Problem</Status> : <Status tone="ok">On</Status>) : <Status tone="neutral">Off</Status>;
+  const status = row.live ? (row.watch_error ? <Status tone="bad" title={row.watch_error}>Problem</Status> : <Status tone="ok">On</Status>) : row.paused_reason ? <Status tone="bad">Paused</Status> : <Status tone="neutral">Off</Status>;
   const done = runs.filter((r) => r.status !== 'waiting');
   const rate = done.length ? Math.round((done.filter((r) => r.status === 'done').length / done.length) * 100) : null;
   const cost30 = runs.filter((r) => Date.now() - Date.parse(r.created_at) < 30 * 86_400_000).reduce((a, r) => a + Number(r.cost_usd || 0), 0);
@@ -103,6 +103,9 @@ export function AgentPage({ tenant, row, onBack, onEdit, onChanged, onDeleted }:
             )}
           </div>
         </div>
+        {!row.live && row.paused_reason && (
+          <div className="paused-note" role="status"><b>Paused automatically.</b> {row.paused_reason.replace(/^Paused /, 'It was paused ')} Fix the cause, then turn it on again.</div>
+        )}
         <div className="ph-below">
           <div className="ptabs" role="tablist">
             {(['overview', 'runs', 'settings'] as TabId[]).map((x) => (

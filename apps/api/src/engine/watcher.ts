@@ -1,3 +1,4 @@
+import { purgeLimits } from '../ratelimit.js';
 import { NODE_DEF_BY_TYPE, type Workflow } from '@crmagents/shared';
 import { pool } from '../db.js';
 import { autoEnableCdc, enableCdc, LOCK_ID as STREAM_LOCK, streamHealthy, syncStreams } from '../smart/stream.js';
@@ -327,6 +328,7 @@ async function tick() {
       if (Date.now() - lastPurge > 3600_000) {
         lastPurge = Date.now();
         await purgeOldRuns().catch(() => undefined);
+        await purgeLimits().catch(() => undefined);
         // Knowledge articles and Files libraries from Salesforce: refreshed once a day.
         await syncDue().catch(() => undefined);
       }
@@ -378,7 +380,7 @@ export async function setLive(tenantId: string, workflowId: string, on: boolean)
   const { rows } = await pool.query('select graph from workflows where id=$1 and tenant_id=$2', [workflowId, tenantId]);
   if (!rows[0]) throw Object.assign(new Error('workflow not found'), { statusCode: 404 });
   const graph = rows[0].graph as Workflow;
-  const reset = "live=true, live_since=now(), watch_cursor=now(), watch_seen='[]', watch_state='{}', watch_error=null, poll_idle=0, poll_next_at=null";
+  const reset = "live=true, live_since=now(), watch_cursor=now(), watch_seen='[]', watch_state='{}', watch_error=null, paused_reason=null, poll_idle=0, poll_next_at=null";
   if (on) {
     if (graph.nodes.some((n) => n.type === 'trigger.schedule')) {
       // Scheduled agents: first run at the next slot after turning on.
@@ -412,7 +414,7 @@ export async function setLive(tenantId: string, workflowId: string, on: boolean)
     }
     return { live: true, object: trigs.map((t) => t.object).join(', '), event: trigs[0].event, realtime };
   }
-  await pool.query('update workflows set live=false, watch_error=null where id=$1', [workflowId]);
+  await pool.query('update workflows set live=false, watch_error=null, paused_reason=null where id=$1', [workflowId]);
   await pool.query('delete from trigger_values where workflow_id=$1', [workflowId]);
   return { live: false };
 }

@@ -60,7 +60,7 @@ export function HomePage({ me, tenant, go, newAgent }: { me: Me; tenant?: Tenant
   const agentRuns = runs.filter((r) => r.workflow_id);
   const waiting = runs.filter((r) => r.status === 'waiting');
   const failed = agentRuns.filter((r) => r.status === 'error' && Date.now() - Date.parse(r.created_at) < 86_400_000);
-  const broken = flows.filter((f) => f.live && f.watch_error);
+  const broken = flows.filter((f) => (f.live && f.watch_error) || (!f.live && f.paused_reason));
   const live = flows.filter((f) => f.live).length;
 
   // Runs per day for the last two weeks (zero-filled so quiet days show).
@@ -187,7 +187,7 @@ export function HomePage({ me, tenant, go, newAgent }: { me: Me; tenant?: Tenant
                 <div key={r.id} className="att-row"><Status tone="warn">Approve</Status><div className="grow"><b>{r.agent_name ?? 'Agent run'}</b><span>Waiting since {time(r.created_at)}</span></div><button className="sm" onClick={() => go('approvals')}>Review</button></div>
               ))}
               {broken.map((f) => (
-                <div key={f.id} className="att-row"><Status tone="bad">Problem</Status><div className="grow"><b>{f.name}</b><span>{f.watch_error}</span></div><button className="sm" onClick={() => go('agents')}>Open</button></div>
+                <div key={f.id} className="att-row"><Status tone="bad">{f.live ? 'Problem' : 'Paused'}</Status><div className="grow"><b>{f.name}</b><span>{f.live ? f.watch_error : f.paused_reason}</span></div><button className="sm" onClick={() => go('agents')}>Open</button></div>
               ))}
               {failed.slice(0, 4).map((r) => (
                 <div key={r.id} className="att-row"><Status tone="bad">Failed</Status><div className="grow"><b>{r.agent_name ?? 'Agent run'}</b><span>{time(r.created_at)}</span></div><button className="sm" onClick={() => go('activity')}>Details</button></div>

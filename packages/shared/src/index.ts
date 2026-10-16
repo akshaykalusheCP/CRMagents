@@ -726,3 +726,15 @@ export const USE_CASES: UseCase[] = [
     problem: 'Leaders start the week without a clear picture.',
     request: 'Every Monday at 7:30, summarise last week: new and won deals with amounts, pipeline change, new and closed cases, and the three things that need attention this week. Post it to Slack.' },
 ];
+
+// ---- Team roles ----
+/** owner: the person who signed up (one or more); admin: everything; builder: agents, assistants, guides; approver: approve, review, ask. */
+export type Role = 'owner' | 'admin' | 'builder' | 'approver';
+export const ROLES: { id: Exclude<Role, 'owner'>; label: string; help: string }[] = [
+  { id: 'admin', label: 'Admin', help: 'Everything, including Salesforce connections, settings, team and billing-related limits.' },
+  { id: 'builder', label: 'Builder', help: 'Builds and runs agents, assistants, dashboards and guides. No settings or team.' },
+  { id: 'approver', label: 'Approver', help: 'Approves changes, reviews runs and suggestions, asks assistants. Cannot change agents.' },
+];
+const RANK: Record<Role, number> = { approver: 1, builder: 2, admin: 3, owner: 4 };
+/** Does `role` include what `need` allows? */
+export const roleAtLeast = (role: string | undefined, need: Role) => (RANK[role as Role] ?? 0) >= RANK[need];

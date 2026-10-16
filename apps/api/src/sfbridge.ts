@@ -172,6 +172,9 @@ export function registerSfBridge(app: FastifyInstance) {
       id = rows[0]?.id;
     }
     if (!id) throw Object.assign(new Error(b.workflowName ? `No agent named "${b.workflowName}"` : 'Give an agent id or name'), { statusCode: 404 });
+    // Paused after failing again and again: Flows that start it are refused until someone turns it back on.
+    const { rows: p } = await pool.query('select paused_reason from workflows where id=$1 and tenant_id=$2', [id, tenantId]);
+    if (p[0]?.paused_reason) throw Object.assign(new Error(`This agent is paused. ${p[0].paused_reason}`), { statusCode: 409 });
     return startRunAsync(tenantId, id, {
       input: b.input, recordId: b.recordId, objectApiName: b.objectApiName, context: b.context, sfUserId: b.userId,
     }, (b.waitSeconds ?? 0) * 1000, b.userEmail);
@@ -181,11 +184,13 @@ export function registerSfBridge(app: FastifyInstance) {
   app.post('/sf/v1/run/batch', { bodyLimit: 5_000_000 }, async (req) => {
     const { items } = z.object({ items: z.array(runBody).min(1).max(2000) }).parse(req.body);
     const tenantId = req.sfTenant!.tenantId;
-    const { rows } = await pool.query('select id, lower(name) as name from workflows where tenant_id=$1', [tenantId]);
+    const { rows } = await pool.query('select id, lower(name) as name, paused_reason from workflows where tenant_id=$1', [tenantId]);
     const results = [];
     for (const b of items) {
       const id = b.workflowId ?? rows.find((w) => w.name === b.workflowName?.trim().toLowerCase())?.id;
       if (!id) { results.push({ status: 'error', error: b.workflowName ? `No agent named "${b.workflowName}"` : 'Give an agent id or name' }); continue; }
+      const paused = rows.find((w) => w.id === id)?.paused_reason;
+      if (paused) { results.push({ status: 'error', error: `This agent is paused. ${paused}` }); continue; }
       try {
         results.push(await queueRun(tenantId, id, { input: b.input, recordId: b.recordId, objectApiName: b.objectApiName, context: b.context, sfUserId: b.userId }, b.userEmail));
       } catch (e) {

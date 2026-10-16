@@ -142,8 +142,8 @@ export function WorkflowsPage({ tenant, goConnections, incoming, onIncomingOpene
 
   const create = (name: string, graph: Workflow) => { setCur({ key: crypto.randomUUID(), id: null, name, graph }); setPicker(false); };
 
-  const counts = { all: rows.length, on: rows.filter((w) => w.live && !w.watch_error).length, off: rows.filter((w) => !w.live).length, problem: rows.filter((w) => w.live && w.watch_error).length };
-  const shown = rows.filter((w) => filter === 'all' || (filter === 'on' ? w.live && !w.watch_error : filter === 'off' ? !w.live : w.live && !!w.watch_error));
+  const counts = { all: rows.length, on: rows.filter((w) => w.live && !w.watch_error).length, off: rows.filter((w) => !w.live).length, problem: rows.filter((w) => (w.live && w.watch_error) || w.paused_reason).length };
+  const shown = rows.filter((w) => filter === 'all' || (filter === 'on' ? w.live && !w.watch_error : filter === 'off' ? !w.live : (w.live && !!w.watch_error) || !!w.paused_reason));
   const open = (w: WorkflowRow) => setDetail(w);
   const columns: Column<WorkflowRow>[] = [
     { key: 'name', header: 'Agent', render: (w) => {
@@ -157,7 +157,7 @@ export function WorkflowsPage({ tenant, goConnections, incoming, onIncomingOpene
     } },
     { key: 'status', header: 'Status', render: (w) => w.live
       ? (w.watch_error ? <Status tone="bad" title={w.watch_error}>Problem</Status> : <Status tone="ok">On</Status>)
-      : <Status tone="neutral">Off</Status> },
+      : w.paused_reason ? <Status tone="bad" title={w.paused_reason}>Paused</Status> : <Status tone="neutral">Off</Status> },
     { key: 'health', header: 'Last 30 days', hideSm: true, render: (w) => {
       const h = health[w.id];
       if (!h || !h.runs) return <span className="muted">No runs</span>;

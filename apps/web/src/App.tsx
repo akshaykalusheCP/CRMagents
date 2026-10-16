@@ -1,6 +1,6 @@
-import { BarChart3, BookOpen, Bot, TrendingUp, ChevronRight, PanelLeft, PanelTop, Sparkles, Check, ChevronsUpDown, History, House, Inbox, LayoutDashboard, LogOut, Moon, Plus, Search, Settings as SettingsIcon, Sun } from 'lucide-react';
+import { BarChart3, BookOpen, Bot, TrendingUp, ChevronRight, PanelLeft, PanelTop, Sparkles, Check, ChevronsUpDown, History, House, Inbox, LayoutDashboard, LogOut, Moon, Plus, Search, Settings as SettingsIcon, Sun, Users } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { api, type Draft, type Me, type Tenant, type WorkflowRow } from './api';
+import { api, type Alert, type Draft, type Me, type Tenant, type WorkflowRow } from './api';
 import { CommandPalette, Menu, Toaster, type Command } from './components/ui';
 import { ApprovalsPage } from './pages/Approvals';
 import { HomePage } from './pages/Home';
@@ -8,7 +8,8 @@ import { InsightsPage } from './pages/Insights';
 import { KnowledgePage } from './pages/Knowledge';
 import { ImpactPage } from './pages/Impact';
 import { Ribbon } from './components/Ribbon';
-import { SettingsHub } from './pages/SettingsHub';
+import { SettingsHub, type SettingsSection } from './pages/SettingsHub';
+import { AlertsBell } from './components/AlertsBell';
 import { AuthPage } from './pages/Auth';
 import { RunsPage } from './pages/Runs';
 import { WorkflowsPage } from './pages/Workflows';
@@ -84,8 +85,13 @@ export function App() {
   const [layout, setLayout] = useState<'top' | 'side'>(() => { try { return localStorage.getItem('layout') === 'side' ? 'side' : 'top'; } catch { return 'top'; } });
   const switchLayout = () => { const next = layout === 'top' ? 'side' : 'top'; setLayout(next); try { localStorage.setItem('layout', next); } catch { /* ignore */ } };
   const [cmdk, setCmdk] = useState(false);
-  const [settingsAt, setSettingsAt] = useState<{ section: 'orgs' | 'ai' | 'rules'; connect?: boolean; n: number }>({ section: 'orgs', n: 0 });
-  const openSettings = (section: 'orgs' | 'ai' | 'rules' = 'orgs', connect = false) => { setSettingsAt((s) => ({ section, connect, n: s.n + 1 })); setTab('settings'); };
+  const [settingsAt, setSettingsAt] = useState<{ section: SettingsSection; connect?: boolean; n: number }>({ section: 'orgs', n: 0 });
+  const openSettings = (section: SettingsSection = 'orgs', connect = false) => { setSettingsAt((s) => ({ section, connect, n: s.n + 1 })); setTab('settings'); };
+  // An alert opens where it can be fixed: the org list for a disconnected org, else the agent's org and the Agents page.
+  const openAlert = (a: Alert) => {
+    if (a.tenantId && a.tenantId !== tenantId) setTenantId(a.tenantId);
+    if (a.kind === 'disconnected') openSettings('orgs'); else setTab('agents');
+  };
   const [agentList, setAgentList] = useState<WorkflowRow[]>([]);
 
   const reload = () =>
@@ -136,7 +142,9 @@ export function App() {
   useEffect(() => { if (cmdk && tenantId) api.workflows(tenantId).then(setAgentList).catch(() => {}); }, [cmdk, tenantId]);
 
   if (me === undefined) return <div className="pad muted">Loading…</div>;
-  if (me === null) return <AuthPage onDone={() => api.me().then(setMe)} />;
+  // An invitation or reset link opens the sign-in card even when someone is already signed in on this browser.
+  const linkToken = /[?&](invite|reset)=/.test(location.search);
+  if (me === null || linkToken) return <AuthPage onDone={() => { setMe(undefined); api.me().then(setMe).catch(() => setMe(null)); }} />;
 
   const logout = async () => { await api.logout(); setTenants([]); setTenantId(''); setMe(null); };
   const newAgent = (request?: string) => { setPrefill(request?.trim() || ' '); setTab('agents'); };
@@ -168,6 +176,7 @@ export function App() {
             </nav>
             <div className="tnav-right">
               <button className="ghost icon" onClick={() => setCmdk(true)} aria-label="Search (⌘K)" title="Search (⌘K)"><Search size={16} /></button>
+              <AlertsBell onOpen={openAlert} />
               <button className={'ghost icon' + (tab === 'settings' ? ' on' : '')} onClick={() => setTab('settings')} aria-label="Settings" title="Settings"><SettingsIcon size={16} /></button>
             {tenants.length > 0 ? (
                 <Menu align="right" trigger={() => (
@@ -202,6 +211,7 @@ export function App() {
                     <div className="mh"><b>{me.accountName}</b>{me.email}</div>
                     <div className="msep" />
                     <button className="mi" onClick={() => { close(); setTab('settings'); }}><SettingsIcon size={15} /> Settings</button>
+                    <button className="mi" onClick={() => { close(); openSettings('team'); }}><Users size={15} /> Team</button>
                     <button className="mi" onClick={() => { close(); toggleTheme(); }}>{theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />} {theme === 'dark' ? 'Light mode' : 'Dark mode'}</button>
                     <button className="mi" onClick={() => { close(); switchLayout(); }}><PanelLeft size={15} /> Navigation on the side</button>
                     <div className="msep" />
@@ -223,7 +233,7 @@ export function App() {
           {pane('approvals', <ApprovalsPage tenant={tenant} onChange={refreshWaiting} me={me.email} />)}
           {pane('knowledge', <KnowledgePage tenant={tenant} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
           {pane('activity', <RunsPage tenant={tenant} goSettings={() => setTab('settings')} />)}
-          {pane('settings', <SettingsHub key={settingsAt.n} section={settingsAt.section} focusConnect={settingsAt.connect} tenants={tenants} tenant={tenant} onChange={reload} />)}
+          {pane('settings', <SettingsHub key={settingsAt.n} section={settingsAt.section} focusConnect={settingsAt.connect} tenants={tenants} tenant={tenant} onChange={reload} me={me} />)}
         </main>
         <CommandPalette open={cmdk} onClose={() => setCmdk(false)} commands={commands} />
         <Toaster />
@@ -275,6 +285,7 @@ export function App() {
         <header className="topbar">
           <button className="search-btn" onClick={() => setCmdk(true)} aria-label="Search"><Search size={15} /><span>Search</span><kbd>⌘K</kbd></button>
           <div className="top-right">
+            <AlertsBell onOpen={openAlert} />
             {tenants.length > 0 ? (
               <Menu align="right" trigger={() => (
                 <button className="org-btn" title="Salesforce org">
@@ -312,7 +323,7 @@ export function App() {
           {pane('approvals', <ApprovalsPage tenant={tenant} onChange={refreshWaiting} me={me.email} />)}
           {pane('knowledge', <KnowledgePage tenant={tenant} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
           {pane('activity', <RunsPage tenant={tenant} goSettings={() => setTab('settings')} />)}
-          {pane('settings', <SettingsHub key={settingsAt.n} section={settingsAt.section} focusConnect={settingsAt.connect} tenants={tenants} tenant={tenant} onChange={reload} />)}
+          {pane('settings', <SettingsHub key={settingsAt.n} section={settingsAt.section} focusConnect={settingsAt.connect} tenants={tenants} tenant={tenant} onChange={reload} me={me} />)}
         </main>
       </div>
       <CommandPalette open={cmdk} onClose={() => setCmdk(false)} commands={commands} />

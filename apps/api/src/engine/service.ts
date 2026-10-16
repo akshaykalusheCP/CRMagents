@@ -1,3 +1,4 @@
+import { afterRunFailed } from '../alerts.js';
 import { auditRun } from '../salesforce/audit.js';
 import { aiClient } from '../agent/provider.js';
 import type { Prefetched } from './prefetch.js';
@@ -136,8 +137,11 @@ async function drive(runId: string, tenantId: string, graph: Workflow, st: RunSt
     void notifySalesforce(tenantId, runId);
     // The changes it made, recorded in Salesforce (CRMagents Agent Activity).
     if (status === 'done' || status === 'error') void auditRun(tenantId, runId);
+    if (status === 'error' && workflowId) void afterRunFailed(tenantId, workflowId, outcome.error ?? 'Unknown error').catch(() => undefined);
     return saved;
   } catch (e) {
+    if (e instanceof Cancelled) return await persist(runId, st, graph, 'error', e.message);
+    if (workflowId) void afterRunFailed(tenantId, workflowId, e instanceof Error ? e.message : String(e)).catch(() => undefined);
     return await persist(runId, st, graph, 'error', e instanceof Error ? e.message : String(e));
   } finally {
     clearInterval(beat);

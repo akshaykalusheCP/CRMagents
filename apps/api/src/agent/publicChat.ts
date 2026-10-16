@@ -3,6 +3,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { config } from '../config.js';
 import { pool } from '../db.js';
+import { overLimit } from '../ratelimit.js';
 import { runAgent } from './runner.js';
 import { DEFAULT_CONFIG, normalizeConfig, selfServiceExec, selfServicePrompt, selfServiceTools } from './selfService.js';
 import { SalesforceClient } from '../salesforce/client.js';
@@ -23,21 +24,11 @@ const PUBLIC_RULES = `You are chatting with a member of the public on the compan
 - Before opening a case, ask for their name, email and a short description, and confirm.
 - Keep answers short and friendly: one or two sentences, then a few short bullets if needed.`;
 
-const visitors = new Map<string, number[]>();
-const daily = new Map<string, { day: string; n: number }>();
-
-function limited(ip: string, key: string): string | null {
-  const now = Date.now();
-  const recent = (visitors.get(ip) ?? []).filter((t) => now - t < 60_000);
-  if (recent.length >= PER_MINUTE) return 'Too many messages. Please wait a minute.';
-  recent.push(now);
-  visitors.set(ip, recent);
-  if (visitors.size > 50_000) visitors.clear();
+/** Per visitor (IP) per minute, and per assistant per day; counted in Postgres so every instance agrees. */
+async function limited(ip: string, key: string): Promise<string | null> {
+  if (await overLimit(`chat|ip|${ip}`, PER_MINUTE, 60)) return 'Too many messages. Please wait a minute.';
   const day = new Date().toISOString().slice(0, 10);
-  const d = daily.get(key);
-  const n = d && d.day === day ? d.n : 0;
-  if (n >= PER_DAY) return 'This chat is busy right now. Please try again later.';
-  daily.set(key, { day, n: n + 1 });
+  if (await overLimit(`chat|day|${key}|${day}`, PER_DAY, 86_400)) return 'This chat is busy right now. Please try again later.';
   return null;
 }
 
@@ -97,7 +88,7 @@ export function registerPublicChat(app: FastifyInstance) {
       sessionId: z.string().uuid().optional(),
     }).safeParse(req.body);
     if (!b.success) return reply.code(400).send({ error: 'Bad message' });
-    const busy = limited(req.ip, key);
+    const busy = await limited(req.ip, key);
     if (busy) return reply.code(429).send({ error: busy });
     const msgs = b.data.messages.slice(-MAX_TURNS);
     const last = msgs[msgs.length - 1];

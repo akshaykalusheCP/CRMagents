@@ -83,6 +83,7 @@ export class SalesforceClient {
           // The org revoked or expired our access: flag it so the app shows "Reconnect" instead of failing silently.
           await db.query("update tenants set setup_status='error', setup_message=$2 where id=$1", [this.tenantId, RECONNECT_MESSAGE]);
           await db.query('commit');
+          void import('../alerts.js').then((m) => m.orgDisconnected(this.tenantId)).catch(() => undefined);
           throw new Error(RECONNECT_MESSAGE);
         }
         throw new Error(`Salesforce token refresh failed: ${text}`);

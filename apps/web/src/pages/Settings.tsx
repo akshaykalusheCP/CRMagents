@@ -5,7 +5,7 @@ import { Meter, Panel, Status, toast } from '../components/ui';
 
 // AI & spending: the AI key, the daily budget and answer reuse. Secrets are write-only; a save bar appears on change.
 
-const EMPTY = { sfClientId: '', sfClientSecret: '', sfLoginUrl: '', anthropicKey: '', dailyBudgetUsd: '', anthropicWorkspaceId: '', aiCacheHours: '', maskPii: '', maskFields: '', maxAiCalls: '', maxToolCalls: '', maxTokens: '', retentionDays: '', aiProvider: '', providerKey: '', aiBaseUrl: '', aiModel: '', aiFastModel: '', aiPriceIn: '', aiPriceOut: '', auditInSalesforce: '' };
+const EMPTY = { sfClientId: '', sfClientSecret: '', sfLoginUrl: '', anthropicKey: '', dailyBudgetUsd: '', anthropicWorkspaceId: '', aiCacheHours: '', maskPii: '', maskFields: '', maxAiCalls: '', maxToolCalls: '', maxTokens: '', retentionDays: '', aiProvider: '', providerKey: '', aiBaseUrl: '', aiModel: '', aiFastModel: '', aiPriceIn: '', aiPriceOut: '', auditInSalesforce: '', alertEmails: '', autoPauseAfter: '' };
 
 export function SettingsPage() {
   const [s, setS] = useState<Settings>();
@@ -19,7 +19,7 @@ export function SettingsPage() {
     setS(x);
     const f = { ...EMPTY, sfClientId: x.sfClientId, sfLoginUrl: x.sfLoginUrl, dailyBudgetUsd: x.dailyBudgetUsd ?? '', anthropicWorkspaceId: x.anthropicWorkspaceId ?? '', aiCacheHours: x.aiCacheHours ?? '',
       maskPii: x.maskPii ?? '', maskFields: x.maskFields ?? '', maxAiCalls: x.maxAiCalls ?? '', maxToolCalls: x.maxToolCalls ?? '', maxTokens: x.maxTokens ?? '', retentionDays: x.retentionDays ?? '',
-      aiProvider: x.aiProvider ?? '', providerKey: '', aiBaseUrl: x.aiBaseUrl ?? '', aiModel: x.aiModel ?? '', aiFastModel: x.aiFastModel ?? '', aiPriceIn: x.aiPriceIn ?? '', aiPriceOut: x.aiPriceOut ?? '', auditInSalesforce: x.auditInSalesforce ?? '' };
+      aiProvider: x.aiProvider ?? '', providerKey: '', aiBaseUrl: x.aiBaseUrl ?? '', aiModel: x.aiModel ?? '', aiFastModel: x.aiFastModel ?? '', aiPriceIn: x.aiPriceIn ?? '', aiPriceOut: x.aiPriceOut ?? '', auditInSalesforce: x.auditInSalesforce ?? '', alertEmails: x.alertEmails ?? '', autoPauseAfter: x.autoPauseAfter ?? '' };
     setForm(f); setBase(f);
   });
   useEffect(() => { load().catch((e) => setMsg(e.message)); api.usage().then(setUsage).catch(() => {}); }, []);
@@ -31,7 +31,7 @@ export function SettingsPage() {
       // Secrets are only sent when typed, so a blank field never wipes a stored value.
       const body: Record<string, string> = { sfClientId: form.sfClientId, sfLoginUrl: form.sfLoginUrl, dailyBudgetUsd: form.dailyBudgetUsd.trim(), anthropicWorkspaceId: form.anthropicWorkspaceId.trim(), aiCacheHours: form.aiCacheHours.trim(),
         maskPii: form.maskPii, maskFields: form.maskFields.trim(), maxAiCalls: form.maxAiCalls.trim(), maxToolCalls: form.maxToolCalls.trim(), maxTokens: form.maxTokens.trim(), retentionDays: form.retentionDays.trim(),
-        aiProvider: form.aiProvider, aiBaseUrl: form.aiBaseUrl.trim(), aiModel: form.aiModel.trim(), aiFastModel: form.aiFastModel.trim(), aiPriceIn: form.aiPriceIn.trim(), aiPriceOut: form.aiPriceOut.trim(), auditInSalesforce: form.auditInSalesforce };
+        aiProvider: form.aiProvider, aiBaseUrl: form.aiBaseUrl.trim(), aiModel: form.aiModel.trim(), aiFastModel: form.aiFastModel.trim(), aiPriceIn: form.aiPriceIn.trim(), aiPriceOut: form.aiPriceOut.trim(), auditInSalesforce: form.auditInSalesforce, alertEmails: form.alertEmails, autoPauseAfter: form.autoPauseAfter.trim() };
       if (form.providerKey) body.providerKey = form.providerKey;
       if (form.sfClientSecret) body.sfClientSecret = form.sfClientSecret;
       if (form.anthropicKey) body.anthropicKey = form.anthropicKey;
@@ -147,6 +147,21 @@ export function SettingsPage() {
           <div className="frow">
             <div className="flabel"><b>Keep run details for</b><span>After this, inputs, AI replies and tool results are cleared. Status, cost and timing stay. 0 keeps everything.</span></div>
             <div className="ffield"><div className="input-affix"><input id="retention" value={form.retentionDays} onChange={set('retentionDays')} placeholder="30" inputMode="numeric" /><span>days</span></div></div>
+          </div>
+        </div>
+      </Panel>
+
+      <Panel title="Alerts">
+        <div className="form">
+          <div className="frow">
+            <div className="flabel"><b>Email admins</b><span>Owners and admins get an email when an agent keeps failing, is paused, or an org is disconnected. Alerts always show under the bell too.</span></div>
+            <div className="ffield">
+              <label className="check"><input id="alert-emails" type="checkbox" checked={form.alertEmails !== 'off'} onChange={(e) => { setMsg(''); setForm({ ...form, alertEmails: e.target.checked ? 'on' : 'off' }); }} /> {form.alertEmails === 'off' ? 'Off: only in the app' : 'On (recommended)'}</label>
+            </div>
+          </div>
+          <div className="frow">
+            <div className="flabel"><b>Pause an agent after</b><span>Failed runs in a row before CRMagents turns the agent off, so a broken agent stops using API calls and AI budget. 0 never pauses.</span></div>
+            <div className="ffield"><div className="input-affix"><input id="auto-pause" value={form.autoPauseAfter} onChange={set('autoPauseAfter')} placeholder="5" inputMode="numeric" /><span>failures</span></div></div>
           </div>
         </div>
       </Panel>
