@@ -1,7 +1,8 @@
-import { AlertTriangle, ChevronDown, ChevronRight, Loader2, ScanSearch, Sparkles, Wand2 } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight, Loader2, ScanSearch, FileText, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, type Tenant, type Xray } from '../api';
 import { Markdown } from './Markdown';
+import { Ribbon } from './Ribbon';
 import { Empty, Status, toast } from './ui';
 
 // Automation X-ray: everything that runs when records are saved, per object, with the problems found in code:
@@ -40,6 +41,7 @@ export function XrayPanel({ tenant, openAgents }: { tenant: Tenant; openAgents: 
   return (
     <div className="xr">
       <section className="dc-hero">
+        <Ribbon className="card-ribbon" strands={140} angle={0.62} width={0.42} palette="dusk" />
         <div className="dc-hero-main xr-hero">
           {x ? <>
             <div className={'xr-score ' + (x.score >= 85 ? 'good' : x.score >= 60 ? 'mid' : 'low')}><b>{x.score}</b><span>/ 100</span></div>
@@ -100,7 +102,7 @@ export function XrayPanel({ tenant, openAgents }: { tenant: Tenant; openAgents: 
                         </li>
                       ))}
                     </ul>
-                    {!ex && <button className="sm" onClick={() => void explain(o.object)}><Sparkles size={14} /> Explain in plain English</button>}
+                    {!ex && <button className="sm" onClick={() => void explain(o.object)}><FileText size={14} /> Explain in plain English</button>}
                     {ex === 'loading' && <span className="row muted small"><Loader2 size={14} className="spin" /> Reading the automation…</span>}
                     {ex && ex !== 'loading' && (
                       <div className="xr-explain">
@@ -111,7 +113,7 @@ export function XrayPanel({ tenant, openAgents }: { tenant: Tenant; openAgents: 
                           <div className="xr-replace">
                             <h4>One agent instead</h4>
                             <p>{ex.replacement}</p>
-                            {!dr && <button className="primary sm" onClick={() => void draft(o.object, ex.replacement)}><Wand2 size={14} /> Draft this agent (stays off)</button>}
+                            {!dr && <button className="primary sm" onClick={() => void draft(o.object, ex.replacement)}><Plus size={14} /> Draft this agent (stays off)</button>}
                             {dr === 'loading' && <span className="row muted small"><Loader2 size={14} className="spin" /> Building it for this org…</span>}
                             {dr && dr !== 'loading' && <div className="xr-drafted"><b>Drafted "{dr.name}"</b>: {dr.summary.join(' · ')}. It is off: replay it on records, then turn it on and switch the old automations off. <button className="link-btn" onClick={openAgents}>Open in Agents</button></div>}
                           </div>

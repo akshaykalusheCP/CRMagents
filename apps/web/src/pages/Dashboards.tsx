@@ -1,4 +1,4 @@
-import { ArrowLeft, LayoutDashboard, Loader2, MoreVertical, Plus, Sparkles, Trash2, X } from 'lucide-react';
+import { ArrowLeft, LayoutDashboard, Loader2, MoreVertical, Plus, Trash2, X } from 'lucide-react';
 import { useConfirm } from '../components/ui';
 import { useEffect, useMemo, useState } from 'react';
 import { api, type ChartKind, type DashRange, type DashSummary, type Tenant, type TileData, type TileSpec } from '../api';
@@ -155,7 +155,7 @@ export function DashboardsPage({ tenant }: { tenant: Tenant }) {
     return (
       <div className="dash">
         <div className="card describe">
-          <div className="row"><Sparkles size={18} color="var(--accent)" /><h3>Describe a dashboard</h3></div>
+          <h3>Describe a dashboard</h3>
           <textarea rows={3} value={prompt} onChange={(e) => setPrompt(e.target.value)} placeholder="e.g. Pipeline by stage and owner, won revenue per month this year, and my 10 biggest open deals" />
           <div className="chips">
             {EXAMPLES.map((x) => <button key={x} className="chip example" onClick={() => setPrompt(x)}>{x.split(':')[0]}</button>)}

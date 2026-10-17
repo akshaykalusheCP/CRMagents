@@ -1,8 +1,9 @@
-import { ArrowRight, CheckCircle2, GraduationCap, Loader2, Power, Radar, Sparkles, XCircle } from 'lucide-react';
+import { ArrowRight, CheckCircle2, GraduationCap, Loader2, Power, Radar, FlaskConical, XCircle } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, type Discovery, type Opportunity, type Proof, type Tenant } from '../api';
 import { Empty, PageHeader, Status, toast } from '../components/ui';
 import { XrayPanel } from '../components/Xray';
+import { Ribbon } from '../components/Ribbon';
 
 // What to automate, from the org's own data: a quick scan (counting only, no AI) finds the repetitive work, then
 // each opportunity can be built into an agent and proven on real records: what it would have done, and how often
@@ -64,6 +65,7 @@ export function DiscoverPage({ tenant, openAgents }: { tenant?: Tenant; openAgen
       </div>
       {view === 'xray' ? <XrayPanel tenant={tenant} openAgents={openAgents} /> : <>
       <section className="dc-hero">
+        <Ribbon className="card-ribbon" strands={140} angle={0.62} width={0.42} palette="ocean" />
         <div className="dc-hero-main">
           {d ? <>
             <div className="dc-big">{hours(d.totalHours)}<small> a month</small></div>
@@ -97,7 +99,7 @@ export function DiscoverPage({ tenant, openAgents }: { tenant?: Tenant; openAgen
                 <div className="dc-hours"><b>{hours(o.hoursPerMonth)}</b><span>{money(o.valuePerMonth)} / month</span></div>
                 <div className="dc-actions">
                   {p ? <button className="sm" onClick={() => setOpen(isOpen ? '' : o.id)}>{isOpen ? 'Hide proof' : 'See proof'}</button>
-                    : <button className="primary sm" onClick={() => void prove(o)} disabled={!!busy}>{busy === o.id ? <Loader2 size={14} className="spin" /> : <Sparkles size={14} />} Build &amp; prove</button>}
+                    : <button className="primary sm" onClick={() => void prove(o)} disabled={!!busy}>{busy === o.id ? <Loader2 size={14} className="spin" /> : <FlaskConical size={14} />} Build &amp; prove</button>}
                 </div>
               </div>
 

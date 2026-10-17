@@ -4,7 +4,7 @@ import {
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
 import {
-  ArrowLeft, Check, ChevronDown, ChevronUp, CloudUpload, FlaskConical, GitCompare, History, LayoutList, MoreHorizontal, Network, Loader2, MousePointerClick, Play, Power, Save, Search, Sparkles, Trash2, X, Zap,
+  ArrowLeft, PenLine, Check, ChevronDown, ChevronUp, CloudUpload, FlaskConical, GitCompare, History, LayoutList, MoreHorizontal, Network, Loader2, MousePointerClick, Play, Power, Save, Search, Trash2, X, Zap,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { CATEGORY_COLORS, NODE_DEFS, NODE_DEF_BY_TYPE, type Category, type Workflow, type WFNode } from '@crmagents/shared';
@@ -377,11 +377,11 @@ function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDe
 
   // The AI draft summary + "change something" box; floats over the canvas or sits above the steps.
   const aiPanel = (mode: 'float' | 'inline') => !ai ? null : !aiOpen ? (
-    <button className={mode === 'float' ? 'ai-reopen' : 'ai-reopen inline'} onClick={() => setAiOpen(true)}><Sparkles size={14} /> AI draft</button>
+    <button className={mode === 'float' ? 'ai-reopen' : 'ai-reopen inline'} onClick={() => setAiOpen(true)}><PenLine size={14} /> AI draft</button>
   ) : (
     <div className={'ai-panel' + (mode === 'inline' ? ' inline' : '')}>
       <div className="row between">
-        <div className="row"><Sparkles size={15} color="var(--accent)" /><b>AI draft</b></div>
+        <div className="row"><b>AI draft</b></div>
         <button className="ghost icon sm" onClick={() => setAiOpen(false)} title="Hide"><X size={14} /></button>
       </div>
       <ul className="ai-summary">{ai.summary.map((l, i) => <li key={i}>{l}</li>)}</ul>

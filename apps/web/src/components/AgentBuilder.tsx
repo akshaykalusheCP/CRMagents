@@ -1,4 +1,4 @@
-import { ArrowLeft, ArrowUp, CircleAlert, Clock, Filter, ListOrdered, Loader2, ShieldCheck, Sparkles, Wrench } from 'lucide-react';
+import { ArrowLeft, ArrowUp, CircleAlert, Clock, Filter, ListOrdered, Loader2, ShieldCheck, Wrench } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { NODE_DEF_BY_TYPE } from '@crmagents/shared';
 import { api, type ChatMsg, type Draft } from '../api';
@@ -65,7 +65,7 @@ export function AgentBuilder({ tenantId, first, onBack, onOpen }: {
       <section className="ab-chat" aria-label="Build with AI">
         <div className="ab-chat-head">
           <button className="ghost icon" onClick={onBack} title="Back to agents"><ArrowLeft size={16} /></button>
-          <h3><Sparkles size={16} color="var(--accent)" /> Build with AI</h3>
+          <h3>Build with AI</h3>
           {spent > 0 && <span className="muted small" title="AI cost of building so far">${spent.toFixed(4)}</span>}
         </div>
         <div className="ab-msgs" aria-live="polite">

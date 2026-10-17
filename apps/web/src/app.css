@@ -868,3 +868,41 @@ select.sm { height: 30px; padding: 0 28px 0 8px; font-size: 13px; width: auto; }
 :root .cost-now span { font-size: 13px; color: var(--muted); }
 :root .cost-cap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 :root .cost-cap .input-affix { width: 110px; }
+
+/* ---- Calmer top bar: plain mark, five entries, two small menus ---- */
+:root:root .app .tnav-brand .brand-mark { width: 24px; height: 24px; border-radius: 7px; background: var(--accent); color: #fff; box-shadow: none; display: grid; place-items: center; }
+:root:root .app .tnav-brand .brand-mark svg { width: 14px; height: 14px; }
+:root .land-brand .brand-mark { background: var(--accent, #533afd); }
+:root:root .app .tnav-links { gap: 6px; }
+:root:root .app-top .tnav-link { padding: 0 12px; font-size: 14px; color: var(--text-2, var(--text)); }
+:root:root .app-top .tnav-link.on { color: var(--accent); font-weight: 500; }
+:root:root .app-top .tnav-link.on .tnav-caret { color: var(--accent); }
+:root .app-top .nav-menu { display: flex; align-items: stretch; height: 100%; }
+:root .app-top .nav-menu > span { display: flex; align-items: stretch; }
+:root .app-top .tnav-link .tnav-caret { margin-left: 4px; color: var(--muted); transition: transform .15s ease; }
+:root .app-top .tnav-link.open .tnav-caret { transform: rotate(180deg); }
+:root .app-top .nav-menu .mnu-pop { top: calc(100% - 6px); min-width: 260px; padding: 6px; }
+:root:root .mnu-pop .nav-mi { height: auto; padding: 9px 10px; align-items: flex-start; }
+:root .mnu-pop .nav-mi > span { display: flex; flex-direction: column; gap: 1px; }
+:root .mnu-pop .nav-mi b { font-weight: 500; font-size: 14px; }
+:root .mnu-pop .nav-mi small { color: var(--muted); font-size: 12.5px; }
+:root .mnu-pop .nav-mi.on b { color: var(--accent); }
+@media (max-width: 1600px) { :root:root .app .tnav-links { gap: 6px; } }
+@media (max-width: 1100px) and (min-width: 901px) { :root:root .app .tnav-links { overflow: visible; flex: 0 1 auto; } }
+
+/* ---- Soft ribbon inside a summary card: the same silk, fainter, fading out towards the text ---- */
+:root .ribbon { transition: opacity .45s ease; }
+:root .dc-hero, :root .imp-kpi-glow { position: relative; overflow: hidden; isolation: isolate; }
+:root .card-ribbon { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; opacity: .5; animation: none;
+  -webkit-mask-image: linear-gradient(to left, #000 0%, rgba(0,0,0,.6) 30%, transparent 62%); mask-image: linear-gradient(to left, #000 0%, rgba(0,0,0,.6) 30%, transparent 62%); }
+:root .imp-kpi-glow .card-ribbon { opacity: .55; -webkit-mask-image: linear-gradient(to left, #000, transparent 80%); mask-image: linear-gradient(to left, #000, transparent 80%); }
+:root .dc-hero > :not(.card-ribbon) { position: relative; }
+@media (prefers-reduced-motion: reduce) { :root .ribbon { transition: none; } }
+:root[data-theme="dark"] .card-ribbon { opacity: .3; }
+@media (max-width: 900px) {
+  :root:root .app-top .tnav-link { padding: 0 6px; font-size: 13px; }
+  :root:root .app .tnav-links { gap: 0; justify-content: space-between; }
+  :root .app-top .tnav-link .tnav-caret { margin-left: 2px; }
+  /* The link row scrolls sideways, which would clip a menu: open it as a panel under the bar instead. */
+  :root .app-top .nav-menu .mnu-pop { position: fixed; top: 96px; left: 12px; right: 12px; min-width: 0; }
+}

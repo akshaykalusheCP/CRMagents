@@ -1,4 +1,4 @@
-import { BarChart3, BookOpen, Bot, TrendingUp, ChevronRight, PanelLeft, PanelTop, Sparkles, Check, ChevronsUpDown, History, House, Inbox, LayoutDashboard, LogOut, Moon, Plus, Search, Settings as SettingsIcon, Sun, Users, Radar } from 'lucide-react';
+import { BarChart3, BookOpen, Bot, TrendingUp, ChevronRight, PanelLeft, PanelTop, ChevronDown, Check, ChevronsUpDown, History, House, Inbox, LayoutDashboard, LogOut, Moon, Plus, Search, Settings as SettingsIcon, Sun, Users, Radar } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { api, type Alert, type Draft, type Me, type Tenant, type WorkflowRow } from './api';
 import { CommandPalette, Menu, Toaster, type Command } from './components/ui';
@@ -8,9 +8,10 @@ import { InsightsPage } from './pages/Insights';
 import { KnowledgePage } from './pages/Knowledge';
 import { ImpactPage } from './pages/Impact';
 import { DiscoverPage } from './pages/Discover';
-import { Ribbon } from './components/Ribbon';
+import { Ribbon, type RibbonPalette } from './components/Ribbon';
 import { SettingsHub, type SettingsSection } from './pages/SettingsHub';
 import { AlertsBell } from './components/AlertsBell';
+import { LogoMark } from './components/Logo';
 import { AuthPage } from './pages/Auth';
 import { RunsPage } from './pages/Runs';
 import { WorkflowsPage } from './pages/Workflows';
@@ -36,6 +37,27 @@ const NAV: { group?: string; items: { key: Tab; label: string; icon: ReactNode }
     { key: 'dashboards', label: 'Dashboards', icon: <LayoutDashboard size={17} /> },
   ] },
 ];
+// Top navigation: five entries, two of them small menus (Stripe-style), so the bar stays calm.
+type TopEntry = { key: Tab; label: string } | { label: string; items: { key: Tab; label: string; desc: string }[] };
+const TOP_NAV: TopEntry[] = [
+  { key: 'home', label: 'Home' },
+  { key: 'discover', label: 'Discover' },
+  { label: 'Agents', items: [
+    { key: 'agents', label: 'Agents', desc: 'Automations and assistants' },
+    { key: 'activity', label: 'Activity', desc: 'Every run, step by step' },
+    { key: 'knowledge', label: 'Knowledge', desc: 'Guides your agents answer from' },
+  ] },
+  { key: 'approvals', label: 'Approvals' },
+  { label: 'Analytics', items: [
+    { key: 'insights', label: 'Insights', desc: 'Your business at a glance' },
+    { key: 'dashboards', label: 'Dashboards', desc: 'Built from a sentence' },
+    { key: 'impact', label: 'Impact', desc: 'Time and money your agents saved' },
+  ] },
+];
+
+// Each area has its own ribbon colours: you can tell where you are at a glance, without anything extra on screen.
+const RIBBON: Record<Tab, RibbonPalette> = { home: 'sunset', discover: 'ocean', agents: 'dusk', activity: 'dusk', knowledge: 'dusk', approvals: 'amber', insights: 'mint', dashboards: 'mint', impact: 'mint', settings: 'silver' };
+
 const LABEL: Record<Tab, string> = { home: 'Home', discover: 'Discover', approvals: 'Approvals', agents: 'Agents', activity: 'Activity', knowledge: 'Knowledge', impact: 'Impact', insights: 'Insights', dashboards: 'Dashboards', settings: 'Settings' };
 
 function useTheme() {
@@ -160,26 +182,39 @@ export function App() {
   const statusDot = tenant?.setup_status === 'ready' ? 'dot-ok' : tenant?.setup_status === 'error' ? 'dot-bad' : 'dot-warn';
 
   if (layout === 'top') {
-    const items = NAV.flatMap((g) => g.items);
     return (
       <div className="app app-top">
         <header className="tnav">
           <div className="tnav-inner">
             <button className="tnav-brand" onClick={() => setTab('home')} aria-label="CRMagents home">
-              <span className="brand-mark"><Sparkles size={15} /></span>CRMagents
+              <span className="brand-mark"><LogoMark size={14} /></span>CRMagents
             </button>
             <nav className="tnav-links" aria-label="Main">
-              {items.map((it) => (
+              {TOP_NAV.map((it) => 'key' in it ? (
                 <button key={it.key} className={'tnav-link' + (tab === it.key ? ' on' : '')} onClick={() => setTab(it.key)} aria-current={tab === it.key ? 'page' : undefined}>
                   {it.label}
                   {it.key === 'approvals' && waitingCount > 0 && <span className="count">{waitingCount}</span>}
                 </button>
+              ) : (
+                <Menu key={it.label} className="nav-menu" trigger={(open) => {
+                  const cur = it.items.find((x) => x.key === tab);
+                  return (
+                    <button className={'tnav-link' + (cur ? ' on' : '') + (open ? ' open' : '')} aria-haspopup="menu" aria-expanded={open}>
+                      {it.label}<ChevronDown size={13} className="tnav-caret" />
+                    </button>
+                  );
+                }}>
+                  {(close) => it.items.map((x) => (
+                    <button key={x.key} className={'mi nav-mi' + (tab === x.key ? ' on' : '')} onClick={() => { close(); setTab(x.key); }}>
+                      <span><b>{x.label}</b><small>{x.desc}</small></span>
+                    </button>
+                  ))}
+                </Menu>
               ))}
             </nav>
             <div className="tnav-right">
               <button className="ghost icon" onClick={() => setCmdk(true)} aria-label="Search (⌘K)" title="Search (⌘K)"><Search size={16} /></button>
               <AlertsBell onOpen={openAlert} />
-              <button className={'ghost icon' + (tab === 'settings' ? ' on' : '')} onClick={() => setTab('settings')} aria-label="Settings" title="Settings"><SettingsIcon size={16} /></button>
             {tenants.length > 0 ? (
                 <Menu align="right" trigger={() => (
                   <button className="org-btn" title="Salesforce org">
@@ -204,7 +239,6 @@ export function App() {
               ) : (
                 <button className="primary sm" onClick={() => openSettings('orgs', true)}>Connect Salesforce</button>
               )}
-              <button className="primary tnav-cta" onClick={() => newAgent()}>New agent <ChevronRight size={14} /></button>
               <Menu align="right" className="acct-menu" trigger={() => (
                 <button className="acct" title={me.email} aria-label="Account"><span className="ws-mark">{initials(me.accountName || me.email)}</span></button>
               )}>
@@ -226,7 +260,7 @@ export function App() {
         </header>
         <main ref={mainRef} onScroll={onMainScroll} className={'stripe-main' + (tab === 'agents' ? ' full' : '')}>
           {/* Silk ribbon behind the top of every page, like stripe.com's hero. */}
-          <Ribbon className="app-ribbon" strands={260} angle={0.6} width={0.3} />
+          <Ribbon className="app-ribbon" strands={260} angle={0.6} width={0.3} palette={RIBBON[tab] ?? 'sunset'} />
           {pane('home', <HomePage me={me} tenant={tenant} go={setTab} newAgent={newAgent} />)}
           {pane('impact', <ImpactPage tenant={tenant} />)}
           {pane('discover', <DiscoverPage tenant={tenant} openAgents={() => setTab('agents')} />)}

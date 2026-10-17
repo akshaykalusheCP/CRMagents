@@ -1,5 +1,6 @@
-import { ArrowUpRight, ChevronRight, ShieldCheck, Sparkles } from 'lucide-react';
+import { ArrowUpRight, ChevronRight, ShieldCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { LogoMark } from '../components/Logo';
 import { api } from '../api';
 import { Ribbon } from '../components/Ribbon';
 
@@ -56,7 +57,7 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
     <div className="landing">
       <header className="land-nav">
         <div className="land-inner">
-          <span className="land-brand"><span className="brand-mark"><Sparkles size={14} /></span>CRMagents</span>
+          <span className="land-brand"><span className="brand-mark"><LogoMark size={15} /></span>CRMagents</span>
           <nav className="land-links" aria-label="Product">
             <a href="#agents">Agents</a><a href="#insights">Insights</a><a href="#dashboards">Dashboards</a>
           </nav>

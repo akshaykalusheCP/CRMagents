@@ -5,10 +5,20 @@ import { useEffect, useRef } from 'react';
 // the slow sway is a CSS transform the GPU composites, so it costs no drawing per frame (redrawing every frame
 // made pages stutter). Purely decorative: aria-hidden, pointer-events none.
 
-const STOPS = ['#6aa8ff', '#8f6bff', '#c45cf0', '#ff5fa8', '#ff7a45', '#ffb03a'];
+/** Colour sets, one per area of the app; all soft enough to sit behind content. */
+export const RIBBON_PALETTES = {
+  sunset: ['#6aa8ff', '#8f6bff', '#c45cf0', '#ff5fa8', '#ff7a45', '#ffb03a'],
+  ocean: ['#67d4ff', '#3fa2ff', '#5b7cff', '#7d6bff', '#a78bfa', '#cbbcff'],
+  mint: ['#8be6c9', '#3ccfb0', '#2bb3c8', '#4c9bff', '#7c8cff', '#b4b9ff'],
+  dusk: ['#8ea6ff', '#7a6bff', '#9b5cf0', '#c65fd6', '#e879b9', '#f6a6c8'],
+  amber: ['#ffd36a', '#ffb03a', '#ff8a4c', '#ff6b6b', '#f45ba0', '#d77bff'],
+  silver: ['#c7d2fe', '#a5b4fc', '#c4b5fd', '#ddd6fe', '#e9d5ff', '#f5d0fe'],
+} as const;
+export type RibbonPalette = keyof typeof RIBBON_PALETTES;
 
-export function Ribbon({ className = '', strands = 420, angle = 0.62, width = 0.34 }: { className?: string; strands?: number; angle?: number; width?: number }) {
+export function Ribbon({ className = '', strands = 420, angle = 0.62, width = 0.34, palette = 'sunset' }: { className?: string; strands?: number; angle?: number; width?: number; palette?: RibbonPalette }) {
   const ref = useRef<HTMLCanvasElement>(null);
+  const drawn = useRef(false);
   useEffect(() => {
     const c = ref.current;
     if (!c) return;
@@ -26,7 +36,8 @@ export function Ribbon({ className = '', strands = 420, angle = 0.62, width = 0.
       const band = Math.max(w, h) * width;
       const sway = 0;
       const grad = ctx.createLinearGradient(w * 0.35, 0, w, h * 0.4);
-      STOPS.forEach((s, i) => grad.addColorStop(i / (STOPS.length - 1), s));
+      const stops = RIBBON_PALETTES[palette] ?? RIBBON_PALETTES.sunset;
+      stops.forEach((s, i) => grad.addColorStop(i / (stops.length - 1), s));
       const curve = (u: number, i: number) => {
         const off = u * band + jitter[i % strands] * 6;
         const bend = (0.18 + sway + u * 0.05) * h;
@@ -61,10 +72,15 @@ export function Ribbon({ className = '', strands = 420, angle = 0.62, width = 0.
     };
     // Redraw only when the canvas changes size (one frame later, so a resize burst draws once).
     const schedule = () => { cancelAnimationFrame(raf); raf = requestAnimationFrame(draw); };
-    schedule();
+    // A new palette (another page) fades in instead of switching abruptly.
+    if (drawn.current) {
+      c.style.opacity = '0';
+      raf = requestAnimationFrame(() => { draw(); requestAnimationFrame(() => { c.style.opacity = ''; }); });
+    } else schedule();
+    drawn.current = true;
     const ro = new ResizeObserver(schedule);
     ro.observe(c);
     return () => { cancelAnimationFrame(raf); ro.disconnect(); };
-  }, [strands, angle, width]);
+  }, [strands, angle, width, palette]);
   return <canvas ref={ref} className={'ribbon ' + className} aria-hidden="true" />;
 }

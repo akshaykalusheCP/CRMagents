@@ -1,4 +1,4 @@
-import { LayoutTemplate, Plus, Sparkles, Upload, Workflow as WorkflowIcon, X } from 'lucide-react';
+import { LayoutTemplate, Plus, Upload, Workflow as WorkflowIcon, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { TEMPLATES, type Workflow } from '@crmagents/shared';
 import { AgentBuilder } from '../components/AgentBuilder';

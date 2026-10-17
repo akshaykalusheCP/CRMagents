@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowDownRight, ArrowUpRight, Bot, CheckCircle2, Eye, Loader2, Minus, Pin, PinOff, RefreshCw, Search, Sparkles, X } from 'lucide-react';
+import { AlertTriangle, ArrowDownRight, ArrowUpRight, Bot, CheckCircle2, Eye, Loader2, Minus, Pin, PinOff, RefreshCw, Search, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, type Answer, type Briefing, type Insights, type Kpi, type Tenant, type Tile, type VizFormat } from '../api';
 import { BarChart, ChartCard, DataTable, LineChart } from '../components/viz/Charts';
@@ -135,7 +135,7 @@ export function InsightsPage({ tenant, goSettings, onAutomate, fixedView }: { te
 
       {/* AI briefing */}
       <div className="card briefing">
-        <div className="row"><Sparkles size={18} color="var(--accent)" /><h3>Your business briefing</h3>
+        <div className="row"><h3>Your business briefing</h3>
           {brief && <span className="muted small" style={{ marginLeft: 'auto' }}>{brief.reused ? 'Up to date' : `$${brief.costUsd.toFixed(3)}`}</span>}
         </div>
         {!brief ? (
