@@ -138,6 +138,14 @@ export interface RecordChange {
   undone_at: string | null; undone_by: string | null; undo_result: string | null; created_at: string; agent_name: string | null;
 }
 export interface UndoReport { restored: number; deleted: number; recovered: number; skipped: { recordId: string; object: string; why: string }[]; failed: { recordId: string; object: string; error: string }[] }
+export interface Opportunity { id: string; title: string; area: string; evidence: string; volume: number; minutesEach: number; hoursPerMonth: number; valuePerMonth: number; request: string; compareFields?: string[] }
+export interface Agreement { checked: number; matched: number; rate: number | null; examples: { recordId: string; field: string; agent: string; team: string; same: boolean }[] }
+export interface Proof {
+  workflowId: string; name: string; summary: string[]; estimateUsd: number; warnings: string[]; replayed: number; ok: number;
+  rows: { recordId: string; label: string; status: string; error?: string; wouldDo: { action: string; detail: unknown }[] }[];
+  agreement: Agreement | null; agreementBefore?: Agreement | null; learned?: number; costUsd: number; monthlyCostUsd: number; hoursPerMonth: number; valuePerMonth: number;
+}
+export interface Discovery { opportunities: Opportunity[]; totalHours: number; hourlyRate: number; checked: number; scannedAt: string; builds: Record<string, { opportunity: string; workflowId: string | null; proof: Proof; name: string | null; live: boolean | null }> }
 export interface Team { me: string; canManage: boolean; users: TeamUser[]; invites: TeamInvite[] }
 export interface Alert { id: string; kind: string; title: string; body: string; tenantId: string | null; workflowId: string | null; readAt: string | null; createdAt: string }
 
@@ -158,6 +166,10 @@ export const api = {
   acceptInvite: (token: string, password: string) => req('POST', '/api/auth/accept', { token, password }),
   changePassword: (current: string, password: string) => req('POST', '/api/auth/password', { current, password }),
   team: () => req<Team>('GET', '/api/team'),
+  discovery: (t: string) => req<Discovery | null>('GET', `/api/tenants/${t}/discover`),
+  scanOrg: (t: string) => req<Discovery>('POST', `/api/tenants/${t}/discover/scan`, {}),
+  prove: (t: string, id: string) => req<Proof>('POST', `/api/tenants/${t}/discover/${id}/prove`, { timezone: localTz() }),
+  learnFromTeam: (t: string, id: string) => req<Proof>('POST', `/api/tenants/${t}/discover/${id}/learn`, {}),
   changes: (t: string, q: { runId?: string; workflowId?: string; since?: string }) => req<{ changes: RecordChange[]; outside: { runId: string; label: string }[] }>('GET', `/api/tenants/${t}/changes?${new URLSearchParams(Object.entries(q).filter(([, v]) => v) as [string, string][])}`),
   undo: (t: string, b: { runId?: string; workflowId?: string; since?: string; changeIds?: number[] }) => req<UndoReport>('POST', `/api/tenants/${t}/undo`, b),
   tests: (t: string, a: string) => req<{ tests: AssistantTest[]; runs: TestRun[] }>('GET', `/api/tenants/${t}/agents/${a}/tests`),

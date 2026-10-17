@@ -1,11 +1,11 @@
-import { ChevronRight, Lightbulb, Plus, X } from 'lucide-react';
+import { ChevronRight, Lightbulb, Plus, Radar, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api, type AgentHealth, type Me, type Run, type Settings, type Suggestion, type Tenant, type UsageSummary, type WorkflowRow } from '../api';
 import { Empty, Meter, PageHeader, Panel, Status, Table, Trend, toast, type Column } from '../components/ui';
 
 // Home is a "today" view: what ran, what it cost, and what needs a person. Building happens on the Agents page.
 
-type Go = (tab: 'insights' | 'agents' | 'approvals' | 'activity' | 'settings') => void;
+type Go = (tab: 'discover' | 'insights' | 'agents' | 'approvals' | 'activity' | 'settings') => void;
 
 const DAYS = 14;
 const day = (d: Date) => d.toISOString().slice(0, 10);
@@ -100,7 +100,7 @@ export function HomePage({ me, tenant, go, newAgent }: { me: Me; tenant?: Tenant
       <PageHeader
         title={`${hello}, ${name}`}
         description={tenant ? <>Working in <b style={{ color: 'var(--text)', fontWeight: 500 }}>{tenant.sf_username ?? tenant.sf_org_id}</b> · {new Date().toLocaleDateString([], { weekday: 'long', month: 'long', day: 'numeric' })}</> : 'Connect a Salesforce org to get started.'}
-        actions={<button className="primary cta" onClick={() => newAgent()}><Plus size={15} /> New agent</button>}
+        actions={<>{tenant && <button className="cta" onClick={() => go('discover')}><Radar size={15} /> Find what to automate</button>}<button className="primary cta" onClick={() => newAgent()}><Plus size={15} /> New agent</button></>}
       />
 
       {setupLeft > 0 && (

@@ -36,6 +36,7 @@ import { publicChatInfo, registerPublicChat, setPublicChat } from './agent/publi
 import { addToRecordPage, addToUtilityBar, listPages } from './salesforce/pages.js';
 import { impact, setAssumptions } from './insights/impact.js';
 import { config } from './config.js';
+import { lastScan, learnFromTeam, proveOpportunity, scanOrg } from './insights/discover.js';
 import { listChanges, notUndoable, undoChanges } from './trust/undo.js';
 import { deleteTest, listTestRuns, listTests, recentQuestions, saveTest, startTestRun } from './agent/tests.js';
 import { registerTeam } from './team.js';
@@ -657,6 +658,20 @@ app.post('/api/tenants/:tenantId/agents/:agentId/tests/run', async (req) => {
   const { tenantId, agentId } = req.params as { tenantId: string; agentId: string };
   const b = z.object({ channel: z.enum(['internal', 'website']).default('internal') }).parse(req.body ?? {});
   return startTestRun(tenantId, agentId, b.channel, req.user!.email);
+});
+
+// ---- What to automate: scan the org, build and prove agents on its own data ----
+app.get('/api/tenants/:tenantId/discover', async (req) => lastScan((req.params as { tenantId: string }).tenantId));
+app.post('/api/tenants/:tenantId/discover/scan', async (req) => scanOrg((req.params as { tenantId: string }).tenantId));
+app.post('/api/tenants/:tenantId/discover/:id/prove', async (req) => {
+  const { tenantId, id } = req.params as { tenantId: string; id: string };
+  const b = z.object({ timezone: z.string().max(60).optional() }).parse(req.body ?? {});
+  return proveOpportunity(tenantId, id, req.user!.email, b.timezone);
+});
+
+app.post('/api/tenants/:tenantId/discover/:id/learn', async (req) => {
+  const { tenantId, id } = req.params as { tenantId: string; id: string };
+  return learnFromTeam(tenantId, id, req.user!.email);
 });
 
 // ---- Undo: what agents changed in Salesforce, and putting it back ----

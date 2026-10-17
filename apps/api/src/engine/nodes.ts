@@ -148,9 +148,15 @@ export const EXECUTORS: Record<string, Executor> = {
       return { name: (i < 0 ? line : line.slice(0, i)).trim(), description: i < 0 ? '' : line.slice(i + 1).trim() };
     }).filter((f) => /^[A-Za-z_][\w]*$/.test(f.name));
     if (!specs.length) throw new Error('Add at least one field (one per line: name: description)');
+    const text = render(node.config.text, scope);
+    // Decisions the team made on similar records (learned from their history), as worked examples.
+    const examples = ((await env.examples?.(node.id, text)) ?? []).filter((e) => e.label.startsWith('{'));
+    const shown = examples.length
+      ? `How this team decided on similar records (follow their judgement):\n${examples.map((e) => `- ${e.input.replace(/\s+/g, ' ').slice(0, 300)} → ${e.label}`).join('\n')}\n\n`
+      : '';
     const r = await env.llm.complete({
       system: 'You extract structured data from text. Use an empty string when a value is not in the text.',
-      prompt: `Text:\n"""\n${render(node.config.text, scope)}\n"""`,
+      prompt: `${shown}Text:\n"""\n${text}\n"""`,
       schema: {
         type: 'object',
         properties: Object.fromEntries(specs.map((f) => [f.name, { type: 'string', ...(f.description ? { description: f.description } : {}) }])),
@@ -159,7 +165,7 @@ export const EXECUTORS: Record<string, Executor> = {
       },
       ...aiOptions(node),
     });
-    return { output: { data: parseJsonLoose(r.text) }, usage: r.usage, reused: r.reused };
+    return { output: { data: parseJsonLoose(r.text), examplesUsed: examples.length }, usage: r.usage, reused: r.reused };
   },
 
   async 'sf.query'(node, scope, env) {

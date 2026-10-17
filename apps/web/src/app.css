@@ -761,3 +761,67 @@ select.sm { height: 30px; padding: 0 28px 0 8px; font-size: 13px; width: auto; }
 :root .chg-note { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
 :root .chg-note.warn { color: var(--warn); }
 :root .chg-report { list-style: none; margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+
+/* ---- Discover ---- */
+:root .dc-hero { display: flex; align-items: center; justify-content: space-between; gap: 24px; padding: 24px 28px; border: 1px solid var(--border); border-radius: 14px; background: var(--surface); box-shadow: 0 1px 2px rgba(16,24,40,.04); margin-bottom: 18px; flex-wrap: wrap; }
+:root .dc-hero-main { flex: 1 1 420px; min-width: 0; }
+:root .dc-hero p { margin: 6px 0 0; font-size: 14.5px; line-height: 1.55; color: var(--text-2, var(--text)); max-width: 720px; }
+:root .dc-hero p .muted { display: block; margin-top: 4px; font-size: 12.5px; }
+:root .dc-big { font-size: 40px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.1; color: var(--text); }
+:root .dc-big small { font-size: 18px; font-weight: 500; color: var(--muted); letter-spacing: 0; }
+:root .dc-big.dc-q { font-size: 28px; }
+:root .dc-list { display: flex; flex-direction: column; gap: 10px; }
+:root .dc-card { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); overflow: hidden; transition: box-shadow .15s ease; }
+:root .dc-card.open { box-shadow: 0 8px 28px -12px rgba(16,24,40,.18); }
+:root .dc-row { display: grid; grid-template-columns: 32px minmax(0, 1fr) auto auto; gap: 16px; align-items: center; padding: 16px 18px; }
+:root .dc-rank { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; font-size: 13px; font-weight: 600; background: var(--accent-soft); color: var(--accent); }
+:root .dc-title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+:root .dc-title b { font-size: 15px; font-weight: 600; }
+:root .dc-area { font-size: 11.5px; color: var(--muted); border: 1px solid var(--border); border-radius: 999px; padding: 1px 8px; }
+:root .dc-evidence { display: block; margin-top: 3px; font-size: 13.5px; color: var(--muted); }
+:root .dc-hours { text-align: right; display: flex; flex-direction: column; }
+:root .dc-hours b { font-size: 17px; font-weight: 600; font-variant-numeric: tabular-nums; }
+:root .dc-hours span { font-size: 12.5px; color: var(--muted); }
+:root .dc-proving { display: flex; gap: 10px; align-items: center; padding: 12px 18px 16px 66px; font-size: 13.5px; color: var(--muted); }
+:root .dc-proof { border-top: 1px solid var(--border); padding: 18px; display: flex; flex-direction: column; gap: 18px; background: color-mix(in srgb, var(--surface-2) 45%, var(--surface)); }
+:root .dc-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+:root .dc-metrics > div { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 2px; }
+:root .dc-metrics small { font-size: 12px; color: var(--muted); }
+:root .dc-metrics b { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+:root .dc-metrics span { font-size: 12px; color: var(--muted); }
+:root .dc-agree.good b { color: var(--ok); } :root .dc-agree.mid b { color: var(--warn); } :root .dc-agree.low b { color: var(--danger); }
+:root .dc-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: 20px; }
+:root .dc-cols h4 { margin: 0 0 8px; font-size: 13.5px; font-weight: 600; }
+:root .dc-steps { margin: 0; padding-left: 18px; font-size: 13.5px; line-height: 1.7; }
+:root .dc-cmp { width: 100%; border-collapse: collapse; font-size: 13px; }
+:root .dc-cmp th { text-align: left; font-weight: 500; color: var(--muted); font-size: 12px; padding: 4px 6px; border-bottom: 1px solid var(--border); }
+:root .dc-cmp td { padding: 6px; border-bottom: 1px solid var(--border); }
+:root .dc-cmp a { color: var(--text); }
+:root .dc-cmp .ok { color: var(--ok); } :root .dc-cmp .bad { color: var(--danger); }
+:root .dc-would { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
+:root .dc-would li { display: flex; flex-direction: column; gap: 2px; }
+:root .dc-would span { color: var(--muted); overflow-wrap: anywhere; }
+:root .dc-would .bad { color: var(--danger); }
+:root .dc-foot { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 860px) {
+  :root .dc-row { grid-template-columns: 28px minmax(0, 1fr); }
+  :root .dc-hours { text-align: left; grid-column: 2; flex-direction: row; gap: 8px; align-items: baseline; }
+  :root .dc-actions { grid-column: 2; }
+  :root .dc-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  :root .dc-cols { grid-template-columns: 1fr; }
+  :root .dc-proving { padding-left: 18px; }
+}
+
+/* Nine page links: below 1600px the top "New agent" button goes (it is on the Agents page) and links sit closer. */
+@media (max-width: 1600px) {
+  :root:root .app .tnav-cta { display: none; }
+  :root:root .app .tnav-links { gap: 16px; }
+  :root:root .app .tnav-inner { gap: 22px; }
+}
+@media (max-width: 1360px) and (min-width: 901px) {
+  :root:root .app .tnav-links { gap: 10px; }
+  :root:root .app .tnav-right .org-btn .n { max-width: 70px; }
+}
+@media (max-width: 1100px) and (min-width: 901px) {
+  :root:root .app .tnav-links { flex: 1 1 auto; min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+}

@@ -15,6 +15,8 @@ function route(method: string, url: URL, body: any): Response {
   if (/^\/api\/team\/users\/[^/]+\/reset-link$/.test(p)) return json({ link: `${location.origin}/?reset=demo-link`, emailed: true });
   if (p === '/api/alerts') return json(DEMO_ALERTS);
   if (p === '/t/changes') return json(DEMO_CHANGES);
+  if (p === '/t/discover' || p === '/t/discover/scan') return json(DEMO_DISCOVERY);
+  if (/^\/t\/discover\/[^/]+\/prove$/.test(p)) return json(DEMO_DISCOVERY.builds['case-triage'].proof);
   if (p === '/t/undo') return json({ restored: 2, deleted: 1, recovered: 0, skipped: [{ recordId: '500Qy00000KHt2aIAD', object: 'Case', why: 'Changed by someone since, kept: Priority' }], failed: [] });
   if (/^\/t\/agents\/[^/]+\/tests$/.test(p) && method === 'GET') return json(DEMO_TESTS);
   if (/^\/t\/agents\/[^/]+\/tests\/recent$/.test(p)) return json([{ question: 'Which accounts have more than 3 open cases?', answer: 'Two accounts: Acme Corp (5) and Globex (4).' }]);
@@ -238,4 +240,34 @@ const DEMO_CHANGES = {
     { id: 2, run_id: 'r2', op: 'update', object: 'Case', record_id: '500Qy00000KHt9bIAD', before: { Priority: 'Medium' }, after: { Priority: 'High' }, undoable: true, undone_at: null, undone_by: null, undo_result: null, created_at: ago(3), agent_name: 'Case triage' },
     { id: 1, run_id: 'r3', op: 'update', object: 'Case', record_id: '500Qy00000KHsZ1IAL', before: { Status: 'New' }, after: { Status: 'Working' }, undoable: true, undone_at: ago(20), undone_by: 'owner@demo-company.com', undo_result: 'Restored', created_at: ago(22), agent_name: 'Case triage' },
   ],
+};
+
+const DEMO_DISCOVERY = {
+  totalHours: 71.4, hourlyRate: 30, checked: 10, scannedAt: ago(0.1),
+  opportunities: [
+    { id: 'email-replies', title: 'Draft replies to customer emails', area: 'Service', evidence: '412 customer emails arrived on cases in the last 30 days, each answered by hand', volume: 412, minutesEach: 6, hoursPerMonth: 41.2, valuePerMonth: 1236, request: '' },
+    { id: 'case-triage', title: 'Triage new cases', area: 'Service', evidence: '486 cases in the last 30 days were sorted by hand (priority or type set by a person)', volume: 486, minutesEach: 2, hoursPerMonth: 16.2, valuePerMonth: 486, request: '', compareFields: ['Priority', 'Type'] },
+    { id: 'stale-deals', title: 'Nudge owners on stale deals', area: 'Sales', evidence: '94 open deals have had no activity for 14+ days', volume: 94, minutesEach: 5, hoursPerMonth: 7.8, valuePerMonth: 235, request: '' },
+    { id: 'lead-research', title: 'Research new leads on the web', area: 'Sales', evidence: '31 new leads from the last 30 days have had no call, email or task yet', volume: 31, minutesEach: 10, hoursPerMonth: 5.2, valuePerMonth: 155, request: '' },
+    { id: 'duplicates', title: 'Find and merge duplicates', area: 'Operations', evidence: '15 leads are duplicates of another lead with the same email', volume: 15, minutesEach: 4, hoursPerMonth: 1, valuePerMonth: 30, request: '' },
+  ],
+  builds: {
+    'case-triage': { opportunity: 'case-triage', workflowId: 'w1', name: 'Case triage on create', live: false, proof: {
+      workflowId: 'w1', name: 'Case triage on create', estimateUsd: 0.0016, warnings: [], replayed: 8, ok: 8, costUsd: 0.034, monthlyCostUsd: 0.78, hoursPerMonth: 16.2, valuePerMonth: 486, learned: 40,
+      summary: ['Runs when a Case is created', 'AI pulls out: type, priority, reason', 'Waits for a person to approve before changing anything', 'Updates the Case: Type, Priority'],
+      agreementBefore: { checked: 16, matched: 11, rate: 0.69, examples: [] },
+      agreement: { checked: 16, matched: 14, rate: 0.875, examples: [
+        { recordId: '500A1', field: 'Priority', agent: 'High', team: 'High', same: true }, { recordId: '500A1', field: 'Type', agent: 'Electrical', team: 'Electrical', same: true },
+        { recordId: '500A2', field: 'Priority', agent: 'Medium', team: 'Medium', same: true }, { recordId: '500A2', field: 'Type', agent: 'Mechanical', team: 'Mechanical', same: true },
+        { recordId: '500A3', field: 'Priority', agent: 'Low', team: 'Medium', same: false }, { recordId: '500A3', field: 'Type', agent: 'Other', team: 'Other', same: true },
+        { recordId: '500A4', field: 'Priority', agent: 'High', team: 'High', same: true }, { recordId: '500A4', field: 'Type', agent: 'Structural', team: 'Structural', same: true },
+      ] },
+      rows: [
+        { recordId: '500A1', label: '00001042 · Generator sparks when starting', status: 'done', wouldDo: [] },
+        { recordId: '500A2', label: '00001041 · Rotor making grinding noise', status: 'done', wouldDo: [] },
+        { recordId: '500A3', label: '00001039 · Question about warranty', status: 'done', wouldDo: [] },
+        { recordId: '500A4', label: '00001036 · Frame cracked after delivery', status: 'done', wouldDo: [] },
+      ],
+    } },
+  },
 };
