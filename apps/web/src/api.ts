@@ -142,30 +142,56 @@ export interface BillingStatus {
   configured: boolean; intervals: { plus: { month: boolean; year: boolean }; pro: { month: boolean; year: boolean } };
   subscription: { plan: PlanId | null; interval: 'month' | 'year' | null; status: string; amountCents: number | null; currency: string | null; renewsAt: string | null; cancelAtPeriodEnd: boolean; purchasedBy: string | null; startedAt: string | null } | null;
 }
+export type Stage = 'trial' | 'expired' | 'paying' | 'past_due' | 'churned' | 'comped';
+export type Health = 'active' | 'quiet' | 'at_risk';
+export interface AttentionItem { id: string; name: string; owner: string | null; why: string }
 export interface AdminOverview {
-  plans: Record<string, number>; subscriptions: number; mrr: number; trials: { active: number; ending: number; ended: number }; signups: { d30: number; d7: number; total: number };
-  users: { total: number; active7: number }; ai: { cost30: number; runs30: number }; openRequests: number; paymentIssues: number; billingConfigured: boolean; series: { day: string; signups: number }[];
+  billingConfigured: boolean;
+  kpis: {
+    workspaces: { value: number; sub: string; change: number; changeLabel: string };
+    mrr: { value: number; arr: number; paying: number; pastDue: number };
+    trials: { value: number; ending: number; expired: number };
+    people: { value: number; active7: number; change: number };
+    ai: { value: number; runs: number; change: number };
+    revenue: { value: number; change: number };
+    requests: number;
+  };
+  stages: Record<Stage, number>; plans: Record<PlanId, number>;
+  funnel: { step: string; n: number }[];
+  attention: { trialsEnding: AttentionItem[]; paymentFailed: AttentionItem[]; upgradeAsks: AttentionItem[]; churnRisk: AttentionItem[]; disconnected: AttentionItem[] };
+  series: { day: string; signups: number }[];
 }
 export interface AdminAccount {
-  id: string; name: string; plan: PlanId; trialEndsAt: string | null; requestedPlan: PlanId | null; planSetBy: string | null; createdAt: string; orgs: number; users: number; owner: string | null;
-  lastActive: string | null; liveAgents: number; aiCost30: number; subStatus: string | null; subInterval: string | null; subAmountCents: number | null; renewsAt: string | null; purchasedBy: string | null; cancelAtPeriodEnd: boolean | null;
+  id: string; name: string; plan: PlanId; trialEndsAt: string | null; requestedPlan: PlanId | null; planSetBy: string | null; createdAt: string; tags: string[]; staffOwner: string | null;
+  orgs: number; orgIssue: boolean; users: number; owner: string | null; lastActive: string | null; liveAgents: number; everLive: boolean; aiCost30: number; notes: number;
+  subStatus: string | null; subInterval: string | null; subAmountCents: number | null; renewsAt: string | null; purchasedBy: string | null; cancelAtPeriodEnd: boolean | null;
+  stage: Stage; health: Health; mrr: number;
 }
+export interface TimelineItem { at: string; kind: 'person' | 'org' | 'plan' | 'billing' | 'request' | 'note' | 'activity'; text: string; by?: string | null; detail?: string | null }
 export interface AdminAccountDetail {
-  account: { id: string; name: string; plan: PlanId; trialEndsAt: string | null; requestedPlan: PlanId | null; planSetBy: string | null; createdAt: string };
+  account: AdminAccount;
   plan: PlanSummary;
   members: { email: string; role: string; createdAt: string; lastLoginAt: string | null }[];
   invites: { email: string; role: string; invitedBy: string | null; expiresAt: string }[];
-  orgs: { username: string | null; url: string; status: string; usePackage: boolean; connectedAt: string }[];
+  orgs: { username: string | null; url: string; status: string; message: string | null; usePackage: boolean; connectedAt: string }[];
   subscription: (NonNullable<BillingStatus['subscription']> & { customerId: string | null }) | null;
   payments: { type: string; plan: string | null; amountCents: number | null; currency: string | null; invoiceUrl: string | null; detail: string | null; createdAt: string }[];
   planHistory: { from: string | null; to: string; by: string; reason: string | null; createdAt: string }[];
   requests: { id: number; topic: string; source: string; status: string; message: string | null; createdAt: string }[];
+  notes: { id: number; author: string; text: string; createdAt: string }[];
   activity: { user: string | null; action: string; target: string | null; createdAt: string }[];
+  timeline: TimelineItem[];
   usage30: { runs: number; cost: number };
 }
+export interface AdminRevenue {
+  mrr: number; arr: number; paying: number; billingConfigured: boolean;
+  byMonth: { month: string; cents: number; started: number; canceled: number }[];
+  subscriptions: { id: string; name: string; plan: PlanId; status: string; interval: string | null; amountCents: number | null; mrr: number; renewsAt: string | null; purchasedBy: string | null; cancelAtPeriodEnd: boolean | null }[];
+}
+export interface StaffLogItem { at: string; by: string | null; accountId: string | null; accountName: string | null; what: string; detail: string | null }
 export interface AdminUser { id: string; email: string; role: string; createdAt: string; lastLoginAt: string | null; accountId: string; accountName: string; plan: PlanId }
 export interface AdminPayment { id: number; type: string; plan: string | null; amountCents: number | null; currency: string | null; invoiceUrl: string | null; detail: string | null; createdAt: string; accountId: string | null; accountName: string | null }
-export interface AdminRequest { id: number; name: string; email: string; company: string; size: string | null; message: string | null; topic: string; source: string; status: string; notes: string | null; handledBy: string | null; createdAt: string; accountId: string | null; accountName: string | null }
+export interface AdminRequest { id: number; name: string; email: string; company: string; size: string | null; message: string | null; topic: string; source: string; status: string; notes: string | null; handledBy: string | null; assignedTo: string | null; createdAt: string; updatedAt: string | null; accountId: string | null; accountName: string | null }
 export interface PlatformAccount { id: string; name: string; plan: PlanId; trialEndsAt: string | null; requestedPlan: PlanId | null; planSetBy: string | null; createdAt: string; orgs: number; users: number; owner: string | null }
 export interface TeamUser { id: string; email: string; role: string; createdAt: string; lastLoginAt: string | null }
 export interface TeamInvite { id: string; email: string; role: string; invitedBy: string | null; expiresAt: string; createdAt: string }
@@ -238,7 +264,14 @@ export const api = {
   adminUsers: () => req<AdminUser[]>('GET', '/api/platform/users'),
   adminPayments: () => req<AdminPayment[]>('GET', '/api/platform/payments'),
   adminRequests: () => req<AdminRequest[]>('GET', '/api/platform/requests'),
-  adminUpdateRequest: (id: number, status: string, notes?: string) => req('PUT', `/api/platform/requests/${id}`, { status, notes }),
+  adminUpdateRequest: (id: number, b: { status?: string; notes?: string; assignedTo?: string | null }) => req('PUT', `/api/platform/requests/${id}`, b),
+  adminRevenue: () => req<AdminRevenue>('GET', '/api/platform/revenue'),
+  adminSearch: (q: string) => req<{ workspaces: { id: string; name: string; plan: PlanId; owner: string | null }[]; users: { email: string; role: string; accountId: string; accountName: string }[] }>('GET', `/api/platform/search?q=${encodeURIComponent(q)}`),
+  adminStaff: () => req<string[]>('GET', '/api/platform/staff'),
+  adminStaffLog: () => req<StaffLogItem[]>('GET', '/api/platform/staff-log'),
+  adminSetMeta: (id: string, b: { tags?: string[]; staffOwner?: string | null }) => req('PUT', `/api/platform/accounts/${id}/meta`, b),
+  adminAddNote: (id: string, text: string) => req<{ id: number }>('POST', `/api/platform/accounts/${id}/notes`, { text }),
+  adminDeleteNote: (id: number) => req('DELETE', `/api/platform/notes/${id}`),
   setAccountPlan: (id: string, plan: PlanId, trialDays?: number) => req('PUT', `/api/platform/accounts/${id}/plan`, { plan, trialDays }),
   conversations: (t: string, agentId?: string) => req<Conversation[]>('GET', `/api/tenants/${t}/conversations${agentId ? `?agentId=${agentId}` : ''}`),
   conversation: (t: string, id: string) => req<Conversation & { messages: { role: 'user' | 'assistant'; text: string; createdAt: string }[] }>('GET', `/api/tenants/${t}/conversations/${id}`),

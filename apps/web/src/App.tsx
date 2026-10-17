@@ -11,7 +11,7 @@ import { DiscoverPage } from './pages/Discover';
 import { TrustPage } from './pages/Trust';
 import { MemoryPage } from './pages/Memory';
 import { ContactPage } from './pages/Contact';
-import { AdminPage } from './pages/Admin';
+import { AdminConsole } from './pages/Admin';
 import { Ribbon, type RibbonPalette } from './components/Ribbon';
 import { SettingsHub, type SettingsSection } from './pages/SettingsHub';
 import { AlertsBell } from './components/AlertsBell';
@@ -192,6 +192,9 @@ export function App() {
   ];
   const statusDot = tenant?.setup_status === 'ready' ? 'dot-ok' : tenant?.setup_status === 'error' ? 'dot-bad' : 'dot-warn';
 
+  // The staff console has its own full-screen layout.
+  if (tab === 'admin' && me.platformAdmin) return <PlanProvider value={planValue}><div className="app"><AdminConsole me={me} onExit={() => setTab('home')} /></div></PlanProvider>;
+
   if (layout === 'top') {
     return (
       <PlanProvider value={planValue}>
@@ -282,7 +285,6 @@ export function App() {
           {pane('discover', <DiscoverPage tenant={tenant} openAgents={() => setTab('agents')} />)}
           {pane('trust', <TrustPage me={me} />)}
           {pane('memory', <MemoryPage me={me} tenants={tenants} />)}
-          {me.platformAdmin && pane('admin', <AdminPage />)}
           {pane('insights', !has('insights') ? <LockedPage feature="insights" title="Insights" /> : <InsightsPage key="ins" fixedView="overview" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
           {pane('dashboards', !has('insights') ? <LockedPage feature="insights" title="Dashboards" /> : <InsightsPage key="dash" fixedView="dashboards" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
           {pane('agents', <WorkflowsPage tenant={tenant} goConnections={() => setTab('settings')} incoming={incoming} onIncomingOpened={() => setIncoming(null)} prefill={prefill} onPrefillUsed={() => setPrefill(null)} />)}
@@ -379,7 +381,6 @@ export function App() {
           {pane('discover', <DiscoverPage tenant={tenant} openAgents={() => setTab('agents')} />)}
           {pane('trust', <TrustPage me={me} />)}
           {pane('memory', <MemoryPage me={me} tenants={tenants} />)}
-          {me.platformAdmin && pane('admin', <AdminPage />)}
           {pane('insights', !has('insights') ? <LockedPage feature="insights" title="Insights" /> : <InsightsPage key="ins" fixedView="overview" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
           {pane('dashboards', !has('insights') ? <LockedPage feature="insights" title="Dashboards" /> : <InsightsPage key="dash" fixedView="dashboards" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
           {pane('agents', <WorkflowsPage tenant={tenant} goConnections={() => setTab('settings')} incoming={incoming} onIncomingOpened={() => setIncoming(null)} prefill={prefill} onPrefillUsed={() => setPrefill(null)} />)}

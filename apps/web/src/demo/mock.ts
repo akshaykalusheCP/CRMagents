@@ -21,7 +21,19 @@ function route(method: string, url: URL, body: any): Response {
   if (p === '/api/billing') return json({ configured: false, intervals: { plus: { month: false, year: false }, pro: { month: false, year: false } }, subscription: null });
   if (p === '/api/platform/overview') return json(DEMO_ADMIN.overview);
   if (p === '/api/platform/accounts') return json(DEMO_ADMIN.accounts);
-  if (/^\/api\/platform\/accounts\/[^/]+$/.test(p)) return json(DEMO_ADMIN.detail);
+  if (/^\/api\/platform\/accounts\/[^/]+$/.test(p)) {
+    const a = DEMO_ADMIN.accounts.find((x) => p.endsWith(x.id)) ?? DEMO_ADMIN.accounts[1];
+    return json({ ...DEMO_ADMIN.detail, account: a });
+  }
+  if (/^\/api\/platform\/accounts\/[^/]+\/(meta|notes|trial|plan)$/.test(p) || /^\/api\/platform\/(notes|requests)\/[^/]+$/.test(p)) return json({ ok: true });
+  if (p === '/api/platform/revenue') return json(DEMO_ADMIN.revenue);
+  if (p === '/api/platform/staff') return json(['owner@demo-company.com', 'sales@crmagents.example']);
+  if (p === '/api/platform/staff-log') return json(DEMO_ADMIN.log);
+  if (p === '/api/platform/search') {
+    const q = (url.searchParams.get('q') ?? '').toLowerCase();
+    return json({ workspaces: DEMO_ADMIN.accounts.filter((a) => a.name.toLowerCase().includes(q) || a.owner.includes(q)).map((a) => ({ id: a.id, name: a.name, plan: a.plan, owner: a.owner })),
+      users: DEMO_ADMIN.users.filter((u) => u.email.includes(q)).map((u) => ({ email: u.email, role: u.role, accountId: u.accountId, accountName: u.accountName })) });
+  }
   if (p === '/api/platform/users') return json(DEMO_ADMIN.users);
   if (p === '/api/platform/payments') return json(DEMO_ADMIN.payments);
   if (p === '/api/platform/requests') return json(DEMO_ADMIN.requests);
@@ -355,15 +367,32 @@ const DEMO_XRAY = {
 const DEMO_ADMIN = (() => {
   const d = (h: number) => new Date(Date.now() - h * 3600_000).toISOString();
   const accounts = [
-    { id: 'w1', name: 'Northwind Service', plan: 'pro', trialEndsAt: null, requestedPlan: null, planSetBy: 'stripe', createdAt: d(900), orgs: 2, users: 14, owner: 'maria@northwind.example', lastActive: d(0.4), liveAgents: 9, aiCost30: 41.2, subStatus: 'active', subInterval: 'month', subAmountCents: 19900, renewsAt: d(-300), purchasedBy: 'maria@northwind.example', cancelAtPeriodEnd: false },
-    { id: 'w2', name: 'Acme Field Ops', plan: 'plus', trialEndsAt: null, requestedPlan: 'pro', planSetBy: 'stripe', createdAt: d(600), orgs: 1, users: 6, owner: 'dev@acme.example', lastActive: d(5), liveAgents: 4, aiCost30: 8.7, subStatus: 'past_due', subInterval: 'year', subAmountCents: 49000, renewsAt: d(-2000), purchasedBy: 'finance@acme.example', cancelAtPeriodEnd: false },
-    { id: 'w3', name: 'Globex Support', plan: 'basic', trialEndsAt: d(-48), requestedPlan: 'plus', planSetBy: 'sign-up trial', createdAt: d(290), orgs: 1, users: 2, owner: 'li@globex.example', lastActive: d(20), liveAgents: 2, aiCost30: 0.6, subStatus: null, subInterval: null, subAmountCents: null, renewsAt: null, purchasedBy: null, cancelAtPeriodEnd: null },
-    { id: 'w4', name: 'Initech', plan: 'basic', trialEndsAt: d(30), requestedPlan: null, planSetBy: 'sign-up trial', createdAt: d(380), orgs: 1, users: 1, owner: 'peter@initech.example', lastActive: d(120), liveAgents: 0, aiCost30: 0.1, subStatus: null, subInterval: null, subAmountCents: null, renewsAt: null, purchasedBy: null, cancelAtPeriodEnd: null },
-    { id: 'w5', name: 'Umbrella Partners', plan: 'promax', trialEndsAt: null, requestedPlan: null, planSetBy: 'owner@crmagents.example', createdAt: d(2000), orgs: 11, users: 32, owner: 'ops@umbrella.example', lastActive: d(1), liveAgents: 37, aiCost30: 212.4, subStatus: null, subInterval: null, subAmountCents: null, renewsAt: null, purchasedBy: null, cancelAtPeriodEnd: null },
+    { id: 'w1', tags: ['enterprise'], staffOwner: 'sales@crmagents.example', orgIssue: false, everLive: true, notes: 2, stage: 'paying', health: 'active', mrr: 199, name: 'Northwind Service', plan: 'pro', trialEndsAt: null, requestedPlan: null, planSetBy: 'stripe', createdAt: d(900), orgs: 2, users: 14, owner: 'maria@northwind.example', lastActive: d(0.4), liveAgents: 9, aiCost30: 41.2, subStatus: 'active', subInterval: 'month', subAmountCents: 19900, renewsAt: d(-300), purchasedBy: 'maria@northwind.example', cancelAtPeriodEnd: false },
+    { id: 'w2', tags: ['upsell'], staffOwner: 'owner@demo-company.com', orgIssue: false, everLive: true, notes: 1, stage: 'past_due', health: 'active', mrr: 40.83, name: 'Acme Field Ops', plan: 'plus', trialEndsAt: null, requestedPlan: 'pro', planSetBy: 'stripe', createdAt: d(600), orgs: 1, users: 6, owner: 'dev@acme.example', lastActive: d(5), liveAgents: 4, aiCost30: 8.7, subStatus: 'past_due', subInterval: 'year', subAmountCents: 49000, renewsAt: d(-2000), purchasedBy: 'finance@acme.example', cancelAtPeriodEnd: false },
+    { id: 'w3', tags: [], staffOwner: null, orgIssue: false, everLive: true, notes: 0, stage: 'expired', health: 'quiet', mrr: 0, name: 'Globex Support', plan: 'basic', trialEndsAt: d(48), requestedPlan: 'plus', planSetBy: 'sign-up trial', createdAt: d(290), orgs: 1, users: 2, owner: 'li@globex.example', lastActive: d(20), liveAgents: 2, aiCost30: 0.6, subStatus: null, subInterval: null, subAmountCents: null, renewsAt: null, purchasedBy: null, cancelAtPeriodEnd: null },
+    { id: 'w4', tags: [], staffOwner: null, orgIssue: true, everLive: false, notes: 0, stage: 'trial', health: 'at_risk', mrr: 0, name: 'Initech', plan: 'basic', trialEndsAt: d(-30), requestedPlan: null, planSetBy: 'sign-up trial', createdAt: d(380), orgs: 1, users: 1, owner: 'peter@initech.example', lastActive: d(120), liveAgents: 0, aiCost30: 0.1, subStatus: null, subInterval: null, subAmountCents: null, renewsAt: null, purchasedBy: null, cancelAtPeriodEnd: null },
+    { id: 'w5', tags: ['partner', 'enterprise'], staffOwner: 'sales@crmagents.example', orgIssue: false, everLive: true, notes: 4, stage: 'comped', health: 'active', mrr: 0, name: 'Umbrella Partners', plan: 'promax', trialEndsAt: null, requestedPlan: null, planSetBy: 'owner@crmagents.example', createdAt: d(2000), orgs: 11, users: 32, owner: 'ops@umbrella.example', lastActive: d(1), liveAgents: 37, aiCost30: 212.4, subStatus: null, subInterval: null, subAmountCents: null, renewsAt: null, purchasedBy: null, cancelAtPeriodEnd: null },
   ];
   return {
-    overview: { plans: { basic: 2, plus: 1, pro: 1, promax: 1 }, subscriptions: 2, mrr: 239.83, trials: { active: 1, ending: 0, ended: 1 }, signups: { d30: 3, d7: 1, total: 5 }, users: { total: 55, active7: 31 }, ai: { cost30: 263.0, runs30: 18420 }, openRequests: 2, paymentIssues: 1, billingConfigured: false,
+    overview: {
+      billingConfigured: false,
+      kpis: { workspaces: { value: 5, sub: '3 new in 30 days', change: 0.5, changeLabel: 'vs previous 30' }, mrr: { value: 239.83, arr: 2878, paying: 2, pastDue: 1 }, trials: { value: 1, ending: 1, expired: 1 },
+        people: { value: 55, active7: 31, change: 0.12 }, ai: { value: 263.0, runs: 18420, change: 0.31 }, revenue: { value: 199, change: -0.6 }, requests: 2 },
+      stages: { trial: 1, expired: 1, paying: 1, past_due: 1, churned: 0, comped: 1 }, plans: { basic: 2, plus: 1, pro: 1, promax: 1 },
+      funnel: [{ step: 'Signed up', n: 5 }, { step: 'Connected Salesforce', n: 5 }, { step: 'Turned an agent on', n: 4 }, { step: 'Paying', n: 2 }],
+      attention: {
+        trialsEnding: [{ id: 'w4', name: 'Initech', owner: 'peter@initech.example', why: 'ends in 1 day' }],
+        paymentFailed: [{ id: 'w2', name: 'Acme Field Ops', owner: 'dev@acme.example', why: 'card declined 1d ago' }],
+        upgradeAsks: [{ id: 'w2', name: 'Acme Field Ops', owner: 'dev@acme.example', why: 'asked for Pro' }, { id: 'w3', name: 'Globex Support', owner: 'li@globex.example', why: 'asked for Plus' }],
+        churnRisk: [], disconnected: [{ id: 'w4', name: 'Initech', owner: 'peter@initech.example', why: 'org login expired' }] },
       series: Array.from({ length: 30 }, (_, i) => ({ day: new Date(Date.now() - (29 - i) * 86_400_000).toISOString().slice(0, 10), signups: [0, 1, 0, 0, 2, 0, 1][i % 7] })) },
+    revenue: { mrr: 239.83, arr: 2878, paying: 2, billingConfigured: false,
+      byMonth: Array.from({ length: 6 }, (_, i) => { const m = new Date(); m.setDate(1); m.setMonth(m.getMonth() - 5 + i); return { month: m.toISOString().slice(0, 7), cents: [0, 0, 49000, 19900, 19900, 19900][i], started: [0, 0, 1, 1, 0, 0][i], canceled: 0 }; }),
+      subscriptions: [{ id: 'w1', name: 'Northwind Service', plan: 'pro', status: 'active', interval: 'month', amountCents: 19900, mrr: 199, renewsAt: d(-300), purchasedBy: 'maria@northwind.example', cancelAtPeriodEnd: false },
+        { id: 'w2', name: 'Acme Field Ops', plan: 'plus', status: 'past_due', interval: 'year', amountCents: 49000, mrr: 40.83, renewsAt: d(-2000), purchasedBy: 'finance@acme.example', cancelAtPeriodEnd: false }] },
+    log: [{ at: d(3), by: 'owner@demo-company.com', accountId: 'w2', accountName: 'Acme Field Ops', what: 'Added a note', detail: 'Called finance: new card coming Monday' },
+      { at: d(50), by: 'sales@crmagents.example', accountId: 'w5', accountName: 'Umbrella Partners', what: 'Changed plan Pro → Pro Max', detail: 'Partner agreement, invoiced yearly' },
+      { at: d(80), by: 'owner@demo-company.com', accountId: null, accountName: null, what: 'Request marked contacted', detail: 'Jo Park · Park Consulting' }],
     accounts,
     detail: { account: accounts[1], plan: { plan: 'plus', name: 'Plus', trialEndsAt: null, trialEnded: false, requestedPlan: 'pro', features: [], limits: { orgs: 2, users: 10, liveAgents: 15, assistants: null }, usage: { orgs: 1, users: 6, liveAgents: 4, assistants: 3 } },
       members: [{ email: 'dev@acme.example', role: 'owner', createdAt: d(600), lastLoginAt: d(5) }, { email: 'finance@acme.example', role: 'admin', createdAt: d(500), lastLoginAt: d(70) }, { email: 'agent1@acme.example', role: 'approver', createdAt: d(300), lastLoginAt: d(8) }],
@@ -374,13 +403,23 @@ const DEMO_ADMIN = (() => {
       planHistory: [{ from: 'basic', to: 'plus', by: 'stripe', reason: 'Subscription active', createdAt: d(580) }, { from: null, to: 'basic', by: 'sign-up', reason: '14-day trial', createdAt: d(600) }],
       requests: [{ id: 3, topic: 'upgrade', source: 'upgrade', status: 'new', message: 'Upgrade request: pro', createdAt: d(10) }],
       activity: [{ user: 'dev@acme.example', action: 'Turned an agent on', target: 'Case triage', createdAt: d(5) }, { user: 'finance@acme.example', action: 'Asked to upgrade to pro', target: null, createdAt: d(10) }],
+      notes: [{ id: 1, author: 'owner@demo-company.com', text: 'Called finance: new card coming Monday. Keep Plus running until then.', createdAt: d(3) }],
+      timeline: [
+        { at: d(3), kind: 'note', text: 'Note added', by: 'owner@demo-company.com', detail: 'Called finance: new card coming Monday' },
+        { at: d(10), kind: 'request', text: 'Asked to upgrade to Pro', by: 'finance@acme.example' },
+        { at: d(30), kind: 'billing', text: 'Payment failed', detail: '$490' },
+        { at: d(300), kind: 'person', text: 'agent1@acme.example joined as approver' },
+        { at: d(580), kind: 'plan', text: 'Basic → Plus', by: 'stripe', detail: 'Subscription active' },
+        { at: d(580), kind: 'billing', text: 'Subscription started', by: 'finance@acme.example', detail: '$490 / year' },
+        { at: d(590), kind: 'org', text: 'Connected admin@acme.example' },
+        { at: d(600), kind: 'person', text: 'Workspace created', by: 'dev@acme.example', detail: '14-day trial' }],
       usage30: { runs: 1840, cost: 8.7 } },
     users: [{ id: 'u1', email: 'maria@northwind.example', role: 'owner', createdAt: d(900), lastLoginAt: d(0.4), accountId: 'w1', accountName: 'Northwind Service', plan: 'pro' }, { id: 'u2', email: 'dev@acme.example', role: 'owner', createdAt: d(600), lastLoginAt: d(5), accountId: 'w2', accountName: 'Acme Field Ops', plan: 'plus' }, { id: 'u3', email: 'li@globex.example', role: 'owner', createdAt: d(290), lastLoginAt: d(20), accountId: 'w3', accountName: 'Globex Support', plan: 'basic' }],
     payments: [{ id: 1, type: 'payment_succeeded', plan: null, amountCents: 19900, currency: 'usd', invoiceUrl: 'https://invoice.stripe.example/1', detail: null, createdAt: d(20), accountId: 'w1', accountName: 'Northwind Service' }, { id: 2, type: 'payment_failed', plan: null, amountCents: 49000, currency: 'usd', invoiceUrl: null, detail: null, createdAt: d(30), accountId: 'w2', accountName: 'Acme Field Ops' }],
     requests: [
-      { id: 3, name: 'finance@acme.example', email: 'finance@acme.example', company: 'Acme Field Ops', size: null, message: 'Upgrade request: pro', topic: 'upgrade', source: 'upgrade', status: 'new', notes: null, handledBy: null, createdAt: d(10), accountId: 'w2', accountName: 'Acme Field Ops' },
-      { id: 2, name: 'Sam Rivera', email: 'sam@bigco.example', company: 'BigCo', size: '1200', message: 'We run 4 orgs and want agents for service and sales. Can you host in the EU?', topic: 'sales', source: 'pricing', status: 'new', notes: null, handledBy: null, createdAt: d(26), accountId: null, accountName: null },
-      { id: 1, name: 'Jo Park', email: 'jo@consult.example', company: 'Park Consulting', size: null, message: 'Salesforce partner here: interested in rolling agents out to our clients.', topic: 'partnership', source: 'contact', status: 'contacted', notes: 'Call booked for Tuesday', handledBy: 'owner@crmagents.example', createdAt: d(80), accountId: null, accountName: null },
+      { id: 3, name: 'finance@acme.example', email: 'finance@acme.example', company: 'Acme Field Ops', size: null, message: 'Upgrade request: pro', topic: 'upgrade', source: 'upgrade', status: 'new', notes: null, handledBy: null, assignedTo: 'owner@demo-company.com', updatedAt: null, createdAt: d(10), accountId: 'w2', accountName: 'Acme Field Ops' },
+      { id: 2, name: 'Sam Rivera', email: 'sam@bigco.example', company: 'BigCo', size: '1200', message: 'We run 4 orgs and want agents for service and sales. Can you host in the EU?', topic: 'sales', source: 'pricing', status: 'new', notes: null, handledBy: null, assignedTo: null, updatedAt: null, createdAt: d(26), accountId: null, accountName: null },
+      { id: 1, name: 'Jo Park', email: 'jo@consult.example', company: 'Park Consulting', size: null, message: 'Salesforce partner here: interested in rolling agents out to our clients.', topic: 'partnership', source: 'contact', status: 'contacted', notes: 'Call booked for Tuesday', handledBy: 'owner@crmagents.example', assignedTo: 'sales@crmagents.example', updatedAt: d(40), createdAt: d(80), accountId: null, accountName: null },
     ],
   };
 })();
