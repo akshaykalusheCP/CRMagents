@@ -36,6 +36,7 @@ import { publicChatInfo, registerPublicChat, setPublicChat } from './agent/publi
 import { addToRecordPage, addToUtilityBar, listPages } from './salesforce/pages.js';
 import { impact, setAssumptions } from './insights/impact.js';
 import { config } from './config.js';
+import { overLimit } from './ratelimit.js';
 import { addMemory, deleteMemory, deleteRecordNote, listMemories, listRecordNotes, memoryOn, updateMemory } from './memory/store.js';
 import { deleteConversation, getConversation, listConversations } from './memory/conversations.js';
 import { audit, deleteWorkspace, exportWorkspace, listAudit, registerAudit, trustFacts } from './trust/audit.js';
@@ -82,6 +83,17 @@ app.addHook('onSend', async (req, reply, payload) => {
 });
 
 app.get('/health', async () => ({ ok: true }));
+
+// "Contact sales" on the pricing section (no sign-in). Kept for the sales team; a few per address per hour.
+app.post('/api/sales-inquiry', async (req, reply) => {
+  if (await overLimit(`sales|${req.ip}`, 5, 3600)) return reply.code(429).send({ error: 'Too many requests. Try again later.' });
+  const b = z.object({
+    name: z.string().trim().min(1, 'Your name, please').max(120), email: z.string().trim().email('A valid work email, please').max(200),
+    company: z.string().trim().min(1, 'Your company, please').max(160), size: z.string().max(40).optional(), message: z.string().max(2000).optional(),
+  }).parse(req.body);
+  await pool.query('insert into sales_inquiries (name, email, company, size, message, ip) values ($1,$2,$3,$4,$5,$6)', [b.name, b.email.toLowerCase(), b.company, b.size ?? null, b.message ?? null, req.ip]);
+  return { ok: true };
+});
 
 // ---- OAuth (browser navigation, no API key) ----
 app.get('/oauth/connect', async (req, reply) => {

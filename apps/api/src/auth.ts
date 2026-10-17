@@ -64,7 +64,7 @@ const password = z.string().min(10, 'Password must be at least 10 characters').m
 const credentials = z.object({ email: z.string().email().max(200), password });
 
 // Reachable without a session.
-const PUBLIC = new Set(['/api/auth/signup', '/api/auth/login', '/api/auth/logout', '/api/auth/me', '/api/auth/forgot', '/api/auth/reset', '/api/auth/accept']);
+const PUBLIC = new Set(['/api/sales-inquiry', '/api/auth/signup', '/api/auth/login', '/api/auth/logout', '/api/auth/me', '/api/auth/forgot', '/api/auth/reset', '/api/auth/accept']);
 const isPublic = (path: string) => PUBLIC.has(path) || path.startsWith('/api/auth/invite/');
 
 export function registerAuth(app: FastifyInstance) {
