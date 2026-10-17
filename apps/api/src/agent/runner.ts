@@ -9,6 +9,7 @@ import { runTrust } from '../trust/policy.js';
 import { hasKnowledge } from '../knowledge/store.js';
 import { endRemote, remoteExecutor } from './remote.js';
 import { journalFor } from '../trust/undo.js';
+import { aiContext } from '../trust/aiLog.js';
 
 export interface AgentSpec {
   id?: string;
@@ -31,7 +32,7 @@ export async function runAgent(
 ) {
   const accountId = await accountOf(tenantId);
   checkRunRate(accountId);
-  const client = await aiClient(accountId);
+  const client = await aiClient(accountId, { tenantId });
   const sf = await SalesforceClient.forTenant(tenantId);
   const { masker, limits } = await runTrust(accountId);
   const remote: { exec?: (name: string, input: unknown) => Promise<unknown> | undefined } = {};
@@ -47,13 +48,13 @@ export async function runAgent(
   else if (opts.exec) remote.exec = opts.exec;
   opts.onStarted?.(runId);
   try {
-    const r = await llm.agent({
+    const r = await aiContext.run({ tenantId, runId }, async () => llm.agent({
       system: agent.systemPrompt,
       prompt: context ? `${userInput}\n\nContext:\n${JSON.stringify(context)}` : userInput,
       // Once guides are uploaded, every assistant can look things up in them (read-only, no AI cost).
       tools: !agent.tools.includes('search_knowledge') && (await hasKnowledge(accountId)) ? [...agent.tools, 'search_knowledge'] : agent.tools,
       history,
-    });
+    }));
     await pool.query(
       `update runs set status='done', output=$2, trace=$3, input_tokens=$4, output_tokens=$5,
          cache_read_tokens=$6, cache_write_tokens=$7, cost_usd=$8 where id=$1`,

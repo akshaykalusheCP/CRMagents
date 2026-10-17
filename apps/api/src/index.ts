@@ -36,6 +36,9 @@ import { publicChatInfo, registerPublicChat, setPublicChat } from './agent/publi
 import { addToRecordPage, addToUtilityBar, listPages } from './salesforce/pages.js';
 import { impact, setAssumptions } from './insights/impact.js';
 import { config } from './config.js';
+import { audit, deleteWorkspace, exportWorkspace, listAudit, registerAudit, trustFacts } from './trust/audit.js';
+import { getAiCall, listAiCalls } from './trust/aiLog.js';
+import { roleAtLeast } from '@crmagents/shared';
 import { forecast, setCap } from './engine/costplan.js';
 import { draftReplacement, explainObject, lastXray, scanAutomation } from './smart/xray.js';
 import { lastScan, learnFromTeam, proveOpportunity, scanOrg } from './insights/discover.js';
@@ -58,10 +61,22 @@ registerPublicChat(app);
 registerAuth(app);
 registerTeam(app);
 registerTwilio(app);
+registerAudit(app);
 
 app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
   const code = err instanceof z.ZodError ? 400 : (err.statusCode ?? 500);
   reply.code(code).send({ error: err instanceof z.ZodError ? err.issues.map((i) => i.message).join('; ') : err.message });
+});
+
+// Security headers on every response (the web app sets its own in production hosting).
+app.addHook('onSend', async (req, reply, payload) => {
+  reply.header('X-Content-Type-Options', 'nosniff');
+  reply.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+  reply.header('X-Frame-Options', 'DENY');
+  reply.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  if (config.publicUrl.startsWith('https://')) reply.header('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  if (req.url.startsWith('/api/')) reply.header('Cache-Control', 'no-store');
+  return payload;
 });
 
 app.get('/health', async () => ({ ok: true }));
@@ -660,6 +675,31 @@ app.post('/api/tenants/:tenantId/agents/:agentId/tests/run', async (req) => {
   const { tenantId, agentId } = req.params as { tenantId: string; agentId: string };
   const b = z.object({ channel: z.enum(['internal', 'website']).default('internal') }).parse(req.body ?? {});
   return startTestRun(tenantId, agentId, b.channel, req.user!.email);
+});
+
+// ---- Trust Center: what the AI saw, who did what, and the workspace's data ----
+app.get('/api/trust', async (req) => trustFacts(req.user!.accountId));
+app.get('/api/trust/ai-calls', async (req) => {
+  const q = z.object({ runId: z.string().uuid().optional(), limit: z.coerce.number().int().optional() }).parse(req.query);
+  return listAiCalls(req.user!.accountId, q);
+});
+app.get('/api/trust/ai-calls/:id', async (req) => getAiCall(req.user!.accountId, Number((req.params as { id: string }).id)));
+app.get('/api/trust/activity', async (req) => listAudit(req.user!.accountId));
+app.get('/api/trust/export', async (req, reply) => {
+  const u = req.user!;
+  if (!roleAtLeast(u.role, 'admin')) return reply.code(403).send({ error: 'Only workspace admins can export.' });
+  await audit(u.accountId, u.email, 'Exported all workspace data', { ip: req.ip });
+  reply.header('Content-Disposition', `attachment; filename="crmagents-export-${new Date().toISOString().slice(0, 10)}.json"`);
+  return exportWorkspace(u.accountId);
+});
+app.post('/api/account/delete', async (req, reply) => {
+  const u = req.user!;
+  if (u.role !== 'owner') return reply.code(403).send({ error: 'Only an owner can delete the workspace.' });
+  const b = z.object({ confirm: z.string() }).parse(req.body);
+  if (b.confirm.trim() !== u.accountName.trim()) return reply.code(400).send({ error: `Type the company name exactly: ${u.accountName}` });
+  const r = await deleteWorkspace(u.accountId);
+  reply.clearCookie('crmagents_session', { path: '/' });
+  return { deleted: true, ...r };
 });
 
 // ---- What to automate: scan the org, build and prove agents on its own data ----

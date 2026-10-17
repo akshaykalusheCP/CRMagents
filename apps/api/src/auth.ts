@@ -8,6 +8,7 @@ import { pool } from './db.js';
 import { sendMail } from './mailer.js';
 import { clearLimit, overLimit } from './ratelimit.js';
 import { requiredRole } from './roles.js';
+import { audit } from './trust/audit.js';
 import { createResetToken, resetEmail, resetLink } from './team.js';
 
 const scrypt = promisify(scryptCb) as (pw: string, salt: Buffer, len: number) => Promise<Buffer>;
@@ -68,6 +69,7 @@ const isPublic = (path: string) => PUBLIC.has(path) || path.startsWith('/api/aut
 
 export function registerAuth(app: FastifyInstance) {
   app.post('/api/auth/signup', async (req, reply) => {
+    if (await overLimit(`signup|${req.ip}`, 10, 3600)) return reply.code(429).send({ error: 'Too many sign-ups from this address. Try again later.' });
     const b = credentials.extend({ accountName: z.string().trim().min(1, 'Company name is required').max(100) }).parse(req.body);
     const email = b.email.trim().toLowerCase();
     const client = await pool.connect();
@@ -91,10 +93,14 @@ export function registerAuth(app: FastifyInstance) {
     const email = b.email.trim().toLowerCase();
     // Password guessing: 8 tries per email and address, and 30 per email from anywhere, per 15 minutes.
     if (await overLimit(`login|${email}|${req.ip}`, 8, 900) || await overLimit(`login|${email}`, 30, 900)) return reply.code(429).send({ error: 'Too many attempts. Try again in a few minutes.' });
-    const { rows } = await pool.query('select id, password_hash from users where lower(email)=$1', [email]);
+    const { rows } = await pool.query('select id, account_id, password_hash from users where lower(email)=$1', [email]);
     // Always run a hash comparison so response time does not reveal whether the email exists.
     const ok = await verifyPassword(b.password, rows[0]?.password_hash ?? 'scrypt$AAAAAAAAAAAAAAAAAAAAAA==$' + 'A'.repeat(86) + '==');
-    if (!rows[0] || !ok) return reply.code(401).send({ error: 'Invalid email or password' });
+    if (!rows[0] || !ok) {
+      if (rows[0]) await audit(rows[0].account_id, email, 'Failed sign-in (wrong password)', { ip: req.ip });
+      return reply.code(401).send({ error: 'Invalid email or password' });
+    }
+    await audit(rows[0].account_id, email, 'Signed in', { ip: req.ip });
     await clearLimit(`login|${email}|${req.ip}`);
     await createSession(reply, rows[0].id);
     return { ok: true };
@@ -117,6 +123,8 @@ export function registerAuth(app: FastifyInstance) {
       'update password_resets set used_at=now() where token_hash=$1 and used_at is null and expires_at > now() returning user_id', [sha(b.token)]);
     if (!rows[0]) return reply.code(400).send({ error: 'This reset link has expired or was already used. Ask for a new one.' });
     await pool.query('update users set password_hash=$2 where id=$1', [rows[0].user_id, await hashPassword(b.password)]);
+    const { rows: who } = await pool.query('select account_id, email from users where id=$1', [rows[0].user_id]);
+    if (who[0]) await audit(who[0].account_id, who[0].email, 'Reset their password with a link', { ip: req.ip });
     // Everyone signed in with the old password is signed out.
     await pool.query('delete from sessions where user_id=$1', [rows[0].user_id]);
     await createSession(reply, rows[0].user_id);
@@ -145,6 +153,7 @@ export function registerAuth(app: FastifyInstance) {
       const u = await client.query('insert into users (account_id, email, password_hash, role) values ($1,$2,$3,$4) returning id',
         [rows[0].account_id, rows[0].email, await hashPassword(b.password), rows[0].role]);
       await client.query('commit');
+      await audit(rows[0].account_id, rows[0].email, 'Joined the workspace', { target: `as ${rows[0].role}`, ip: req.ip });
       await createSession(reply, u.rows[0].id);
     } catch (e) { await client.query('rollback').catch(() => {}); throw e; } finally { client.release(); }
     return { ok: true };

@@ -15,7 +15,7 @@ import type { Insights } from './metrics.js';
 
 export async function setup(tenantId: string): Promise<{ llm: Llm; sf: SalesforceClient }> {
   const accountId = await accountOf(tenantId);
-  const client = await aiClient(accountId);
+  const client = await aiClient(accountId, { tenantId, purpose: 'Insights and tools' });
   const sf = await SalesforceClient.forTenant(tenantId);
   const llm = createLlm('', sf, spendGuard(accountId), client, await dbResultCache(accountId));
   return { llm, sf };

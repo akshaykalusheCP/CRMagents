@@ -46,7 +46,7 @@ function fieldContext(fs: Awaited<ReturnType<typeof describeFields>>): string {
 export async function draftWorkflow(tenantId: string, request: string, current?: Plan, timezone = 'UTC'): Promise<Draft> {
   const tz = isTimeZone(timezone) ? timezone : 'UTC';
   const accountId = await accountOf(tenantId);
-  const client = await aiClient(accountId);
+  const client = await aiClient(accountId, { tenantId, purpose: 'Agent builder' });
   const sf = await SalesforceClient.forTenant(tenantId);
   const llm = createLlm('', sf, spendGuard(accountId), client, await dbResultCache(accountId));
 

@@ -92,6 +92,7 @@ export async function undoChanges(tenantId: string, sf: SalesforceClient, change
   for (const c of rows as ChangeRow[]) {
     const key = `${c.object}:${c.record_id}`;
     try {
+      if (!/^[A-Za-z]\w*$/.test(c.object) || !/^[a-zA-Z0-9]{15,18}$/.test(c.record_id)) throw new Error('Not a valid record');
       if (!c.undoable) { rep.skipped.push({ recordId: c.record_id, object: c.object, why: 'The old values could not be read when it changed' }); continue; }
       if (c.op === 'update') {
         const older = (rows as ChangeRow[]).filter((x) => x.op === 'update' && `${x.object}:${x.record_id}` === key);

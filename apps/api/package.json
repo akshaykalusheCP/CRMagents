@@ -6,7 +6,7 @@
     "dev": "tsx watch --env-file=../../.env src/index.ts",
     "build": "tsc -p .",
     "typecheck": "tsc -p . --noEmit",
-    "test": "tsx --env-file=../../.env --test src/engine/engine.test.ts src/agent/tokens.test.ts src/salesforce/rotation.test.ts src/builder/builder.test.ts src/insights/insights.test.ts src/engine/watcher.test.ts src/smart/smart.test.ts src/trust/mask.test.ts src/trust/trust.test.ts src/knowledge/knowledge.test.ts src/salesforce/limits.test.ts src/agent/remote.test.ts src/agent/provider.test.ts src/smart/features.test.ts src/agent/selfService.test.ts src/salesforce/email.test.ts src/team.test.ts src/agent/tests.test.ts src/salesforce/meetings.test.ts src/channels/twilio.test.ts src/trust/undo.test.ts src/insights/discover.test.ts src/smart/xray.test.ts src/engine/costplan.test.ts"
+    "test": "tsx --env-file=../../.env --test src/engine/engine.test.ts src/agent/tokens.test.ts src/salesforce/rotation.test.ts src/builder/builder.test.ts src/insights/insights.test.ts src/engine/watcher.test.ts src/smart/smart.test.ts src/trust/mask.test.ts src/trust/trust.test.ts src/knowledge/knowledge.test.ts src/salesforce/limits.test.ts src/agent/remote.test.ts src/agent/provider.test.ts src/smart/features.test.ts src/agent/selfService.test.ts src/salesforce/email.test.ts src/team.test.ts src/agent/tests.test.ts src/salesforce/meetings.test.ts src/channels/twilio.test.ts src/trust/undo.test.ts src/insights/discover.test.ts src/smart/xray.test.ts src/engine/costplan.test.ts src/trust/aiLog.test.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.132.1",

@@ -1,6 +1,7 @@
 import { afterRunFailed } from '../alerts.js';
 import { journalFor } from '../trust/undo.js';
 import { checkCap } from './costplan.js';
+import { aiContext } from '../trust/aiLog.js';
 import { auditRun } from '../salesforce/audit.js';
 import { aiClient } from '../agent/provider.js';
 import type { Prefetched } from './prefetch.js';
@@ -52,7 +53,7 @@ async function makeEnv(tenantId: string, workflowId?: string, st?: RunState) {
   let real: Llm | undefined;
   const llm = async (): Promise<Llm> => {
     if (real) return real;
-    const client = await aiClient(accountId);
+    const client = await aiClient(accountId, { tenantId, purpose: workflowId ? undefined : 'Preview' });
     return (real = createLlm('', sf, spendGuard(accountId), client, await dbResultCache(accountId), { masker, limits, counters }));
   };
   const lazy: Llm = {
@@ -129,7 +130,7 @@ async function drive(runId: string, tenantId: string, graph: Workflow, st: RunSt
         if (!rows.length) throw new Cancelled('Run was cancelled');
       },
     };
-    const outcome = await execute(graph, env, st);
+    const outcome = await aiContext.run({ tenantId, runId }, () => execute(graph, env, st));
     const status = outcome.status === 'done' ? 'done' : outcome.status === 'waiting' ? 'waiting' : outcome.status === 'sleeping' ? 'sleeping' : 'error';
     const saved = await persist(runId, st, graph, status, outcome.error, env.unmask);
     if (status === 'sleeping') await pool.query('update runs set wake_at=$2 where id=$1', [runId, st.sleepUntil]);

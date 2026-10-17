@@ -1,3 +1,4 @@
+import { withAiLog, type AiContext } from '../trust/aiLog.js';
 import type Anthropic from '@anthropic-ai/sdk';
 import { getSetting } from '../settings.js';
 import { anthropicClient } from './llm.js';
@@ -18,8 +19,13 @@ const BASE_URLS: Record<Exclude<Provider, 'anthropic' | 'compatible'>, string> =
 const missing = (what: string) => Object.assign(new Error(`${what} is not configured. Add it in Settings → AI & spending.`), { statusCode: 400 });
 
 /** The AI client for a workspace, or a clear error when its key is missing. */
-export async function aiClient(accountId: string): Promise<AiClient> {
+/** The workspace's AI client. Every call through it is recorded in the AI call log (trust/aiLog.ts). */
+export async function aiClient(accountId: string, ctx: AiContext = {}): Promise<AiClient> {
   const provider = ((await getSetting(accountId, 'aiProvider')) || 'anthropic') as Provider;
+  return withAiLog(await rawClient(accountId, provider), accountId, provider, ctx);
+}
+
+async function rawClient(accountId: string, provider: Provider): Promise<AiClient> {
   if (provider === 'anthropic') {
     const key = await getSetting(accountId, 'anthropicKey');
     if (!key) throw missing('Anthropic API key');

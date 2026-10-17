@@ -3,6 +3,7 @@ import { usageFrom } from '../agent/pricing.js';
 import { pool } from '../db.js';
 import { getSetting } from '../settings.js';
 import { spendGuard } from '../spend.js';
+import { logAiCall } from '../trust/aiLog.js';
 
 // Scanned PDFs (pages that are only images) are read by Claude, which sees each page. Uses the low-cost model;
 // the cost counts toward the workspace's daily AI budget like any other AI use.
@@ -29,6 +30,10 @@ export async function ocrPdf(accountId: string, pdf: Buffer, pages: number, titl
     }],
   }).finalMessage();
   const usage = usageFrom(OCR_MODEL, msg.usage);
+  void logAiCall(accountId, 'anthropic', { purpose: 'Reading a scanned PDF' }, { model: OCR_MODEL, ms: 0,
+    request: { messages: [{ role: 'user', content: [{ document: `PDF "${title}", ${pages} pages (not stored here)` }, { text: 'Transcribe all the text in this document exactly, page by page.' }] }] },
+    response: { stop: msg.stop_reason, content: [{ text: `${msg.content.map((b) => (b.type === 'text' ? b.text : '')).join('').length} characters of transcript (stored as a guide)` }] },
+    usage: { input: usage.input, output: usage.output, costUsd: usage.costUsd } });
   // Logged like a run so it shows in usage and counts toward the daily budget.
   await pool.query(
     `insert into runs (tenant_id, input, status, output, input_tokens, output_tokens, cost_usd)

@@ -98,8 +98,10 @@ async function byKey(key: string) {
 const EMPTY_TWIML = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
 
 export function registerTwilio(app: FastifyInstance) {
-  // Twilio posts form fields.
-  app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (_req, body, done) => {
+  // Twilio posts form fields. Only its webhook accepts them: everything else takes JSON only, which a plain
+  // cross-site HTML form can't send.
+  app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (req, body, done) => {
+    if (!req.url.startsWith('/public/twilio/')) return done(Object.assign(new Error('Unsupported content type'), { statusCode: 415 }), undefined);
     done(null, Object.fromEntries(new URLSearchParams(String(body ?? ''))));
   });
 

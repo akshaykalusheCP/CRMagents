@@ -44,6 +44,7 @@ export class SalesforceClient {
   /** Current values of these fields (or every field) for some records, by 15-character Id. Never throws. */
   private async valuesOf(sobject: string, ids: string[], fields: string[] | 'ALL'): Promise<Map<string, Record<string, unknown>>> {
     const out = new Map<string, Record<string, unknown>>();
+    if (!FIELD.test(sobject)) return out; // object names only: nothing else goes into the query
     const list = fields === 'ALL' ? 'FIELDS(ALL)' : [...new Set(['Id', ...fields.filter((f) => FIELD.test(f) && f !== 'Id')])].join(', ');
     for (let i = 0; i < ids.length; i += 200) {
       const part = ids.slice(i, i + 200).filter((x) => /^[a-zA-Z0-9]{15,18}$/.test(x));

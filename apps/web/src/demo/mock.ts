@@ -15,6 +15,26 @@ function route(method: string, url: URL, body: any): Response {
   if (/^\/api\/team\/users\/[^/]+\/reset-link$/.test(p)) return json({ link: `${location.origin}/?reset=demo-link`, emailed: true });
   if (p === '/api/alerts') return json(DEMO_ALERTS);
   if (p === '/t/changes') return json(DEMO_CHANGES);
+  if (p === '/api/trust') return json({ ai: { provider: 'anthropic', calls30d: 1874, maskedValues30d: 6412 }, masking: { on: true, extraFields: ['Salary__c'] }, retentionDays: 30,
+    limits: { aiCalls: 40, toolCalls: 60, tokens: 400000, dailyBudgetUsd: '2' }, agents: { total: 5, live: 3, liveWriting: 3, liveWritingAsking: 2, capped: 2 }, rules: 4,
+    changes30d: 1290, undone30d: 3, team: { owner: 1, admin: 1, builder: 1, approver: 1 }, alerts: true,
+    salesforce: { scopes: ['api', 'refresh_token'], orgs: [{ id: 't', username: 'owner@demo-company.com', url: 'https://demo.my.salesforce.com', status: 'ready', connectedAt: ago(900) }] } });
+  if (p === '/api/trust/ai-calls') return json([
+    { id: 3, createdAt: ago(0.2), provider: 'anthropic', model: 'claude-haiku-5-5', maskedValues: 2, inputTokens: 812, outputTokens: 64, costUsd: 0.0011, ms: 900, error: null, runId: 'r1', purpose: 'Case triage' },
+    { id: 2, createdAt: ago(1), provider: 'anthropic', model: 'claude-opus-5-5', maskedValues: 0, inputTokens: 3400, outputTokens: 410, costUsd: 0.027, ms: 5200, error: null, runId: null, purpose: 'Insights and tools' },
+    { id: 1, createdAt: ago(3), provider: 'anthropic', model: 'claude-sonnet-5-5', maskedValues: 4, inputTokens: 2100, outputTokens: 380, costUsd: 0.012, ms: 3900, error: null, runId: 'r2', purpose: 'Draft replies to customer emails' },
+  ]);
+  if (/^\/api\/trust\/ai-calls\/\d+$/.test(p)) return json({ id: 3, createdAt: ago(0.2), provider: 'anthropic', model: 'claude-haiku-5-5', maskedValues: 2, error: null,
+    request: { system: 'You extract structured data from text. Use an empty string when a value is not in the text.', tools: [],
+      messages: [{ role: 'user', content: 'Text:\n"""\nSubject: Generator sparks when starting\nDescription: Hi, this is [PERSON_1], reach me at [EMAIL_1]. The generator sparks every time I start it.\n"""' }] },
+    response: { stop: 'end_turn', content: [{ text: '{"type":"Electrical","priority":"High","reason":"Sparking is a safety risk."}' }] } });
+  if (p === '/api/trust/activity') return json([
+    { id: 5, user: 'owner@demo-company.com', action: 'Turned an agent on', target: 'Case triage', ip: '203.0.113.7', createdAt: ago(0.5) },
+    { id: 4, user: 'support-lead@demo-company.com', action: 'Approved a change', target: 'r1', ip: '203.0.113.9', createdAt: ago(2) },
+    { id: 3, user: 'owner@demo-company.com', action: 'Invited someone', target: 'sam@demo-company.com as approver', ip: '203.0.113.7', createdAt: ago(28) },
+    { id: 2, user: 'priya@demo-company.com', action: 'Changed workspace settings', target: 'maskPii, maskFields', ip: '203.0.113.8', createdAt: ago(50) },
+    { id: 1, user: 'owner@demo-company.com', action: 'Signed in', target: null, ip: '203.0.113.7', createdAt: ago(51) },
+  ]);
   if (/^\/t\/workflows\/[^/]+\/forecast$/.test(p)) return json({ perRunUsd: 0.0016, perRunBasis: 'actual', runsPerMonth: 486, runsBasis: 'Case records created in the last 30 days', monthlyUsd: 0.78, capUsd: 5, spentThisMonthUsd: 0.41, suggestedCapUsd: 2 });
   if (/^\/t\/workflows\/[^/]+\/cap$/.test(p)) return json({ perRunUsd: 0.0016, perRunBasis: 'actual', runsPerMonth: 486, runsBasis: 'Case records created in the last 30 days', monthlyUsd: 0.78, capUsd: body.capUsd, spentThisMonthUsd: 0.41, suggestedCapUsd: 2 });
   if (p === '/t/xray' || p === '/t/xray/scan') return json(DEMO_XRAY);

@@ -1,5 +1,9 @@
 import { Search } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+
+/** Overlays (drawers, dialogs) render at the app's top level, above the sticky top bar, never inside a page. */
+const overlay = (node: ReactNode) => createPortal(node, document.querySelector('.app') ?? document.body);
 
 // The app's building blocks. Pages compose these instead of styling their own boxes, so spacing, borders and
 // states stay the same everywhere. Cards are for separate objects only; sections are plain panels with a header.
@@ -191,7 +195,7 @@ export function Drawer({ open, title, sub, onClose, children, footer }: { open: 
     return () => window.removeEventListener('keydown', k);
   }, [open, onClose]);
   if (!open) return null;
-  return (
+  return overlay(
     <div className="sheet-back" onClick={onClose}>
       <aside className="sheet" role="dialog" aria-label={typeof title === 'string' ? title : 'Details'} onClick={(e) => e.stopPropagation()}>
         <header className="sheet-head">
@@ -201,7 +205,7 @@ export function Drawer({ open, title, sub, onClose, children, footer }: { open: 
         <div className="sheet-body">{children}</div>
         {footer && <footer className="sheet-foot">{footer}</footer>}
       </aside>
-    </div>
+    </div>,
   );
 }
 
@@ -255,7 +259,7 @@ export function useConfirm(): [ReactNode, (o: AskOptions) => Promise<boolean>] {
     window.addEventListener('keydown', k);
     return () => window.removeEventListener('keydown', k);
   });
-  const ui = state && (
+  const ui = state && overlay(
     <div className="modal" onClick={() => close(false)}>
       <div className="confirm-card" role="alertdialog" aria-labelledby="confirm-title" onClick={(e) => e.stopPropagation()}>
         <h2 id="confirm-title">{state.title}</h2>
