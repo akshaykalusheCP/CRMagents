@@ -71,7 +71,7 @@ async function ensurePackage(tenantId: string, sf: SalesforceClient) {
   }
 }
 
-async function ensureRemoteSite(sf: SalesforceClient) {
+export async function ensureRemoteSite(sf: SalesforceClient) {
   const origin = new URL(config.bridgeUrl).origin;
   const metadata = {
     url: origin,
@@ -116,8 +116,7 @@ export async function setupOrg(tenantId: string): Promise<void> {
       // Optional add-on: the record-page panel and Flow action live in the package.
       await ensurePackage(tenantId, sf);
       await status(tenantId, 'configuring', 'Connecting the Agent Panel to CRMagents…');
-      await ensureRemoteSite(sf);
-      await provisionOrg(tenantId);
+      await provisionOrg(tenantId); // also allows the address in Remote Site Settings
       await ensurePermission(tenantId, sf);
       await status(tenantId, 'ready', 'Ready. CRMagents is installed in Salesforce: add the Agent Panel to pages and the Ask CRMagents button to layouts.');
     } else {

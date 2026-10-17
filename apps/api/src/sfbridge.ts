@@ -1,3 +1,4 @@
+import { ensureRemoteSite } from './salesforce/setup.js';
 import { deliverResults, takeCalls } from './agent/remote.js';
 import { markSuggestion, recordSuggestions } from './knowledge/suggestions.js';
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
@@ -39,6 +40,9 @@ export async function provisionOrg(tenantId: string): Promise<{ ok: true }> {
   const { rows } = await pool.query('select sf_org_id from tenants where id=$1', [tenantId]);
   const orgId: string = rows[0].sf_org_id;
   const sf = await SalesforceClient.forTenant(tenantId);
+  // Salesforce only calls addresses listed in Remote Site Settings: when our address changes (new tunnel, new
+  // host), the setting must change with it, or every panel shows "Unauthorized endpoint".
+  await ensureRemoteSite(sf);
   const fields = { Base_Url__c: config.bridgeUrl, Signing_Secret__c: secret };
   try {
     const existing = await sf.query(`SELECT Id FROM CRMagents_Config__c WHERE SetupOwnerId = '${orgId}' LIMIT 1`);
