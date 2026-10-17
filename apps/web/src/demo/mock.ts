@@ -15,9 +15,20 @@ function route(method: string, url: URL, body: any): Response {
   if (/^\/api\/team\/users\/[^/]+\/reset-link$/.test(p)) return json({ link: `${location.origin}/?reset=demo-link`, emailed: true });
   if (p === '/api/alerts') return json(DEMO_ALERTS);
   if (p === '/t/changes') return json(DEMO_CHANGES);
+  if (p === '/api/memories' && method === 'GET') return json({ on: true, canTeam: true,
+    memories: [
+      { id: 'm1', scope: 'team', owner: null, text: 'A hot deal is over $100k and closes this quarter', source: 'user', createdBy: 'priya@demo-company.com', uses: 41, lastUsedAt: ago(1), createdAt: ago(400) },
+      { id: 'm2', scope: 'team', owner: null, text: 'We call Cases "tickets" with customers', source: 'assistant', createdBy: 'owner@demo-company.com', uses: 12, lastUsedAt: ago(5), createdAt: ago(200) },
+      { id: 'm3', scope: 'personal', owner: 'owner@demo-company.com', text: 'I look after the enterprise accounts in the West', source: 'assistant', createdBy: 'owner@demo-company.com', uses: 9, lastUsedAt: ago(2), createdAt: ago(90) },
+      { id: 'm4', scope: 'personal', owner: 'owner@demo-company.com', text: 'Keep answers to one line unless I ask for more', source: 'user', createdBy: 'owner@demo-company.com', uses: 30, lastUsedAt: ago(0.5), createdAt: ago(60) },
+    ],
+    notes: [
+      { id: 1, tenantId: 't', recordId: '500Qy00000KHt2aIAD', note: 'Customer prefers email over phone', author: 'Case triage', createdAt: ago(20) },
+      { id: 2, tenantId: 't', recordId: '006Qy00000Abc12IAD', note: 'Already asked for the signed order form on 14 Oct', author: 'Stale deal follow-ups', createdAt: ago(70) },
+    ] });
   if (p === '/api/trust') return json({ ai: { provider: 'anthropic', calls30d: 1874, maskedValues30d: 6412 }, masking: { on: true, extraFields: ['Salary__c'] }, retentionDays: 30,
     limits: { aiCalls: 40, toolCalls: 60, tokens: 400000, dailyBudgetUsd: '2' }, agents: { total: 5, live: 3, liveWriting: 3, liveWritingAsking: 2, capped: 2 }, rules: 4,
-    changes30d: 1290, undone30d: 3, team: { owner: 1, admin: 1, builder: 1, approver: 1 }, alerts: true,
+    changes30d: 1290, undone30d: 3, team: { owner: 1, admin: 1, builder: 1, approver: 1 }, alerts: true, memory: { on: true, team: 6, personal: 11, recordNotes: 48 },
     salesforce: { scopes: ['api', 'refresh_token'], orgs: [{ id: 't', username: 'owner@demo-company.com', url: 'https://demo.my.salesforce.com', status: 'ready', connectedAt: ago(900) }] } });
   if (p === '/api/trust/ai-calls') return json([
     { id: 3, createdAt: ago(0.2), provider: 'anthropic', model: 'claude-haiku-5-5', maskedValues: 2, inputTokens: 812, outputTokens: 64, costUsd: 0.0011, ms: 900, error: null, runId: 'r1', purpose: 'Case triage' },
@@ -53,7 +64,8 @@ function route(method: string, url: URL, body: any): Response {
   if (p === '/t/builder/chat') return json(demoChat(body));
   if (p === '/t/workflows' && method === 'GET') return json(DEMO_AGENTS);
   if (p === '/t/agents' && method === 'GET') return json(DEMO_ASSISTANTS);
-  if (/^\/t\/agents\/[^/]+\/run$/.test(p)) return json({ runId: 'x', output: body.history?.length ? 'Of those 9, 4 are High priority: 00001042, 00001039, 00001031 and 00001027.' : '**9 open cases**, mostly high priority.\n\n- **High:** 4 (oldest is 00001042, 12 days)\n- **Medium:** 3\n- **Low:** 2\n- Two are **past their SLA**: 00001042 and 00001039' });
+  if (p === '/t/conversations') return json([{ id: 'c1', title: 'How many open cases by priority?', channel: 'app', recordId: null, agentId: 'a', agentName: 'Support analyst', updatedAt: ago(3), messages: 4 }, { id: 'c2', title: 'Summarise this case', channel: 'salesforce', recordId: '500Qy', agentId: 'a', agentName: 'Support analyst', updatedAt: ago(30), messages: 2 }]);
+  if (/^\/t\/agents\/[^/]+\/run$/.test(p)) return json({ runId: 'x', conversationId: 'c1', remembered: /remember/i.test(body.input ?? '') ? [{ kind: 'personal', text: 'Looks after the enterprise accounts in the West', id: 'm9' }] : [], output: body.history?.length ? 'Of those 9, 4 are High priority: 00001042, 00001039, 00001031 and 00001027.' : '**9 open cases**, mostly high priority.\n\n- **High:** 4 (oldest is 00001042, 12 days)\n- **Medium:** 3\n- **Low:** 2\n- Two are **past their SLA**: 00001042 and 00001039' });
   if (p === '/api/tools') return json(DEMO_TOOLS);
   if (/^\/t\/agents\/[^/]+\/public$/.test(p)) return json({ enabled: true, origins: 'https://www.demo-company.com', cases: true, greeting: 'Hi! Ask me about our products, or check on your order.', sms: { enabled: true, webhookUrl: 'https://app.crmagents.example/public/twilio/pc_demo' }, snippet: '<script src="https://app.crmagents.example/public/widget.js" data-crmagents-key="pc_demo" async></script>',
     selfService: { verify: true, handoff: true, updatable: ['Phone', 'MailingStreet', 'MailingCity'],

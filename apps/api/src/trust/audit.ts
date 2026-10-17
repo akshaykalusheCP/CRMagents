@@ -80,8 +80,10 @@ export async function listAudit(accountId: string, limit = 200) {
 /** The facts behind the Trust Center, for this workspace, as they are right now. */
 export async function trustFacts(accountId: string) {
   const s = (k: Parameters<typeof getSetting>[1]) => getSetting(accountId, k);
-  const [provider, mask, maskFields, retention, maxAi, maxTools, maxTokens, alerts, budget] = await Promise.all([
-    s('aiProvider'), s('maskPii'), s('maskFields'), s('retentionDays'), s('maxAiCalls'), s('maxToolCalls'), s('maxTokens'), s('alertEmails'), s('dailyBudgetUsd')]);
+  const [provider, mask, maskFields, retention, maxAi, maxTools, maxTokens, alerts, budget, memory] = await Promise.all([
+    s('aiProvider'), s('maskPii'), s('maskFields'), s('retentionDays'), s('maxAiCalls'), s('maxToolCalls'), s('maxTokens'), s('alertEmails'), s('dailyBudgetUsd'), s('memoryEnabled')]);
+  const { rows: mem } = await pool.query("select count(*) filter (where scope='team')::int team, count(*) filter (where scope='personal')::int personal from memories where account_id=$1", [accountId]);
+  const { rows: notes } = await pool.query('select count(*)::int n from record_notes n join tenants t on t.id = n.tenant_id where t.account_id=$1', [accountId]);
   const { rows: orgs } = await pool.query('select id, sf_username as username, sf_instance_url as url, setup_status as status, created_at as "connectedAt" from tenants where account_id=$1', [accountId]);
   const { rows: wf } = await pool.query('select w.graph, w.live, w.monthly_cap_usd from workflows w join tenants t on t.id = w.tenant_id where t.account_id=$1', [accountId]);
   const live = wf.filter((w) => w.live);
@@ -102,6 +104,7 @@ export async function trustFacts(accountId: string) {
     changes30d: undo[0].n, undone30d: undo[0].undone,
     team: Object.fromEntries(team.map((r) => [r.role, r.n])),
     alerts: alerts !== 'off',
+    memory: { on: memory !== 'off', team: mem[0].team, personal: mem[0].personal, recordNotes: notes[0].n },
     salesforce: { scopes: ['api', 'refresh_token'], orgs },
   };
 }

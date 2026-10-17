@@ -157,11 +157,16 @@ export interface TrustFacts {
   limits: { aiCalls: number; toolCalls: number; tokens: number; dailyBudgetUsd: string };
   agents: { total: number; live: number; liveWriting: number; liveWritingAsking: number; capped: number };
   rules: number; changes30d: number; undone30d: number; team: Record<string, number>; alerts: boolean;
+  memory?: { on: boolean; team: number; personal: number; recordNotes: number };
   salesforce: { scopes: string[]; orgs: { id: string; username: string | null; url: string; status: string; connectedAt: string }[] };
 }
 export interface AiCallRow { id: number; createdAt: string; provider: string; model: string; maskedValues: number; inputTokens: number; outputTokens: number; costUsd: number; ms: number | null; error: string | null; runId: string | null; purpose: string }
 export interface AiCallDetail { id: number; createdAt: string; provider: string; model: string; maskedValues: number; error: string | null; request: { system?: unknown; messages: { role: string; content: unknown }[]; tools: string[] }; response: { stop?: string; content: unknown } | null }
 export interface ActivityRow { id: number; user: string | null; action: string; target: string | null; ip: string | null; createdAt: string }
+export interface Remembered { kind: 'personal' | 'team' | 'record'; text: string; id?: string; recordId?: string }
+export interface Conversation { id: string; title: string; channel: 'app' | 'salesforce'; recordId: string | null; agentId: string | null; agentName: string | null; updatedAt: string; messages: number }
+export interface MemoryItem { id: string; scope: 'personal' | 'team'; owner: string | null; text: string; source: string; createdBy: string | null; uses: number; lastUsedAt: string | null; createdAt: string }
+export interface RecordNote { id: number; tenantId: string; recordId: string; note: string; author: string | null; createdAt: string }
 export interface Team { me: string; canManage: boolean; users: TeamUser[]; invites: TeamInvite[] }
 export interface Alert { id: string; kind: string; title: string; body: string; tenantId: string | null; workflowId: string | null; readAt: string | null; createdAt: string }
 
@@ -182,6 +187,14 @@ export const api = {
   acceptInvite: (token: string, password: string) => req('POST', '/api/auth/accept', { token, password }),
   changePassword: (current: string, password: string) => req('POST', '/api/auth/password', { current, password }),
   team: () => req<Team>('GET', '/api/team'),
+  conversations: (t: string, agentId?: string) => req<Conversation[]>('GET', `/api/tenants/${t}/conversations${agentId ? `?agentId=${agentId}` : ''}`),
+  conversation: (t: string, id: string) => req<Conversation & { messages: { role: 'user' | 'assistant'; text: string; createdAt: string }[] }>('GET', `/api/tenants/${t}/conversations/${id}`),
+  deleteConversation: (t: string, id: string) => req('DELETE', `/api/tenants/${t}/conversations/${id}`),
+  memories: () => req<{ on: boolean; canTeam: boolean; memories: MemoryItem[]; notes: RecordNote[] }>('GET', '/api/memories'),
+  addMemory: (text: string, scope: 'personal' | 'team') => req<{ id: string }>('POST', '/api/memories', { text, scope }),
+  updateMemory: (id: string, text: string) => req('PUT', `/api/memories/${id}`, { text }),
+  deleteMemory: (id: string) => req('DELETE', `/api/memories/${id}`),
+  deleteRecordNote: (id: number) => req('DELETE', `/api/memories/notes/${id}`),
   trust: () => req<TrustFacts>('GET', '/api/trust'),
   aiCalls: () => req<AiCallRow[]>('GET', '/api/trust/ai-calls'),
   aiCall: (id: number) => req<AiCallDetail>('GET', `/api/trust/ai-calls/${id}`),
@@ -223,8 +236,8 @@ export const api = {
   createAgent: (t: string, a: Omit<Agent, 'id'>) => req<{ id: string }>('POST', `/api/tenants/${t}/agents`, a),
   updateAgent: (t: string, a: Agent) => req('PUT', `/api/tenants/${t}/agents/${a.id}`, a),
   deleteAgent: (t: string, id: string) => req('DELETE', `/api/tenants/${t}/agents/${id}`),
-  run: (t: string, id: string, input: string, history?: { role: 'user' | 'assistant'; text: string }[]) =>
-    req<{ runId: string; output: string }>('POST', `/api/tenants/${t}/agents/${id}/run`, { input, history }),
+  run: (t: string, id: string, input: string, history?: { role: 'user' | 'assistant'; text: string }[], conversationId?: string | null) =>
+    req<{ runId: string; output: string; conversationId: string | null; remembered: Remembered[] }>('POST', `/api/tenants/${t}/agents/${id}/run`, { input, history, conversationId }),
   publicChat: (t: string, agentId: string) => req<PublicChat>('GET', `/api/tenants/${t}/agents/${agentId}/public`),
   setPublicChat: (t: string, agentId: string, b: Omit<PublicChat, 'snippet' | 'sms'> & { sms?: boolean }) => req<PublicChat>('PUT', `/api/tenants/${t}/agents/${agentId}/public`, b),
   sfPages: (t: string, object?: string) => req<{ utilityBars: SfPage[]; recordPages: SfPage[] }>('GET', `/api/tenants/${t}/salesforce/pages${object ? `?object=${encodeURIComponent(object)}` : ''}`),

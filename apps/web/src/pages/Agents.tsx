@@ -1,9 +1,9 @@
 import { PublicChatSettings } from '../components/PublicChat';
 import { AssistantTests, type TestDraft } from '../components/AssistantTests';
-import { Loader2, Plus, Send } from 'lucide-react';
+import { Loader2, Plus, Send, History, Trash2, Bookmark } from 'lucide-react';
 import { Markdown } from '../components/Markdown';
 import { useEffect, useState } from 'react';
-import { api, type Agent, type Tenant, type ToolInfo } from '../api';
+import { api, type Agent, type Tenant, type ToolInfo, type Remembered, type Conversation } from '../api';
 import { Empty, Panel, Status, toast, useConfirm } from '../components/ui';
 
 // Assistants answer questions when asked (in the app, or from Salesforce). List on the left, the selected one on the right.
@@ -23,7 +23,9 @@ export function AgentsPage({ tenant, goConnections }: { tenant?: Tenant; goConne
   const [confirmUI, ask] = useConfirm();
   const [err, setErr] = useState('');
   const [input, setInput] = useState('');
-  const [thread, setThread] = useState<{ role: 'user' | 'assistant'; text: string }[]>([]);
+  const [thread, setThread] = useState<{ role: 'user' | 'assistant'; text: string; remembered?: Remembered[] }[]>([]);
+  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [past, setPast] = useState<Conversation[] | null>(null);
   const [testDraft, setTestDraft] = useState<TestDraft | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -33,7 +35,28 @@ export function AgentsPage({ tenant, goConnections }: { tenant?: Tenant; goConne
 
   if (!tenant) return <Panel><Empty title="No org connected" body="Assistants work with a connected Salesforce org." action={<button className="sm" onClick={goConnections}>Connect Salesforce</button>} /></Panel>;
 
-  const pick = (a: Agent) => { setSel(a); setSaved(JSON.stringify(a)); setErr(''); setThread([]); };
+  const pick = (a: Agent) => { setSel(a); setSaved(JSON.stringify(a)); setErr(''); setThread([]); setConversationId(null); setPast(null); };
+  const newChat = () => { setThread([]); setConversationId(null); };
+  const showPast = async () => {
+    if (!sel?.id) return;
+    if (past) { setPast(null); return; }
+    try { setPast(await api.conversations(tenant.id, sel.id)); } catch (e) { toast((e as Error).message, 'bad'); }
+  };
+  const openChat = async (id: string) => {
+    try {
+      const c = await api.conversation(tenant.id, id);
+      setThread(c.messages.map((m) => ({ role: m.role, text: m.text })));
+      setConversationId(c.id); setPast(null);
+    } catch (e) { toast((e as Error).message, 'bad'); }
+  };
+  const forget = async (msgIndex: number, r: Remembered) => {
+    if (!r.id) return;
+    try {
+      await api.deleteMemory(r.id);
+      setThread((t) => t.map((m, i) => (i === msgIndex ? { ...m, remembered: (m.remembered ?? []).filter((x) => x.id !== r.id) } : m)));
+      toast('Forgotten');
+    } catch (e) { toast((e as Error).message, 'bad'); }
+  };
   const dirty = !!sel && JSON.stringify(sel) !== saved;
   const save = async () => {
     if (!sel) return;
@@ -54,7 +77,11 @@ export function AgentsPage({ tenant, goConnections }: { tenant?: Tenant; goConne
     const q = input.trim();
     const before = thread;
     setThread([...before, { role: 'user', text: q }]); setInput(''); setBusy(true);
-    try { const r = await api.run(tenant.id, sel.id, q, before.slice(-20)); setThread((t) => [...t, { role: 'assistant', text: r.output }]); }
+    try {
+      const r = await api.run(tenant.id, sel.id, q, before.slice(-20).map(({ role, text }) => ({ role, text })), conversationId);
+      setConversationId(r.conversationId);
+      setThread((t) => [...t, { role: 'assistant', text: r.output, remembered: r.remembered }]);
+    }
     catch (e) { setThread((t) => [...t, { role: 'assistant', text: 'Error: ' + (e as Error).message }]); }
     setBusy(false);
   };
@@ -101,10 +128,35 @@ export function AgentsPage({ tenant, goConnections }: { tenant?: Tenant; goConne
 
               {sel.id && (
                 <div className="try">
-                  <div className="row between"><h3>Try it</h3>{thread.length > 0 && <button className="link-btn" onClick={() => setThread([])}>New conversation</button>}</div>
+                  <div className="row between"><h3>Try it</h3>
+                    <div className="row" style={{ gap: 12 }}>
+                      <button className="link-btn" onClick={() => void showPast()}><History size={14} /> {past ? 'Hide past chats' : 'Past chats'}</button>
+                      {thread.length > 0 && <button className="link-btn" onClick={newChat}>New conversation</button>}
+                    </div>
+                  </div>
+                  {past && (
+                    <ul className="past-chats">
+                      {past.length === 0 && <li className="muted small">No saved chats with this assistant yet.</li>}
+                      {past.map((c) => (
+                        <li key={c.id}>
+                          <button className={'past-chat' + (c.id === conversationId ? ' on' : '')} onClick={() => void openChat(c.id)}>
+                            <b>{c.title || 'Untitled'}</b>
+                            <span>{c.channel === 'salesforce' ? 'In Salesforce' : 'Here'} · {c.messages} messages · {new Date(c.updatedAt).toLocaleString([], { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                          </button>
+                          <button className="ghost icon sm" aria-label="Delete chat" title="Delete chat" onClick={() => void api.deleteConversation(tenant.id, c.id).then(() => { setPast((p) => p && p.filter((x) => x.id !== c.id)); if (c.id === conversationId) newChat(); })}><Trash2 size={14} /></button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                   {thread.length > 0 && (
                     <div className="thread">{thread.map((m, i) => <div key={i} className={'msg ' + (m.role === 'user' ? 'me' : 'ai')}>{m.role === 'user' ? <div className="bubble">{m.text}</div> : <>
                       <Markdown className="bubble" text={m.text} />
+                      {(m.remembered ?? []).map((r, j) => (
+                        <span key={j} className="mem-saved">
+                          <Bookmark size={12} /> {r.kind === 'record' ? 'Noted on the record' : r.kind === 'team' ? 'Saved to team memory' : 'Saved to memory'}: {r.text}
+                          {r.id && <button className="link-btn" onClick={() => void forget(i, r)}>Forget</button>}
+                        </span>
+                      ))}
                       {i > 0 && thread[i - 1].role === 'user' && !m.text.startsWith('Error:') && (
                         <button className="link-btn save-test" onClick={() => setTestDraft({ question: thread[i - 1].text, expect: m.text, n: Date.now() })}>Save as a test</button>
                       )}

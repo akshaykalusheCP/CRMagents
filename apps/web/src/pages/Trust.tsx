@@ -42,6 +42,7 @@ export function TrustPage({ me }: { me: Me }) {
     { ok: f.agents.capped > 0 || f.agents.live === 0, title: `Spending is capped`, detail: `Each run stops at ${f.limits.aiCalls} AI calls and ${f.limits.tokens.toLocaleString()} tokens; the workspace at $${f.limits.dailyBudgetUsd} a day; ${f.agents.capped} agent${f.agents.capped === 1 ? ' has' : 's have'} a monthly cap.` },
     { ok: true, title: 'Access by role', detail: Object.entries(f.team).map(([r, n]) => `${n} ${r}${n > 1 ? 's' : ''}`).join(', ') + '. Approvers can\'t change agents; only admins see settings and the team. Whoever starts a run can\'t approve it when there is someone else to ask.' },
     { ok: f.alerts, title: f.alerts ? 'Admins are alerted when something goes wrong' : 'Alert emails are off', detail: 'Agents failing again and again are paused automatically; disconnected orgs are reported.' },
+    { ok: true, title: f.memory?.on === false ? 'Memory is off' : 'Memory is visible and deletable', detail: f.memory?.on === false ? 'Assistants and agents don\'t keep anything between conversations.' : `${f.memory?.team ?? 0} team and ${f.memory?.personal ?? 0} personal memories, ${f.memory?.recordNotes ?? 0} notes on records. Anything that looks like personal data is refused. Everyone sees and can delete their own on the Memory page.` },
     { ok: true, title: 'Secrets are encrypted', detail: 'Salesforce tokens and API keys are encrypted at rest (AES-256-GCM); passwords are stored as scrypt hashes; every change is signed between Salesforce and CRMagents.' },
   ] : [];
 

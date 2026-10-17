@@ -1,4 +1,4 @@
-import { BarChart3, BookOpen, Bot, TrendingUp, ChevronRight, PanelLeft, PanelTop, ChevronDown, Check, ChevronsUpDown, History, House, Inbox, LayoutDashboard, LogOut, Moon, Plus, Search, Settings as SettingsIcon, Sun, Users, Radar, ShieldCheck } from 'lucide-react';
+import { BarChart3, BookOpen, Bot, TrendingUp, ChevronRight, PanelLeft, PanelTop, ChevronDown, Check, ChevronsUpDown, History, House, Inbox, LayoutDashboard, LogOut, Moon, Plus, Search, Settings as SettingsIcon, Sun, Users, Radar, ShieldCheck, Bookmark } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { api, type Alert, type Draft, type Me, type Tenant, type WorkflowRow } from './api';
 import { CommandPalette, Menu, Toaster, type Command } from './components/ui';
@@ -9,6 +9,7 @@ import { KnowledgePage } from './pages/Knowledge';
 import { ImpactPage } from './pages/Impact';
 import { DiscoverPage } from './pages/Discover';
 import { TrustPage } from './pages/Trust';
+import { MemoryPage } from './pages/Memory';
 import { Ribbon, type RibbonPalette } from './components/Ribbon';
 import { SettingsHub, type SettingsSection } from './pages/SettingsHub';
 import { AlertsBell } from './components/AlertsBell';
@@ -19,7 +20,7 @@ import { WorkflowsPage } from './pages/Workflows';
 
 const PAGE_FRESH_MS = 2 * 60_000;
 
-type Tab = 'home' | 'discover' | 'trust' | 'impact' | 'insights' | 'dashboards' | 'agents' | 'approvals' | 'activity' | 'knowledge' | 'settings';
+type Tab = 'home' | 'discover' | 'trust' | 'memory' | 'impact' | 'insights' | 'dashboards' | 'agents' | 'approvals' | 'activity' | 'knowledge' | 'settings';
 
 const NAV: { group?: string; items: { key: Tab; label: string; icon: ReactNode }[] }[] = [
   { items: [
@@ -57,9 +58,9 @@ const TOP_NAV: TopEntry[] = [
 ];
 
 // Each area has its own ribbon colours: you can tell where you are at a glance, without anything extra on screen.
-const RIBBON: Record<Tab, RibbonPalette> = { trust: 'silver', home: 'sunset', discover: 'ocean', agents: 'dusk', activity: 'dusk', knowledge: 'dusk', approvals: 'amber', insights: 'mint', dashboards: 'mint', impact: 'mint', settings: 'silver' };
+const RIBBON: Record<Tab, RibbonPalette> = { trust: 'silver', memory: 'dusk', home: 'sunset', discover: 'ocean', agents: 'dusk', activity: 'dusk', knowledge: 'dusk', approvals: 'amber', insights: 'mint', dashboards: 'mint', impact: 'mint', settings: 'silver' };
 
-const LABEL: Record<Tab, string> = { home: 'Home', discover: 'Discover', trust: 'Trust center', approvals: 'Approvals', agents: 'Agents', activity: 'Activity', knowledge: 'Knowledge', impact: 'Impact', insights: 'Insights', dashboards: 'Dashboards', settings: 'Settings' };
+const LABEL: Record<Tab, string> = { home: 'Home', discover: 'Discover', trust: 'Trust center', memory: 'Memory', approvals: 'Approvals', agents: 'Agents', activity: 'Activity', knowledge: 'Knowledge', impact: 'Impact', insights: 'Insights', dashboards: 'Dashboards', settings: 'Settings' };
 
 function useTheme() {
   const initial = (): 'light' | 'dark' => {
@@ -249,6 +250,7 @@ export function App() {
                     <div className="msep" />
                     <button className="mi" onClick={() => { close(); setTab('settings'); }}><SettingsIcon size={15} /> Settings</button>
                     <button className="mi" onClick={() => { close(); openSettings('team'); }}><Users size={15} /> Team</button>
+                    <button className="mi" onClick={() => { close(); setTab('memory'); }}><Bookmark size={15} /> Memory</button>
                     <button className="mi" onClick={() => { close(); setTab('trust'); }}><ShieldCheck size={15} /> Trust center</button>
                     <button className="mi" onClick={() => { close(); toggleTheme(); }}>{theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />} {theme === 'dark' ? 'Light mode' : 'Dark mode'}</button>
                     <button className="mi" onClick={() => { close(); switchLayout(); }}><PanelLeft size={15} /> Navigation on the side</button>
@@ -267,6 +269,7 @@ export function App() {
           {pane('impact', <ImpactPage tenant={tenant} />)}
           {pane('discover', <DiscoverPage tenant={tenant} openAgents={() => setTab('agents')} />)}
           {pane('trust', <TrustPage me={me} />)}
+          {pane('memory', <MemoryPage me={me} tenants={tenants} />)}
           {pane('insights', <InsightsPage key="ins" fixedView="overview" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
           {pane('dashboards', <InsightsPage key="dash" fixedView="dashboards" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
           {pane('agents', <WorkflowsPage tenant={tenant} goConnections={() => setTab('settings')} incoming={incoming} onIncomingOpened={() => setIncoming(null)} prefill={prefill} onPrefillUsed={() => setPrefill(null)} />)}
@@ -359,6 +362,7 @@ export function App() {
           {pane('impact', <ImpactPage tenant={tenant} />)}
           {pane('discover', <DiscoverPage tenant={tenant} openAgents={() => setTab('agents')} />)}
           {pane('trust', <TrustPage me={me} />)}
+          {pane('memory', <MemoryPage me={me} tenants={tenants} />)}
           {pane('insights', <InsightsPage key="ins" fixedView="overview" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
           {pane('dashboards', <InsightsPage key="dash" fixedView="dashboards" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
           {pane('agents', <WorkflowsPage tenant={tenant} goConnections={() => setTab('settings')} incoming={incoming} onIncomingOpened={() => setIncoming(null)} prefill={prefill} onPrefillUsed={() => setPrefill(null)} />)}
