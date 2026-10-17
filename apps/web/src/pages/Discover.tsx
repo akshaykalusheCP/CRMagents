@@ -2,6 +2,7 @@ import { ArrowRight, CheckCircle2, GraduationCap, Loader2, Power, Radar, Sparkle
 import { useEffect, useState } from 'react';
 import { api, type Discovery, type Opportunity, type Proof, type Tenant } from '../api';
 import { Empty, PageHeader, Status, toast } from '../components/ui';
+import { XrayPanel } from '../components/Xray';
 
 // What to automate, from the org's own data: a quick scan (counting only, no AI) finds the repetitive work, then
 // each opportunity can be built into an agent and proven on real records: what it would have done, and how often
@@ -17,6 +18,7 @@ export function DiscoverPage({ tenant, openAgents }: { tenant?: Tenant; openAgen
   const [scanning, setScanning] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
+  const [view, setView] = useState<'work' | 'xray'>('work');
 
   useEffect(() => { setD(undefined); if (tenant) api.discovery(tenant.id).then(setD).catch(() => setD(null)); }, [tenant?.id]);
   if (!tenant) return <div className="pg"><PageHeader title="Discover" description="Connect a Salesforce org first." /></div>;
@@ -56,6 +58,11 @@ export function DiscoverPage({ tenant, openAgents }: { tenant?: Tenant; openAgen
   return (
     <div className="pg">
       <PageHeader title="Discover" description="What your team does by hand that an agent could do, found in your own Salesforce data and proven on your own records." />
+      <div className="ptabs dc-tabs" role="tablist">
+        <button role="tab" aria-selected={view === 'work'} className={view === 'work' ? 'on' : ''} onClick={() => setView('work')}>Hand work</button>
+        <button role="tab" aria-selected={view === 'xray'} className={view === 'xray' ? 'on' : ''} onClick={() => setView('xray')}>Automation X-ray</button>
+      </div>
+      {view === 'xray' ? <XrayPanel tenant={tenant} openAgents={openAgents} /> : <>
       <section className="dc-hero">
         <div className="dc-hero-main">
           {d ? <>
@@ -145,6 +152,7 @@ export function DiscoverPage({ tenant, openAgents }: { tenant?: Tenant; openAgen
           );
         })}
       </div>
+      </>}
     </div>
   );
 }

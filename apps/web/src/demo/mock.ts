@@ -15,6 +15,12 @@ function route(method: string, url: URL, body: any): Response {
   if (/^\/api\/team\/users\/[^/]+\/reset-link$/.test(p)) return json({ link: `${location.origin}/?reset=demo-link`, emailed: true });
   if (p === '/api/alerts') return json(DEMO_ALERTS);
   if (p === '/t/changes') return json(DEMO_CHANGES);
+  if (p === '/t/xray' || p === '/t/xray/scan') return json(DEMO_XRAY);
+  if (p === '/t/xray/explain') return json({ object: 'Case', costUsd: 0.004,
+    summary: '- When a case is created, the Process Builder "Case escalation" sets Priority to High if the account is Gold.\n- The Apex trigger CaseTrigger also sets Priority (from the case origin) and fills the Status.\n- The Flow "Case assignment" sends new cases to the Support queue and emails the owner.\n- The Workflow Rule "Notify on high priority" emails the support lead.',
+    risks: '- Priority is set by both the Process Builder and the trigger: the trigger runs first, so Gold accounts always end up High, whatever the origin says.\n- Two retired tools (Process Builder, Workflow Rule) stop getting fixes.',
+    replacement: 'When a Case is created, set Priority to High if the account is Gold, otherwise from the case origin (Phone = Medium, Web = Low), assign it to the Support queue, and email the support lead when Priority is High.' });
+  if (p === '/t/xray/replace') return json({ workflowId: 'w9', name: 'Case intake', summary: ['Runs when a Case is created', 'Sets Priority from account tier or origin', 'Assigns to Support', 'Emails the support lead for High'], warnings: [], costUsd: 0.002 });
   if (p === '/t/discover' || p === '/t/discover/scan') return json(DEMO_DISCOVERY);
   if (/^\/t\/discover\/[^/]+\/prove$/.test(p)) return json(DEMO_DISCOVERY.builds['case-triage'].proof);
   if (p === '/t/undo') return json({ restored: 2, deleted: 1, recovered: 0, skipped: [{ recordId: '500Qy00000KHt2aIAD', object: 'Case', why: 'Changed by someone since, kept: Priority' }], failed: [] });
@@ -270,4 +276,29 @@ const DEMO_DISCOVERY = {
       ],
     } },
   },
+};
+
+const xa = (kind: string, name: string, object: string, event: string, writes: string[] = [], extra: Record<string, unknown> = {}) => ({ kind, name, label: name, object, event, timing: 'after save', writes: writes.length ? [{ object, fields: writes }] : [], creates: [], steps: 4, actions: [], order: null, lastModified: ago(9000), ...extra });
+const DEMO_XRAY = {
+  score: 58, scannedAt: ago(0.05), flowsRead: 14, flowsSkipped: 0,
+  automations: [
+    xa('process', 'Case escalation', 'Case', 'any', ['Priority']), xa('trigger', 'CaseTrigger', 'Case', 'created or updated', ['Priority', 'Status']),
+    xa('flow', 'Case assignment', 'Case', 'created', ['OwnerId']), xa('workflow', 'Notify on high priority', 'Case', 'any'), xa('flow', 'Case SLA timer', 'Case', 'created or updated', ['SLA_Due__c']),
+    xa('flow', 'Lead scoring', 'Lead', 'created or updated', ['Rating']), xa('process', 'Lead rating', 'Lead', 'any', ['Rating']),
+    xa('flow', 'Opportunity next step', 'Opportunity', 'updated', ['NextStep']), xa('trigger', 'OpportunityTrigger', 'Opportunity', 'created or updated', ['Probability']),
+  ],
+  findings: [
+    { severity: 'high', kind: 'conflict', object: 'Case', title: '2 automations set Case.Priority', detail: 'Process Builder "Case escalation", Apex trigger "CaseTrigger" all write Priority. Whichever runs last wins, so the value depends on the order Salesforce runs them in.', automations: [] },
+    { severity: 'high', kind: 'conflict', object: 'Lead', title: '2 automations set Lead.Rating', detail: 'Flow "Lead scoring", Process Builder "Lead rating" all write Rating. Whichever runs last wins.', automations: [] },
+    { severity: 'medium', kind: 'crowded', object: 'Case', title: '5 automations run when a Case is saved', detail: 'Process Builder, Apex trigger, Flow, Workflow Rule all react to Case saves, across different tools. Good candidates to combine.', automations: [] },
+    { severity: 'medium', kind: 'legacy', object: 'Case', title: 'Process Builder "Case escalation" is a retired tool', detail: 'Salesforce ended support for Process Builder at the end of 2025. Move it to a Flow or an agent.', automations: [] },
+    { severity: 'medium', kind: 'legacy', object: 'Lead', title: 'Process Builder "Lead rating" is a retired tool', detail: 'Salesforce ended support for Process Builder at the end of 2025.', automations: [] },
+    { severity: 'medium', kind: 'legacy', object: 'Case', title: 'Workflow Rule "Notify on high priority" is a retired tool', detail: 'Salesforce ended support for Workflow Rules at the end of 2025.', automations: [] },
+    { severity: 'low', kind: 'clutter', object: 'Account', title: 'Inactive Flow "Old account sync" untouched for over a year', detail: 'It never runs. If nobody needs it, delete it.', automations: [] },
+  ],
+  objects: [
+    { object: 'Case', count: 5, kinds: { process: 1, trigger: 1, flow: 2, workflow: 1 }, rules: 3, findings: 4 },
+    { object: 'Lead', count: 2, kinds: { flow: 1, process: 1 }, rules: 1, findings: 2 },
+    { object: 'Opportunity', count: 2, kinds: { flow: 1, trigger: 1 }, rules: 2, findings: 0 },
+  ],
 };

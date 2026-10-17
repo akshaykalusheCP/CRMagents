@@ -825,3 +825,40 @@ select.sm { height: 30px; padding: 0 28px 0 8px; font-size: 13px; width: auto; }
 @media (max-width: 1100px) and (min-width: 901px) {
   :root:root .app .tnav-links { flex: 1 1 auto; min-width: 0; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
 }
+
+/* ---- Automation X-ray ---- */
+:root .dc-tabs { margin: -4px 0 16px; border-bottom: 1px solid var(--border); display: flex; gap: 20px; }
+:root .xr-hero { display: flex; align-items: center; gap: 20px; }
+:root .xr-score { width: 84px; height: 84px; border-radius: 50%; display: grid; place-content: center; text-align: center; border: 6px solid var(--border); flex: none; }
+:root .xr-score b { font-size: 28px; font-weight: 600; line-height: 1; font-variant-numeric: tabular-nums; }
+:root .xr-score span { font-size: 11px; color: var(--muted); }
+:root .xr-score.good { border-color: color-mix(in srgb, var(--ok) 55%, transparent); } :root .xr-score.good b { color: var(--ok); }
+:root .xr-score.mid { border-color: color-mix(in srgb, var(--warn) 55%, transparent); } :root .xr-score.mid b { color: var(--warn); }
+:root .xr-score.low { border-color: color-mix(in srgb, var(--danger) 55%, transparent); } :root .xr-score.low b { color: var(--danger); }
+:root .xr-h { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; }
+:root .xr-findings { list-style: none; margin: 0 0 22px; padding: 0; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); overflow: hidden; }
+:root .xr-findings li { display: grid; grid-template-columns: 64px minmax(0, 1fr) auto; gap: 12px; align-items: start; padding: 12px 16px; }
+:root .xr-findings li + li { border-top: 1px solid var(--border); }
+:root .xr-findings li b { display: block; font-size: 14px; font-weight: 600; }
+:root .xr-findings li span { display: block; font-size: 13px; color: var(--muted); line-height: 1.5; margin-top: 2px; }
+:root .xr-sec { font-size: 15px; font-weight: 600; margin: 0 0 10px; }
+:root .xr-objects { display: flex; flex-direction: column; gap: 8px; }
+:root .xr-obj { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); overflow: hidden; }
+:root:root .xr-obj-row { display: flex; align-items: center; gap: 10px; width: 100%; height: auto; padding: 12px 14px; border: 0; border-radius: 0; background: transparent; box-shadow: none; text-align: left; font-weight: 400; color: var(--text); white-space: normal; }
+:root:root .xr-obj-row:hover { background: var(--surface-2); }
+:root .xr-obj-row b { font-size: 14px; font-weight: 600; }
+:root .xr-kinds { flex: 1; min-width: 0; font-size: 13px; color: var(--muted); }
+:root .xr-flag { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; color: var(--warn); font-weight: 500; }
+:root .xr-detail { border-top: 1px solid var(--border); padding: 14px 16px 16px 40px; display: flex; flex-direction: column; gap: 12px; }
+:root .xr-autos { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+:root .xr-autos li { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 10px; }
+:root .xr-autos li > div { display: flex; flex-direction: column; gap: 2px; font-size: 13.5px; min-width: 0; overflow-wrap: anywhere; }
+:root .xr-kind { font-size: 11.5px; font-weight: 500; padding: 2px 8px; border-radius: 999px; align-self: start; justify-self: start; background: var(--surface-2); color: var(--text-2, var(--text)); }
+:root .xr-kind.k-process, :root .xr-kind.k-workflow { background: var(--warn-soft); color: var(--warn); }
+:root .xr-kind.k-trigger { background: var(--accent-soft); color: var(--accent); }
+:root .xr-explain { display: flex; flex-direction: column; gap: 6px; padding: 14px; border-radius: 10px; background: var(--surface-2); font-size: 13.5px; }
+:root .xr-explain h4 { margin: 4px 0 0; font-size: 13px; font-weight: 600; }
+:root .xr-replace { margin-top: 6px; padding-top: 10px; border-top: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+:root .xr-replace p { margin: 0; line-height: 1.5; }
+:root .xr-drafted { font-size: 13px; line-height: 1.5; }
+@media (max-width: 760px) { :root .xr-findings li { grid-template-columns: 1fr; } :root .xr-autos li { grid-template-columns: 1fr; } :root .xr-detail { padding-left: 16px; } :root .xr-hero { flex-direction: column; align-items: flex-start; } }

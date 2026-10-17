@@ -36,6 +36,7 @@ import { publicChatInfo, registerPublicChat, setPublicChat } from './agent/publi
 import { addToRecordPage, addToUtilityBar, listPages } from './salesforce/pages.js';
 import { impact, setAssumptions } from './insights/impact.js';
 import { config } from './config.js';
+import { draftReplacement, explainObject, lastXray, scanAutomation } from './smart/xray.js';
 import { lastScan, learnFromTeam, proveOpportunity, scanOrg } from './insights/discover.js';
 import { listChanges, notUndoable, undoChanges } from './trust/undo.js';
 import { deleteTest, listTestRuns, listTests, recentQuestions, saveTest, startTestRun } from './agent/tests.js';
@@ -672,6 +673,20 @@ app.post('/api/tenants/:tenantId/discover/:id/prove', async (req) => {
 app.post('/api/tenants/:tenantId/discover/:id/learn', async (req) => {
   const { tenantId, id } = req.params as { tenantId: string; id: string };
   return learnFromTeam(tenantId, id, req.user!.email);
+});
+
+// ---- Automation X-ray ----
+app.get('/api/tenants/:tenantId/xray', async (req) => lastXray((req.params as { tenantId: string }).tenantId));
+app.post('/api/tenants/:tenantId/xray/scan', async (req) => scanAutomation((req.params as { tenantId: string }).tenantId));
+app.post('/api/tenants/:tenantId/xray/explain', async (req) => {
+  const { tenantId } = req.params as { tenantId: string };
+  const b = z.object({ object: z.string().regex(/^\w+$/) }).parse(req.body);
+  return explainObject(tenantId, b.object);
+});
+app.post('/api/tenants/:tenantId/xray/replace', async (req) => {
+  const { tenantId } = req.params as { tenantId: string };
+  const b = z.object({ request: z.string().trim().min(10).max(4000), timezone: z.string().max(60).optional() }).parse(req.body);
+  return draftReplacement(tenantId, b.request, req.user!.email, b.timezone);
 });
 
 // ---- Undo: what agents changed in Salesforce, and putting it back ----

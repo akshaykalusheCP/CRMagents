@@ -146,6 +146,9 @@ export interface Proof {
   agreement: Agreement | null; agreementBefore?: Agreement | null; learned?: number; costUsd: number; monthlyCostUsd: number; hoursPerMonth: number; valuePerMonth: number;
 }
 export interface Discovery { opportunities: Opportunity[]; totalHours: number; hourlyRate: number; checked: number; scannedAt: string; builds: Record<string, { opportunity: string; workflowId: string | null; proof: Proof; name: string | null; live: boolean | null }> }
+export interface XAutomation { kind: 'flow' | 'process' | 'workflow' | 'trigger'; name: string; label: string; object: string; event: string; timing: string; writes: { object: string; fields: string[] }[]; creates: string[]; steps: number; actions: string[]; order: number | null; lastModified: string | null }
+export interface XFinding { severity: 'high' | 'medium' | 'low'; kind: string; object: string; title: string; detail: string; automations: string[] }
+export interface Xray { automations: XAutomation[]; findings: XFinding[]; objects: { object: string; count: number; kinds: Record<string, number>; rules: number; findings: number }[]; score: number; scannedAt: string; flowsRead: number; flowsSkipped: number }
 export interface Team { me: string; canManage: boolean; users: TeamUser[]; invites: TeamInvite[] }
 export interface Alert { id: string; kind: string; title: string; body: string; tenantId: string | null; workflowId: string | null; readAt: string | null; createdAt: string }
 
@@ -166,6 +169,10 @@ export const api = {
   acceptInvite: (token: string, password: string) => req('POST', '/api/auth/accept', { token, password }),
   changePassword: (current: string, password: string) => req('POST', '/api/auth/password', { current, password }),
   team: () => req<Team>('GET', '/api/team'),
+  xray: (t: string) => req<Xray | null>('GET', `/api/tenants/${t}/xray`),
+  scanXray: (t: string) => req<Xray>('POST', `/api/tenants/${t}/xray/scan`, {}),
+  explainObject: (t: string, object: string) => req<{ object: string; summary: string; risks: string; replacement: string; costUsd: number }>('POST', `/api/tenants/${t}/xray/explain`, { object }),
+  draftReplacement: (t: string, request: string) => req<{ workflowId: string; name: string; summary: string[]; warnings: string[]; costUsd: number }>('POST', `/api/tenants/${t}/xray/replace`, { request, timezone: localTz() }),
   discovery: (t: string) => req<Discovery | null>('GET', `/api/tenants/${t}/discover`),
   scanOrg: (t: string) => req<Discovery>('POST', `/api/tenants/${t}/discover/scan`, {}),
   prove: (t: string, id: string) => req<Proof>('POST', `/api/tenants/${t}/discover/${id}/prove`, { timezone: localTz() }),
