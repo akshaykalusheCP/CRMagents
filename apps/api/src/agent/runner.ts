@@ -44,7 +44,7 @@ export async function runAgent(
   );
   const runId = rows[0].id as string;
   sf.journal = journalFor({ tenantId, runId, agentId: agent.id ?? null });
-  if (opts.inOrg) remote.exec = remoteExecutor(runId);
+  if (opts.inOrg) remote.exec = remoteExecutor(runId, sf.journal);
   else if (opts.exec) remote.exec = opts.exec;
   opts.onStarted?.(runId);
   try {

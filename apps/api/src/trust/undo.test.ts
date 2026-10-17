@@ -16,3 +16,13 @@ test('undo: fields already back, and numbers sent as text, are handled', () => {
   assert.deepEqual(p.restore, { Amount: 100 });
   assert.deepEqual(p.skipped, []);
 });
+
+test('undo: changes made inside Salesforce (panel tools) are logged from what Apex reports', async () => {
+  const { inOrgChange } = await import('../agent/remote.js');
+  assert.deepEqual(inOrgChange('update_record', { id: '001A', fields: { Phone: '2' } }, { success: true, object: 'Account', before: { Phone: '1' } }),
+    { op: 'update', object: 'Account', recordId: '001A', before: { Phone: '1' }, after: { Phone: '2' }, undoable: true });
+  assert.equal(inOrgChange('update_record', { id: '001A', fields: { Phone: '2' } }, { success: true })?.undoable, false, 'older package: no old values, not undoable');
+  assert.equal(inOrgChange('create_record', { sobject: 'Task', fields: {} }, { id: '00T1', object: 'Task' })?.op, 'create');
+  assert.equal(inOrgChange('delete_record', { id: '001B' }, { object: 'Account', before: { Name: 'X' } })?.op, 'delete');
+  assert.equal(inOrgChange('soql_query', {}, {}), null);
+});

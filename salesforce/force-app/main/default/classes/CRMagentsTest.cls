@@ -145,6 +145,25 @@ private class CRMagentsTest {
     }
 
     @IsTest
+    static void recordChangesAndUndoAsTheUser() {
+        configure();
+        Mock m = new Mock(200, '[{"runId":"r1","agent":"Case triage","open":1,"changes":[{"id":7,"lines":["Priority: Low → High"]}]}]');
+        System.Test.setMock(System.HttpCalloutMock.class, m);
+        System.Test.startTest();
+        String changes = CRMAgentsController.recordChanges('500000000000001');
+        System.assert(changes.contains('Case triage'));
+        System.assert(m.last.getEndpoint().contains('/sf/v1/changes?recordId=500000000000001'));
+        m.body = '{"restored":1,"deleted":0,"recovered":0,"skipped":[],"failed":[]}';
+        String rep = CRMAgentsController.undoChanges('[7]');
+        System.Test.stopTest();
+        System.assert(rep.contains('"restored":1'));
+        System.assert(m.last.getEndpoint().endsWith('/sf/v1/undo'));
+        // Who is asking goes along, so CRMagents checks their access to the record.
+        System.assert(m.last.getBody().contains(System.UserInfo.getUserId()), m.last.getBody());
+        System.assert(m.last.getBody().contains('"changeIds":[7]'), m.last.getBody());
+    }
+
+    @IsTest
     static void asksInBackgroundWithRecordReadInOrg() {
         configure();
         Account a = new Account(Name = 'Acme Test', Description = 'Big customer');

@@ -146,3 +146,24 @@ export async function undoChanges(tenantId: string, sf: SalesforceClient, change
   }
   return rep;
 }
+
+/** What agents changed on one record, newest run first, as lines a person can read. */
+export async function recordChanges(tenantId: string, recordId: string) {
+  const { rows } = await pool.query(
+    `select c.id, c.run_id, c.op, c.object, c.record_id, c.before, c.after, c.undoable, c.undone_at, c.undone_by, c.undo_result, c.created_at,
+            coalesce(w.name, a.name, 'Agent') as agent, r.started_by
+     from run_changes c left join workflows w on w.id = c.workflow_id left join agents a on a.id = c.agent_id left join runs r on r.id = c.run_id
+     where c.tenant_id=$1 and left(c.record_id, 15) = left($2, 15) and c.created_at > now() - interval '90 days'
+     order by c.created_at desc, c.id desc limit 200`, [tenantId, recordId]);
+  const show = (v: unknown) => (v === null || v === undefined || v === '' ? '(empty)' : String(v).slice(0, 80));
+  const groups = new Map<string, { runId: string; agent: string; startedBy: string | null; createdAt: string; changes: unknown[]; open: number }>();
+  for (const c of rows) {
+    const g = groups.get(c.run_id) ?? { runId: c.run_id, agent: c.agent, startedBy: c.started_by, createdAt: c.created_at, changes: [] as unknown[], open: 0 };
+    const lines = c.op === 'update' ? Object.keys(c.after ?? {}).map((f) => `${f}: ${c.before ? show(c.before[f]) : '?'} → ${show(c.after[f])}`)
+      : c.op === 'create' ? [`Created this ${c.object}`] : [`Deleted this ${c.object}`];
+    g.changes.push({ id: Number(c.id), op: c.op, lines, undone: !!c.undone_at, undoResult: c.undo_result, undoneBy: c.undone_by, undoable: c.undoable });
+    if (!c.undone_at && c.undoable) g.open++;
+    groups.set(c.run_id, g);
+  }
+  return [...groups.values()].slice(0, 20);
+}

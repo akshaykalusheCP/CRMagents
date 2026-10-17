@@ -66,7 +66,11 @@
                                 <div class="act-head"><b>{c.agent}</b> <span class="slds-text-color_weak meta">{c.when} · {c.who}</span>
                                     <template lwc:if={c.failed}><span class="slds-text-color_error meta"> · stopped with an error</span></template></div>
                                 <template lwc:if={c.approved}><div class="slds-text-color_weak meta">{c.approved}</div></template>
-                                <ul class="act-lines"><template for:each={c.lines} for:item="l"><li key={l.k}>{l.t}</li></template></ul>
+                                <ul class="act-lines"><template for:each={c.lines} for:item="l"><li key={l.k} class={l.cls}>{l.t}</li></template></ul>
+                                <template lwc:if={c.canUndo}>
+                                    <lightning-button class="undo" label="Undo" icon-name="utility:undo" data-run={c.id} onclick={undoRun} disabled={undoing}></lightning-button>
+                                </template>
+                                <template lwc:if={c.undoneNote}><p class="slds-text-color_weak meta undone-note">{c.undoneNote}</p></template>
                             </li>
                         </template>
                     </ul>

@@ -1,5 +1,5 @@
 import { recordsToTable } from '../salesforce/table.js';
-import { compactRecord } from '../salesforce/client.js';
+import { compactRecord, type Journal } from '../salesforce/client.js';
 
 // Assistants answering inside Salesforce run their Salesforce tools there, as the person asking: the panel picks
 // up each tool call, Apex runs it in user mode (their sharing, field permissions and name in the field history),
@@ -19,7 +19,7 @@ const runs = new Map<string, Pending>();
 let seq = 0;
 
 /** A tool runner for one run: returns undefined for tools that stay on our side (knowledge search, run_agent). */
-export function remoteExecutor(runId: string) {
+export function remoteExecutor(runId: string, journal?: Journal) {
   const p: Pending = { calls: [], waiters: new Map() };
   runs.set(runId, p);
   // Files are read on our side (Apex can't read PDFs), but only files Salesforce listed for this person.
@@ -40,6 +40,7 @@ export function remoteExecutor(runId: string) {
       }, WAIT_MS);
       p.waiters.set(id, {
         resolve: (v) => {
+          if (journal) void logInOrgChange(journal, name, input as Record<string, unknown>, v as Record<string, unknown>);
           if (name === 'list_files') for (const f of ((v as { files?: { versionId?: string }[] })?.files ?? [])) if (f.versionId) visibleFiles.add(f.versionId.slice(0, 15));
           resolve(formatResult(name, v));
         },
@@ -47,6 +48,19 @@ export function remoteExecutor(runId: string) {
       });
     });
   };
+}
+
+/** A change Apex made as the person asking, in the change log (so it can be undone like any other). Pure-ish; tested. */
+export function inOrgChange(name: string, input: Record<string, unknown>, result: Record<string, unknown>) {
+  const object = String(result?.object ?? input?.sobject ?? '');
+  if (name === 'create_record' && result?.id) return { op: 'create' as const, object, recordId: String(result.id), after: (input.fields as Record<string, unknown>) ?? {}, undoable: true };
+  if (name === 'update_record' && input?.id) return { op: 'update' as const, object, recordId: String(input.id), before: (result?.before as Record<string, unknown>) ?? null, after: (input.fields as Record<string, unknown>) ?? {}, undoable: !!result?.before };
+  if (name === 'delete_record' && input?.id) return { op: 'delete' as const, object, recordId: String(input.id), before: (result?.before as Record<string, unknown>) ?? null, undoable: true };
+  return null;
+}
+async function logInOrgChange(journal: Journal, name: string, input: Record<string, unknown>, result: Record<string, unknown>) {
+  const c = inOrgChange(name, input, result);
+  if (c && c.object) await journal([c]).catch(() => undefined);
 }
 
 /** Tool calls waiting for Salesforce; a call handed out but not answered for a while is handed out again. */

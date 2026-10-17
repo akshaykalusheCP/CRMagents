@@ -29,3 +29,6 @@
 .act-lines { list-style: disc; margin: 0.25rem 0 0 1.1rem; color: var(--slds-g-color-neutral-base-30, #444); }
 .reply-meta { margin-top: 0.5rem; font-size: 0.75rem; color: var(--slds-g-color-neutral-base-30, #444); }
 .reply-box { display: block; margin-top: 0.35rem; }
+.act-lines li.undone { text-decoration: line-through; opacity: .6; }
+.undo { display: inline-block; margin-top: .4rem; }
+.undone-note { margin-top: .25rem; }

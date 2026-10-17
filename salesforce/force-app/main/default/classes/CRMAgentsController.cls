@@ -282,6 +282,31 @@ public with sharing class CRMAgentsController {
         }
     }
 
+    /** What agents changed on this record, with old and new values (from CRMagents' change log). */
+    @AuraEnabled
+    public static String recordChanges(String recordId) {
+        try {
+            return CRMClient.okBody(CRMClient.call('GET', '/sf/v1/changes?recordId=' + System.EncodingUtil.urlEncode(recordId, 'UTF-8'), null));
+        } catch (Exception e) {
+            throw fail(e);
+        }
+    }
+
+    /** Undo agent changes, as the signed-in user: CRMagents checks they may edit those records. */
+    @AuraEnabled
+    public static String undoChanges(String changeIdsJson) {
+        try {
+            Map<String, Object> body = new Map<String, Object>{
+                'changeIds' => System.JSON.deserializeUntyped(changeIdsJson),
+                'userId' => System.UserInfo.getUserId(),
+                'userEmail' => System.UserInfo.getUserEmail()
+            };
+            return CRMClient.okBody(CRMClient.call('POST', '/sf/v1/undo', System.JSON.serialize(body)));
+        } catch (Exception e) {
+            throw fail(e);
+        }
+    }
+
     /** Feedback on a suggestion: helpful, not_helpful or dismissed, recorded with the user's email. */
     @AuraEnabled
     public static void rateSuggestion(String suggestionId, String status) {

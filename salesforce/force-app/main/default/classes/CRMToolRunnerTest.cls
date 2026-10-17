@@ -22,6 +22,11 @@ private class CRMToolRunnerTest {
         Map<String, Object> upd = first(run(new List<Map<String, Object>>{ call('update_record', new Map<String, Object>{ 'id' => id, 'fields' => new Map<String, Object>{ 'Description' => 'Updated' } }) }));
         System.assertEquals(true, upd.get('ok'), '' + upd.get('error'));
         System.assertEquals('Updated', [SELECT Description FROM Account WHERE Id = :id].Description);
+        // What it replaced is reported, so CRMagents can undo it.
+        Map<String, Object> updRes = (Map<String, Object>) upd.get('result');
+        System.assertEquals('Account', updRes.get('object'));
+        System.assert(((Map<String, Object>) updRes.get('before')).containsKey('Description'), System.JSON.serialize(updRes));
+        System.assertEquals(null, ((Map<String, Object>) updRes.get('before')).get('Description'));
 
         Map<String, Object> got = first(run(new List<Map<String, Object>>{ call('get_record', new Map<String, Object>{ 'sobject' => 'Account', 'id' => id, 'fields' => new List<Object>{ 'Name', 'Description' } }) }));
         System.assertEquals('Acme Tools', ((Map<String, Object>) got.get('result')).get('Name'));
@@ -35,6 +40,8 @@ private class CRMToolRunnerTest {
 
         Map<String, Object> del = first(run(new List<Map<String, Object>>{ call('delete_record', new Map<String, Object>{ 'id' => id }) }));
         System.assertEquals(true, del.get('ok'));
+        Map<String, Object> delRes = (Map<String, Object>) del.get('result');
+        System.assertEquals('Acme Tools', ((Map<String, Object>) delRes.get('before')).get('Name'), System.JSON.serialize(delRes));
         System.assertEquals(0, [SELECT COUNT() FROM Account WHERE Id = :id]);
     }
 

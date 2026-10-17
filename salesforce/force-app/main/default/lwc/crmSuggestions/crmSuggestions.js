@@ -6,6 +6,10 @@ import rateSuggestion from '@salesforce/apex/CRMAgentsController.rateSuggestion'
 import activity from '@salesforce/apex/CRMAgentsController.activity';
 import sendSuggestedReply from '@salesforce/apex/CRMAgentsController.sendSuggestedReply';
 import markSuggestionSent from '@salesforce/apex/CRMAgentsController.markSuggestionSent';
+import recordChanges from '@salesforce/apex/CRMAgentsController.recordChanges';
+import undoChanges from '@salesforce/apex/CRMAgentsController.undoChanges';
+import LightningConfirm from 'lightning/confirm';
+import { notifyRecordUpdateAvailable } from 'lightning/uiRecordApi';
 import { markdownToHtml } from 'c/crmMarkdown';
 
 const CHANNEL = '/event/CRMagents_Run_Event__e';
@@ -43,9 +47,31 @@ export default class CrmSuggestions extends LightningElement {
         if (this.subscription) unsubscribe(this.subscription, () => {});
     }
 
+    undoing = false;
+
     load() {
         if (!this.recordId) return;
-        // What agents changed here, read inside Salesforce.
+        // What agents changed here, with old and new values (CRMagents' change log); the activity records in
+        // Salesforce are the fallback when CRMagents can't be reached.
+        recordChanges({ recordId: this.recordId })
+            .then((json) => {
+                this.changes = JSON.parse(json).map((g) => ({
+                    id: g.runId, agent: g.agent, when: ago(g.createdAt),
+                    who: g.startedBy ? 'started by ' + g.startedBy : 'automatic',
+                    approved: '',
+                    lines: g.changes.flatMap((c) => c.lines.map((t, i) => ({ k: c.id + '-' + i, t, cls: c.undone ? 'undone' : '' }))).slice(0, 12),
+                    openIds: g.changes.filter((c) => !c.undone && c.undoable).map((c) => c.id),
+                    canUndo: g.open > 0,
+                    undoneNote: g.open === 0 && g.changes.some((c) => c.undone) ? 'Undone' + (g.changes.find((c) => c.undoneBy) ? ' by ' + g.changes.find((c) => c.undoneBy).undoneBy.replace(' (in Salesforce)', '') : '') : '',
+                    failed: false
+                }));
+                if (this.changes.some((c) => c.canUndo) && !this.showChanges) this.showChanges = true;
+            })
+            .catch(() => this.loadActivity());
+        this.loadSuggestions();
+    }
+
+    loadActivity() {
         activity({ recordId: this.recordId })
             .then((rows) => {
                 this.changes = (rows || []).map((r) => ({
@@ -57,6 +83,9 @@ export default class CrmSuggestions extends LightningElement {
                 }));
             })
             .catch(() => { this.changes = []; });
+    }
+
+    loadSuggestions() {
         suggestions({ recordId: this.recordId })
             .then((json) => {
                 this.items = JSON.parse(json).map((s) => ({
@@ -87,6 +116,32 @@ export default class CrmSuggestions extends LightningElement {
     get hasChanges() { return this.changes.length > 0; }
     get changesLabel() { return (this.showChanges ? 'Hide' : 'Show') + ' agent changes (' + this.changes.length + ')'; }
     toggleChanges() { this.showChanges = !this.showChanges; }
+
+    // Puts back what an agent changed here. CRMagents checks this person may edit the record; anything a person
+    // changed since the agent is kept.
+    async undoRun(event) {
+        const run = this.changes.find((c) => c.id === event.currentTarget.dataset.run);
+        if (!run || !run.openIds.length || this.undoing) return;
+        const ok = await LightningConfirm.open({
+            label: 'Undo these changes?',
+            message: 'The old values go back where the agent\'s value is still there. Anything a person changed since is kept.',
+            theme: 'default'
+        });
+        if (!ok) return;
+        this.undoing = true;
+        try {
+            const rep = JSON.parse(await undoChanges({ changeIdsJson: JSON.stringify(run.openIds) }));
+            const done = (rep.restored || 0) + (rep.deleted || 0) + (rep.recovered || 0);
+            const kept = (rep.skipped || []).length;
+            this.toast(done ? 'Undone' + (kept ? ': ' + kept + ' kept because someone changed them since' : '') : (kept ? 'Kept: someone changed these since' : 'Nothing needed undoing'), done ? 'success' : 'info');
+            await notifyRecordUpdateAvailable([{ recordId: this.recordId }]);
+            this.load();
+        } catch (e) {
+            this.toast((e && e.body && e.body.message) || 'Could not undo', 'error');
+        } finally {
+            this.undoing = false;
+        }
+    }
     get helpfulVariant() { return this.latest && this.latest.helpful ? 'brand' : 'border-filled'; }
     get notHelpfulVariant() { return this.latest && this.latest.notHelpful ? 'brand' : 'border-filled'; }
 

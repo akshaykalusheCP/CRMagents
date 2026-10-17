@@ -145,12 +145,54 @@ public with sharing class CRMToolRunner {
             }
             rec.put(f, coerce(f.getDescribe().getType(), values.get(k)));
         }
+        String objectName = t.getDescribe().getName();
         if (String.isNotBlank(recordId)) {
+            // What this replaces, so CRMagents can put it back (undo).
+            Map<String, Object> before = currentValues(t, (Id) recordId, values == null ? new Set<String>() : values.keySet());
             update as user rec;
-            return new Map<String, Object>{ 'success' => true };
+            return new Map<String, Object>{ 'success' => true, 'object' => objectName, 'before' => before };
         }
         insert as user rec;
-        return new Map<String, Object>{ 'id' => rec.Id, 'success' => true };
+        return new Map<String, Object>{ 'id' => rec.Id, 'success' => true, 'object' => objectName };
+    }
+
+    /** The record's current values of these fields (or every readable field when none are given), as this user sees them. */
+    @TestVisible
+    static Map<String, Object> currentValues(Schema.SObjectType t, Id recordId, Set<String> wanted) {
+        Map<String, Schema.SObjectField> fmap = t.getDescribe().fields.getMap();
+        List<String> names = new List<String>();
+        for (String k : (wanted.isEmpty() ? fmap.keySet() : wanted)) {
+            Schema.SObjectField f = fmap.get(k);
+            if (f == null) {
+                continue;
+            }
+            Schema.DescribeFieldResult d = f.getDescribe();
+            if (!d.isAccessible() || d.getType() == Schema.DisplayType.BASE64 || d.getType() == Schema.DisplayType.ADDRESS || d.getType() == Schema.DisplayType.LOCATION || d.isCalculated()) {
+                continue;
+            }
+            if (wanted.isEmpty() && !d.isUpdateable() && !d.isCreateable()) {
+                continue;
+            }
+            names.add(d.getName());
+            if (names.size() >= 150) {
+                break;
+            }
+        }
+        Map<String, Object> out = new Map<String, Object>();
+        if (names.isEmpty()) {
+            return out;
+        }
+        List<SObject> rows = Database.queryWithBinds(
+            'SELECT ' + String.join(names, ',') + ' FROM ' + t.getDescribe().getName() + ' WHERE Id = :rid LIMIT 1',
+            new Map<String, Object>{ 'rid' => recordId }, AccessLevel.USER_MODE
+        );
+        if (rows.isEmpty()) {
+            return out;
+        }
+        for (String n : names) {
+            out.put(n, rows[0].get(n));
+        }
+        return out;
     }
 
     /** JSON values (mostly strings) into the field's Apex type. */
@@ -172,9 +214,12 @@ public with sharing class CRMToolRunner {
 
     static Object remove(String recordId) {
         Id rid = (Id) recordId;
-        SObject rec = rid.getSObjectType().newSObject(rid);
+        Schema.SObjectType t = rid.getSObjectType();
+        // Kept so it can be brought back from the Recycle Bin (undo).
+        Map<String, Object> before = currentValues(t, rid, new Set<String>());
+        SObject rec = t.newSObject(rid);
         delete as user rec;
-        return new Map<String, Object>{ 'success' => true };
+        return new Map<String, Object>{ 'success' => true, 'object' => t.getDescribe().getName(), 'before' => before };
     }
 
     /** Files on a record that this user can see. CRMagents reads only these (by their version Id). */

@@ -1,3 +1,5 @@
+import { recordChanges, undoChanges } from './trust/undo.js';
+import { audit } from './trust/audit.js';
 import { ensureRemoteSite } from './salesforce/setup.js';
 import { deliverResults, takeCalls } from './agent/remote.js';
 import { markSuggestion, recordSuggestions } from './knowledge/suggestions.js';
@@ -287,6 +289,35 @@ FORMAT (mandatory, overrides any other style instruction): you are answering in 
     if (!own.rowCount) throw Object.assign(new Error('Question not found'), { statusCode: 404 });
     const { results } = z.object({ results: z.array(z.object({ id: z.string(), ok: z.boolean(), result: z.unknown().optional(), error: z.string().max(5000).optional() })).max(50) }).parse(req.body);
     return { accepted: deliverResults(id, results) };
+  });
+
+  // What agents changed on a record, grouped by run, with old and new values (for the panel's Undo).
+  app.get('/sf/v1/changes', async (req) => {
+    const { recordId } = z.object({ recordId: z.string().regex(/^[a-zA-Z0-9]{15,18}$/) }).parse(req.query);
+    return recordChanges(req.sfTenant!.tenantId, recordId);
+  });
+
+  // Undo from Salesforce: only changes on records this person may edit (or delete, for records agents created).
+  app.post('/sf/v1/undo', async (req) => {
+    const b = z.object({ changeIds: z.array(z.number().int()).min(1).max(200), userId: z.string().regex(/^005[a-zA-Z0-9]{12,15}$/), userEmail: z.string().max(200).optional() }).parse(req.body);
+    const tenantId = req.sfTenant!.tenantId;
+    const { rows } = await pool.query('select id, op, record_id from run_changes where tenant_id=$1 and id = any($2) and undone_at is null', [tenantId, b.changeIds]);
+    if (!rows.length) return { restored: 0, deleted: 0, recovered: 0, skipped: [], failed: [] };
+    const sf = await SalesforceClient.forTenant(tenantId);
+    const ids = [...new Set(rows.filter((r) => r.op !== 'delete').map((r) => r.record_id as string))];
+    const access = new Map<string, { edit: boolean; del: boolean }>();
+    for (let i = 0; i < ids.length; i += 200) {
+      const part = ids.slice(i, i + 200);
+      const r = await sf.query(`SELECT RecordId, HasEditAccess, HasDeleteAccess FROM UserRecordAccess WHERE UserId = '${b.userId}' AND RecordId IN (${part.map((x) => `'${x}'`).join(',')})`);
+      for (const a of r.records as { RecordId: string; HasEditAccess: boolean; HasDeleteAccess: boolean }[]) access.set(a.RecordId.slice(0, 15), { edit: a.HasEditAccess, del: a.HasDeleteAccess });
+    }
+    const allowed = rows.filter((r) => r.op === 'delete' || (r.op === 'update' ? access.get(r.record_id.slice(0, 15))?.edit : access.get(r.record_id.slice(0, 15))?.del));
+    if (!allowed.length) throw Object.assign(new Error('You can only undo changes on records you are allowed to edit.'), { statusCode: 403 });
+    const who = b.userEmail?.toLowerCase() || b.userId;
+    const rep = await undoChanges(tenantId, sf, allowed.map((r) => Number(r.id)), `${who} (in Salesforce)`);
+    const { rows: acc } = await pool.query('select account_id from tenants where id=$1', [tenantId]);
+    await audit(acc[0].account_id, who, 'Undid agent changes in Salesforce', { target: `${allowed.length} change${allowed.length === 1 ? '' : 's'}`, tenantId });
+    return { ...rep, notAllowed: rows.length - allowed.length };
   });
 
   app.get('/sf/v1/runs/:id', async (req) => getRun(req.sfTenant!.tenantId, (req.params as { id: string }).id));
