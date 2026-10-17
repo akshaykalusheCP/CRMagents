@@ -1,7 +1,10 @@
 import { lookup } from 'node:dns/promises';
 import { isIP } from 'node:net';
 
-function isPrivate(ip: string): boolean {
+export function isPrivate(ip: string): boolean {
+  // IPv4 written as IPv6 (::ffff:10.0.0.1): check the IPv4 part.
+  const mapped = ip.toLowerCase().match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (mapped) return isPrivate(mapped[1]);
   if (ip.includes(':')) {
     const l = ip.toLowerCase();
     return l === '::1' || l === '::' || l.startsWith('fc') || l.startsWith('fd') || l.startsWith('fe80') || l.startsWith('::ffff:127.') || l.startsWith('::ffff:10.') || l.startsWith('::ffff:192.168.');

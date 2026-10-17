@@ -34,3 +34,9 @@ test('ai log: every call through the client is recorded with its context, and fa
   await pool.query('delete from accounts where id=$1', [acc[0].id]);
   await pool.end();
 });
+
+test('outbound requests: private and internal addresses are blocked, also written as IPv6', async () => {
+  const { isPrivate } = await import('../engine/net.js');
+  for (const ip of ['10.0.0.1', '127.0.0.1', '169.254.169.254', '172.20.1.1', '192.168.1.1', '::1', '::ffff:169.254.169.254', '::ffff:172.16.0.5', 'fd00::1']) assert.ok(isPrivate(ip), ip);
+  for (const ip of ['8.8.8.8', '172.32.0.1', '2606:4700::1111']) assert.ok(!isPrivate(ip), ip);
+});
