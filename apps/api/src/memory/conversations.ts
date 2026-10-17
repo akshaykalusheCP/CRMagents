@@ -29,14 +29,14 @@ export async function conversationHistory(conversationId: string, limit = 20) {
   return rows as { role: 'user' | 'assistant'; text: string }[];
 }
 
-export async function listConversations(tenantId: string, userKey: string, o: { agentId?: string; recordId?: string; limit?: number } = {}) {
+export async function listConversations(tenantId: string, userKey: string, o: { agentId?: string; recordId?: string; noRecord?: boolean; limit?: number } = {}) {
   const { rows } = await pool.query(
     `select c.id, c.title, c.channel, c.record_id as "recordId", c.agent_id as "agentId", a.name as "agentName", c.updated_at as "updatedAt",
             (select count(*)::int from conversation_messages m where m.conversation_id = c.id) as messages
      from conversations c left join agents a on a.id = c.agent_id
-     where c.tenant_id=$1 and c.user_key=$2 and ($3::uuid is null or c.agent_id=$3) and ($4::text is null or left(c.record_id,15)=left($4,15))
+     where c.tenant_id=$1 and c.user_key=$2 and ($3::uuid is null or c.agent_id=$3) and ($4::text is null or left(c.record_id,15)=left($4,15)) and (not $6::boolean or c.record_id is null)
      order by c.updated_at desc limit $5`,
-    [tenantId, userKey.toLowerCase(), o.agentId ?? null, o.recordId ?? null, Math.min(o.limit ?? 30, 100)]);
+    [tenantId, userKey.toLowerCase(), o.agentId ?? null, o.recordId ?? null, Math.min(o.limit ?? 30, 100), !!o.noRecord]);
   return rows.filter((r) => r.messages > 0);
 }
 

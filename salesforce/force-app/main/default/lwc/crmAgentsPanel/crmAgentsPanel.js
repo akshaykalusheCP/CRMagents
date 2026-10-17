@@ -4,7 +4,8 @@ import home from '@salesforce/apex/CRMAgentsController.home';
 import startRun from '@salesforce/apex/CRMAgentsController.startRun';
 import getRun from '@salesforce/apex/CRMAgentsController.getRun';
 import decideWithNote from '@salesforce/apex/CRMAgentsController.decideWithNote';
-import startAsk from '@salesforce/apex/CRMAgentsController.startAsk';
+import startChat from '@salesforce/apex/CRMAgentsController.startChat';
+import chatContext from '@salesforce/apex/CRMAgentsController.chatContext';
 import askResult from '@salesforce/apex/CRMAgentsController.askResult';
 import execTools from '@salesforce/apex/CRMAgentsController.execTools';
 import postToolResults from '@salesforce/apex/CRMAgentsController.postToolResults';
@@ -65,7 +66,7 @@ export default class CrmAgentsPanel extends LightningElement {
             .then((json) => {
                 this.data = JSON.parse(json);
                 this.error = undefined;
-                if (!this.assistantId && this.data.assistants.length) this.assistantId = this.data.assistants[0].id;
+                if (!this.assistantId && this.data.assistants.length) { this.assistantId = this.data.assistants[0].id; this.loadChat(); }
             })
             .catch((e) => { this.error = this.message(e); })
             .finally(() => { this.loading = false; });
@@ -121,7 +122,10 @@ export default class CrmAgentsPanel extends LightningElement {
         return ((this.run && this.run.steps) || []).map((s, i) => ({ key: i + s.label, label: s.label, icon: s.status === 'ok' ? 'utility:success' : s.status === 'error' ? 'utility:error' : 'utility:clock' }));
     }
     get messages() {
-        return this.thread.map((m, i) => ({ key: i, text: m.text, mine: m.role === 'user', html: m.role === 'user' ? '' : markdownToHtml(m.text), css: m.role === 'user' ? 'bubble me' : 'bubble ai md' }));
+        return this.thread.map((m, i) => ({
+            key: i, text: m.text, mine: m.role === 'user', html: m.role === 'user' ? '' : markdownToHtml(m.text), css: m.role === 'user' ? 'bubble me' : 'bubble ai md',
+            memory: (m.remembered || []).map((r, j) => ({ key: i + '-' + j, text: (r.kind === 'record' ? 'Noted on this record: ' : 'Saved to memory: ') + r.text }))
+        }));
     }
     get cannotAsk() { return this.asking || !this.question.trim() || !this.assistantId; }
     get notConnected() { return this.error && /not connected|CRMagents_Config/i.test(this.error); }
@@ -165,7 +169,29 @@ export default class CrmAgentsPanel extends LightningElement {
     }
 
     // ---------- ask ----------
-    handleAssistant(e) { this.assistantId = e.detail.value; this.thread = []; }
+    handleAssistant(e) { this.assistantId = e.detail.value; this.thread = []; this.conversationId = null; this.loadChat(); }
+
+    // Memory: pick up this person's last chat on this record, and show what agents noted about it.
+    conversationId = null;
+    resumed = false;
+    notes = [];
+    loadChat() {
+        if (!this.assistantId) return;
+        chatContext({ recordId: this.recordId, assistantId: this.assistantId })
+            .then((json) => {
+                const c = JSON.parse(json);
+                this.notes = (c.notes || []).map((n) => ({ key: n.id, text: n.note, by: n.author || 'Agent' }));
+                const last = c.latest;
+                // Recent and not already in progress here: continue it.
+                if (last && !this.thread.length && Date.now() - new Date(last.updatedAt).getTime() < 7 * 86400000) {
+                    this.thread = last.messages.map((m) => ({ role: m.role, text: m.text }));
+                    this.conversationId = last.id;
+                    this.resumed = true;
+                }
+            })
+            .catch(() => {});
+    }
+    get hasNotes() { return this.notes.length > 0; }
     handleQuestion(e) { this.question = e.detail.value; }
     handleQuestionKey(e) { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.send(); } }
     send() {
@@ -176,9 +202,9 @@ export default class CrmAgentsPanel extends LightningElement {
         this.question = '';
         this.asking = true;
         // Start the question, then check for the answer: nothing in Salesforce waits on the AI.
-        startAsk({ assistantId: this.assistantId, question: q, recordId: this.recordId, objectApiName: this.objectApiName, historyJson: JSON.stringify(history) })
-            .then((json) => this.waitForAnswer(JSON.parse(json).runId, 0))
-            .then((text) => { this.thread = [...this.thread, { role: 'assistant', text }]; })
+        startChat({ assistantId: this.assistantId, question: q, recordId: this.recordId, objectApiName: this.objectApiName, historyJson: JSON.stringify(history.map((m) => ({ role: m.role, text: m.text }))), conversationId: this.conversationId })
+            .then((json) => { const s = JSON.parse(json); if (s.conversationId) this.conversationId = s.conversationId; return this.waitForAnswer(s.runId, 0); })
+            .then((r) => { this.thread = [...this.thread, { role: 'assistant', text: r.answer, remembered: r.remembered || [] }]; })
             .catch((e) => { this.thread = [...this.thread, { role: 'assistant', text: 'Sorry: ' + this.message(e) }]; })
             .finally(() => { this.asking = false; });
     }
@@ -190,7 +216,7 @@ export default class CrmAgentsPanel extends LightningElement {
             .then(() => askResult({ runId }))
             .then((json) => {
                 const r = JSON.parse(json);
-                if (r.status === 'done') return r.answer;
+                if (r.status === 'done') return r;
                 if (r.status === 'error') throw new Error(r.error || 'The assistant could not answer');
                 if (r.status === 'tool') {
                     // The assistant needs Salesforce data or a change: run it here, as this user, then hand it back.
@@ -202,7 +228,7 @@ export default class CrmAgentsPanel extends LightningElement {
             });
     }
 
-    newConversation() { this.thread = []; }
+    newConversation() { this.thread = []; this.conversationId = null; this.resumed = false; }
 
     refresh() { this.load(); }
     message(e) { return (e && e.body && e.body.message) || (e && e.message) || 'Something went wrong'; }

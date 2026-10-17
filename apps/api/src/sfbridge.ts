@@ -291,7 +291,8 @@ FORMAT (mandatory, overrides any other style instruction): you are answering in 
   app.get('/sf/v1/conversations', async (req) => {
     const q = z.object({ recordId: z.string().regex(/^[a-zA-Z0-9]{15,18}$/).optional(), userEmail: z.string().max(200), assistantId: z.string().uuid().optional() }).parse(req.query);
     const tenantId = req.sfTenant!.tenantId;
-    const list = await listConversations(tenantId, q.userEmail, { recordId: q.recordId, agentId: q.assistantId, limit: 10 });
+    // Without a record (utility bar), only chats that weren't about a record.
+    const list = await listConversations(tenantId, q.userEmail, { recordId: q.recordId, noRecord: !q.recordId, agentId: q.assistantId, limit: 10 });
     const latest = list[0] ? await getConversation(tenantId, q.userEmail, list[0].id) : null;
     const notes = q.recordId ? await recordNotes(tenantId, q.recordId) : [];
     return { conversations: list, latest, notes };

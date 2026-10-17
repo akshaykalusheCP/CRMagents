@@ -1,12 +1,12 @@
 {
   "packageDirectories": [
     {
-      "versionName": "ver 0.9",
-      "versionNumber": "0.9.0.NEXT",
+      "versionName": "ver 0.10",
+      "versionNumber": "0.10.0.NEXT",
       "path": "force-app",
       "default": true,
       "package": "CRMagents",
-      "versionDescription": "Undo agent changes from the record page; changes made inside Salesforce report their old values"
+      "versionDescription": "Memory: the panel continues your last chat on a record, shows what agents noted about it and what was saved to memory"
     }
   ],
   "name": "crmagents",
@@ -27,6 +27,7 @@
     "CRMagents@0.7.0-1": "04tQy000000aBkvIAE",
     "CRMagents@0.8.0-1": "04tQy000000aBxpIAE",
     "CRMagents@0.8.0-2": "04tQy000000aBzRIAU",
-    "CRMagents@0.9.0-1": "04tQy000000aEhBIAU"
+    "CRMagents@0.9.0-1": "04tQy000000aEhBIAU",
+    "CRMagents@0.10.0-1": "04tQy000000aEinIAE"
   }
 }

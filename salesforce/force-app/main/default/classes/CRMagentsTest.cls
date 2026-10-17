@@ -145,6 +145,22 @@ private class CRMagentsTest {
     }
 
     @IsTest
+    static void continuesConversationsAndReadsChatContext() {
+        configure();
+        Mock m = new Mock(200, '{"runId":"r9","status":"running","conversationId":"c1"}');
+        System.Test.setMock(System.HttpCalloutMock.class, m);
+        System.Test.startTest();
+        String started = CRMAgentsController.startChat('a1', 'And the oldest?', null, null, null, 'c1');
+        System.assert(started.contains('c1'));
+        System.assert(m.last.getBody().contains('"conversationId":"c1"'), m.last.getBody());
+        m.body = '{"conversations":[],"latest":null,"notes":[]}';
+        CRMAgentsController.chatContext('500000000000001', 'a1');
+        System.Test.stopTest();
+        System.assert(m.last.getEndpoint().contains('/sf/v1/conversations?userEmail='));
+        System.assert(m.last.getEndpoint().contains('recordId=500000000000001'));
+    }
+
+    @IsTest
     static void recordChangesAndUndoAsTheUser() {
         configure();
         Mock m = new Mock(200, '[{"runId":"r1","agent":"Case triage","open":1,"changes":[{"id":7,"lines":["Priority: Low → High"]}]}]');

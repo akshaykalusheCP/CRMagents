@@ -100,12 +100,38 @@ public with sharing class CRMAgentsController {
      */
     @AuraEnabled
     public static String startAsk(String assistantId, String question, String recordId, String objectApiName, String historyJson) {
+        return startChat(assistantId, question, recordId, objectApiName, historyJson, null);
+    }
+
+    /** Like startAsk, continuing a saved conversation (null = a new one). The reply carries the conversation id. */
+    @AuraEnabled
+    public static String startChat(String assistantId, String question, String recordId, String objectApiName, String historyJson, String conversationId) {
         try {
             Map<String, Object> body = askBody(assistantId, null, question, recordId, objectApiName, historyJson, true);
+            if (String.isNotBlank(conversationId)) {
+                body.put('conversationId', conversationId);
+            }
             // The assistant's Salesforce tools run here, as this user (execTools).
             body.put('inOrg', true);
             body.put('userEmail', System.UserInfo.getUserEmail());
             return CRMClient.okBody(CRMClient.call('POST', '/sf/v1/ask', System.JSON.serialize(body), 30000));
+        } catch (Exception e) {
+            throw fail(e);
+        }
+    }
+
+    /** This person's last conversation on the record (to continue it) and the notes agents kept on the record. */
+    @AuraEnabled
+    public static String chatContext(String recordId, String assistantId) {
+        try {
+            String q = '?userEmail=' + System.EncodingUtil.urlEncode(System.UserInfo.getUserEmail(), 'UTF-8');
+            if (String.isNotBlank(recordId)) {
+                q += '&recordId=' + System.EncodingUtil.urlEncode(recordId, 'UTF-8');
+            }
+            if (String.isNotBlank(assistantId)) {
+                q += '&assistantId=' + System.EncodingUtil.urlEncode(assistantId, 'UTF-8');
+            }
+            return CRMClient.okBody(CRMClient.call('GET', '/sf/v1/conversations' + q, null, 30000));
         } catch (Exception e) {
             throw fail(e);
         }

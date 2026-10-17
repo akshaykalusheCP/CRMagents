@@ -77,12 +77,20 @@
                     <lightning-tab label="Ask">
                         <template lwc:if={hasAssistants}>
                             <lightning-combobox label="Assistant" value={assistantId} options={assistants} onchange={handleAssistant}></lightning-combobox>
+                            <template lwc:if={hasNotes}>
+                                <div class="rec-notes">
+                                    <span class="rec-notes-h">What agents know about this record</span>
+                                    <ul><template for:each={notes} for:item="n"><li key={n.key}>{n.text} <span class="slds-text-color_weak">· {n.by}</span></li></template></ul>
+                                </div>
+                            </template>
+                            <template lwc:if={resumed}><p class="resumed slds-text-color_weak">Continuing your last conversation here.</p></template>
                             <div class="thread">
                                 <template for:each={messages} for:item="m">
                                     <div key={m.key} class={m.css}>
                                         <template lwc:if={m.mine}>{m.text}</template>
                                         <template lwc:else><lightning-formatted-rich-text value={m.html}></lightning-formatted-rich-text></template>
                                     </div>
+                                    <template for:each={m.memory} for:item="r"><p key={r.key} class="mem-note">{r.text}</p></template>
                                 </template>
                                 <template lwc:if={asking}><div class="bubble ai weak">Looking it up…</div></template>
                             </div>
