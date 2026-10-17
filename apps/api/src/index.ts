@@ -36,6 +36,7 @@ import { publicChatInfo, registerPublicChat, setPublicChat } from './agent/publi
 import { addToRecordPage, addToUtilityBar, listPages } from './salesforce/pages.js';
 import { impact, setAssumptions } from './insights/impact.js';
 import { config } from './config.js';
+import { forecast, setCap } from './engine/costplan.js';
 import { draftReplacement, explainObject, lastXray, scanAutomation } from './smart/xray.js';
 import { lastScan, learnFromTeam, proveOpportunity, scanOrg } from './insights/discover.js';
 import { listChanges, notUndoable, undoChanges } from './trust/undo.js';
@@ -687,6 +688,18 @@ app.post('/api/tenants/:tenantId/xray/replace', async (req) => {
   const { tenantId } = req.params as { tenantId: string };
   const b = z.object({ request: z.string().trim().min(10).max(4000), timezone: z.string().max(60).optional() }).parse(req.body);
   return draftReplacement(tenantId, b.request, req.user!.email, b.timezone);
+});
+
+// ---- Price certainty: monthly forecast and cap per agent ----
+app.get('/api/tenants/:tenantId/workflows/:id/forecast', async (req) => {
+  const { tenantId, id } = req.params as { tenantId: string; id: string };
+  return forecast(tenantId, id);
+});
+app.put('/api/tenants/:tenantId/workflows/:id/cap', async (req) => {
+  const { tenantId, id } = req.params as { tenantId: string; id: string };
+  const b = z.object({ capUsd: z.number().min(0.01).max(100_000).nullable() }).parse(req.body);
+  await setCap(tenantId, id, b.capUsd);
+  return forecast(tenantId, id);
 });
 
 // ---- Undo: what agents changed in Salesforce, and putting it back ----

@@ -1,5 +1,6 @@
 import { afterRunFailed } from '../alerts.js';
 import { journalFor } from '../trust/undo.js';
+import { checkCap } from './costplan.js';
 import { auditRun } from '../salesforce/audit.js';
 import { aiClient } from '../agent/provider.js';
 import type { Prefetched } from './prefetch.js';
@@ -227,6 +228,7 @@ async function createRun(tenantId: string, workflowId: string, trigger: TriggerP
   const graph = rows[0].graph as Workflow;
   validateWorkflow(graph);
   if (!graph.nodes.some((n) => n.type.startsWith('trigger.'))) throw new Error('Add a trigger node first');
+  await checkCap(tenantId, workflowId);
   const { rows: r } = await pool.query(
     'insert into runs (tenant_id, workflow_id, input, status, started_by, heartbeat_at) values ($1,$2,$3,$4,$5,now()) returning id',
     [tenantId, workflowId, JSON.stringify(trigger), 'running', startedBy ?? null],
@@ -253,6 +255,7 @@ export async function startRunAsync(tenantId: string, workflowId: string, trigge
  * as room frees up under the per-minute run limit, instead of being refused.
  */
 export async function queueRun(tenantId: string, workflowId: string, trigger: TriggerPayload, startedBy?: string): Promise<{ runId: string; status: string }> {
+  await checkCap(tenantId, workflowId);
   const { rows } = await pool.query(
     `insert into runs (tenant_id, workflow_id, input, status, started_by)
      select $1, w.id, $3, 'queued', $4 from workflows w where w.id=$2 and w.tenant_id=$1 returning id`,

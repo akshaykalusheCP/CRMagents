@@ -2,11 +2,11 @@ import { ChangesList } from '../components/Changes';
 import { ArrowLeft, ChevronRight, History, Loader2, Pencil, Power, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { Edge } from '@xyflow/react';
-import { api, type AgentHealth, type BacktestResult, type Run, type Tenant, type WorkflowRow } from '../api';
+import { api, type AgentHealth, type BacktestResult, type Forecast, type Run, type Tenant, type WorkflowRow } from '../api';
 import { BacktestView, ResultModal, Working } from '../components/Smart';
 import { StepsView } from '../components/StepsView';
 import type { WFRFNode } from '../components/WorkflowNode';
-import { Empty, Facts, Panel, Status, Table, toast, type Column } from '../components/ui';
+import { Empty, Facts, Meter, Panel, Status, Table, toast, useConfirm, type Column } from '../components/ui';
 import { runLabel, runTone } from './Home';
 import { RunsPage } from './Runs';
 import { BackfillPanel, MovePanel, StartMode, VersionsPanel, WebhookPanel } from '../components/AgentAdmin';
@@ -28,6 +28,43 @@ function triggerText(w: WorkflowRow) {
     return `When a ${t.config.objectApiName ?? 'record'} is ${t.config.event ?? 'created'}${changed && t.config.event !== 'created' && t.config.event !== 'deleted' ? ` and ${changed.split(/\s*,\s*/).join(' or ')} changes` : ''}`;
   }
   return 'When you run it';
+}
+
+const usd = (n: number) => (n === 0 ? '$0' : n < 0.01 ? '< $0.01' : n < 10 ? `$${n.toFixed(2)}` : `$${Math.round(n).toLocaleString()}`);
+/** Cost of one run: small, so more decimals. */
+const usdRun = (n: number) => (n >= 0.01 ? `$${n.toFixed(2)}` : `$${n.toFixed(4)}`);
+
+/** What it costs: this month so far, the forecast, and a monthly cap it can't go over. */
+function CostPanel({ tenant, workflowId }: { tenant: Tenant; workflowId: string }) {
+  const [f, setF] = useState<Forecast | null>(null);
+  const [cap, setCap] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { setF(null); api.forecast(tenant.id, workflowId).then((x) => { setF(x); setCap(x.capUsd ? String(x.capUsd) : ''); }).catch(() => {}); }, [tenant.id, workflowId]);
+  if (!f) return null;
+  const save = async (v: number | null) => {
+    setBusy(true);
+    try { const x = await api.setCap(tenant.id, workflowId, v); setF(x); setCap(x.capUsd ? String(x.capUsd) : ''); toast(v ? `Capped at ${usd(v)} a month` : 'Cap removed'); }
+    catch (e) { toast((e as Error).message, 'bad'); }
+    setBusy(false);
+  };
+  return (
+    <Panel title="Cost">
+      <div className="cost-p">
+        <div className="cost-now"><b>{usd(f.spentThisMonthUsd)}</b><span>this month{f.capUsd ? ` of ${usd(f.capUsd)} cap` : ''}</span></div>
+        {f.capUsd ? <Meter value={f.spentThisMonthUsd} max={f.capUsd} label="Spent of cap" /> : null}
+        <p className="muted small" style={{ margin: 0 }}>
+          About <b style={{ color: 'var(--text)' }}>{usd(f.monthlyUsd)} a month</b>: {f.runsPerMonth.toLocaleString()} runs × {usdRun(f.perRunUsd)} ({f.perRunBasis === 'actual' ? 'its real runs' : 'estimated from its steps'}), going by {f.runsBasis}.
+        </p>
+        <div className="cost-cap">
+          <label className="small" htmlFor={`cap-${workflowId}`}>Monthly cap</label>
+          <div className="input-affix"><span>$</span><input id={`cap-${workflowId}`} value={cap} onChange={(e) => setCap(e.target.value.replace(/[^\d.]/g, ''))} placeholder={String(f.suggestedCapUsd)} inputMode="decimal" /></div>
+          <button className="sm" disabled={busy || !Number(cap) || Number(cap) === f.capUsd} onClick={() => void save(Number(cap))}>Set</button>
+          {f.capUsd ? <button className="sm ghost" disabled={busy} onClick={() => void save(null)}>Remove</button> : null}
+        </div>
+        <span className="muted small">At the cap it stops and you get an alert. AI only: Salesforce API use doesn't cost money.</span>
+      </div>
+    </Panel>
+  );
 }
 
 /** Everything this agent changed in Salesforce over a period, with one Undo for all of it. */
@@ -73,7 +110,27 @@ export function AgentPage({ tenant, row, onBack, onEdit, onChanged, onDeleted }:
     setBusy(label); setErr('');
     try { await fn(); } catch (e) { setErr((e as Error).message); } finally { setBusy(''); }
   };
-  const toggleLive = () => act('live', async () => { const r = await api.setLive(t, row.id, !row.live); onChanged({ live: r.live, watch_error: null, paused_reason: null }); toast(r.live ? 'Agent turned on' : 'Agent turned off'); });
+  const [confirmUi, ask] = useConfirm();
+  const toggleLive = () => act('live', async () => {
+    // Before turning on: what it will cost a month, with the option to cap it.
+    if (!row.live) {
+      const f = await api.forecast(t, row.id).catch(() => null);
+      if (f) {
+        const ok = await ask({
+          title: `Turn on "${row.name}"?`,
+          body: <>It will cost about <b>{usd(f.monthlyUsd)} a month</b> in AI: {f.runsPerMonth.toLocaleString()} runs × {usdRun(f.perRunUsd)}, going by {f.runsBasis}.
+            {!f.capUsd && <label className="row small" style={{ gap: 8, marginTop: 12 }}><input id={`cap-on-${row.id}`} type="checkbox" defaultChecked /> Stop it if it reaches {usd(f.suggestedCapUsd)} this month</label>}
+            {f.capUsd ? <><br />Monthly cap: {usd(f.capUsd)}.</> : null}</>,
+          confirm: 'Turn on',
+        });
+        if (!ok) return;
+        if (!f.capUsd && (document.getElementById(`cap-on-${row.id}`) as HTMLInputElement | null)?.checked) await api.setCap(t, row.id, f.suggestedCapUsd);
+      }
+    }
+    const r = await api.setLive(t, row.id, !row.live);
+    onChanged({ live: r.live, watch_error: null, paused_reason: null });
+    toast(r.live ? 'Agent turned on' : 'Agent turned off');
+  });
   const letItAct = () => act('trust', async () => { const r = await api.dropApproval(t, row.id); onChanged({ graph: r.graph }); setHealth((h) => h && { ...h, suggestion: undefined }); toast('Approval step removed: it now acts on its own'); });
   const remove = () => act('delete', async () => { await api.deleteWorkflow(t, row.id); toast('Agent deleted', 'info'); onDeleted(); });
   // Objects this agent writes (where a field limit makes sense).
@@ -99,6 +156,7 @@ export function AgentPage({ tenant, row, onBack, onEdit, onChanged, onDeleted }:
 
   return (
     <div className="pg">
+      {confirmUi}
       <header className="ph">
         <button className="link-btn crumb-back" onClick={onBack}><ArrowLeft size={14} /> Agents</button>
         <div className="ph-row">
@@ -156,6 +214,7 @@ export function AgentPage({ tenant, row, onBack, onEdit, onChanged, onDeleted }:
                 ['AI cost', money(cost30)],
               ]} />
             </Panel>
+            <CostPanel tenant={tenant} workflowId={row.id} />
             {canRun && (
               <Panel title="Replay last 30 days">
                 <p className="muted small" style={{ margin: '0 0 12px' }}>See what it would have done last month, on a sample of real records. Nothing is written.</p>

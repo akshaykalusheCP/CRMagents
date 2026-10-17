@@ -862,3 +862,9 @@ select.sm { height: 30px; padding: 0 28px 0 8px; font-size: 13px; width: auto; }
 :root .xr-replace p { margin: 0; line-height: 1.5; }
 :root .xr-drafted { font-size: 13px; line-height: 1.5; }
 @media (max-width: 760px) { :root .xr-findings li { grid-template-columns: 1fr; } :root .xr-autos li { grid-template-columns: 1fr; } :root .xr-detail { padding-left: 16px; } :root .xr-hero { flex-direction: column; align-items: flex-start; } }
+:root .cost-p { display: flex; flex-direction: column; gap: 10px; }
+:root .cost-now { display: flex; align-items: baseline; gap: 8px; }
+:root .cost-now b { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+:root .cost-now span { font-size: 13px; color: var(--muted); }
+:root .cost-cap { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+:root .cost-cap .input-affix { width: 110px; }

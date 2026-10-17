@@ -15,6 +15,8 @@ function route(method: string, url: URL, body: any): Response {
   if (/^\/api\/team\/users\/[^/]+\/reset-link$/.test(p)) return json({ link: `${location.origin}/?reset=demo-link`, emailed: true });
   if (p === '/api/alerts') return json(DEMO_ALERTS);
   if (p === '/t/changes') return json(DEMO_CHANGES);
+  if (/^\/t\/workflows\/[^/]+\/forecast$/.test(p)) return json({ perRunUsd: 0.0016, perRunBasis: 'actual', runsPerMonth: 486, runsBasis: 'Case records created in the last 30 days', monthlyUsd: 0.78, capUsd: 5, spentThisMonthUsd: 0.41, suggestedCapUsd: 2 });
+  if (/^\/t\/workflows\/[^/]+\/cap$/.test(p)) return json({ perRunUsd: 0.0016, perRunBasis: 'actual', runsPerMonth: 486, runsBasis: 'Case records created in the last 30 days', monthlyUsd: 0.78, capUsd: body.capUsd, spentThisMonthUsd: 0.41, suggestedCapUsd: 2 });
   if (p === '/t/xray' || p === '/t/xray/scan') return json(DEMO_XRAY);
   if (p === '/t/xray/explain') return json({ object: 'Case', costUsd: 0.004,
     summary: '- When a case is created, the Process Builder "Case escalation" sets Priority to High if the account is Gold.\n- The Apex trigger CaseTrigger also sets Priority (from the case origin) and fills the Status.\n- The Flow "Case assignment" sends new cases to the Support queue and emails the owner.\n- The Workflow Rule "Notify on high priority" emails the support lead.',

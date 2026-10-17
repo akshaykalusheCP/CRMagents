@@ -149,6 +149,7 @@ export interface Discovery { opportunities: Opportunity[]; totalHours: number; h
 export interface XAutomation { kind: 'flow' | 'process' | 'workflow' | 'trigger'; name: string; label: string; object: string; event: string; timing: string; writes: { object: string; fields: string[] }[]; creates: string[]; steps: number; actions: string[]; order: number | null; lastModified: string | null }
 export interface XFinding { severity: 'high' | 'medium' | 'low'; kind: string; object: string; title: string; detail: string; automations: string[] }
 export interface Xray { automations: XAutomation[]; findings: XFinding[]; objects: { object: string; count: number; kinds: Record<string, number>; rules: number; findings: number }[]; score: number; scannedAt: string; flowsRead: number; flowsSkipped: number }
+export interface Forecast { perRunUsd: number; perRunBasis: 'actual' | 'estimate'; runsPerMonth: number; runsBasis: string; monthlyUsd: number; capUsd: number | null; spentThisMonthUsd: number; suggestedCapUsd: number }
 export interface Team { me: string; canManage: boolean; users: TeamUser[]; invites: TeamInvite[] }
 export interface Alert { id: string; kind: string; title: string; body: string; tenantId: string | null; workflowId: string | null; readAt: string | null; createdAt: string }
 
@@ -169,6 +170,8 @@ export const api = {
   acceptInvite: (token: string, password: string) => req('POST', '/api/auth/accept', { token, password }),
   changePassword: (current: string, password: string) => req('POST', '/api/auth/password', { current, password }),
   team: () => req<Team>('GET', '/api/team'),
+  forecast: (t: string, id: string) => req<Forecast>('GET', `/api/tenants/${t}/workflows/${id}/forecast`),
+  setCap: (t: string, id: string, capUsd: number | null) => req<Forecast>('PUT', `/api/tenants/${t}/workflows/${id}/cap`, { capUsd }),
   xray: (t: string) => req<Xray | null>('GET', `/api/tenants/${t}/xray`),
   scanXray: (t: string) => req<Xray>('POST', `/api/tenants/${t}/xray/scan`, {}),
   explainObject: (t: string, object: string) => req<{ object: string; summary: string; risks: string; replacement: string; costUsd: number }>('POST', `/api/tenants/${t}/xray/explain`, { object }),
