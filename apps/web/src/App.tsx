@@ -1,4 +1,4 @@
-import { BarChart3, BookOpen, Bot, TrendingUp, ChevronRight, PanelLeft, PanelTop, ChevronDown, Check, ChevronsUpDown, History, House, Inbox, LayoutDashboard, LogOut, Moon, Plus, Search, Settings as SettingsIcon, Sun, Users, Radar, ShieldCheck, Bookmark } from 'lucide-react';
+import { BarChart3, BookOpen, Bot, TrendingUp, ChevronRight, PanelLeft, PanelTop, ChevronDown, Check, ChevronsUpDown, History, House, Inbox, LayoutDashboard, LogOut, Moon, Plus, Search, Settings as SettingsIcon, Sun, Users, Radar, ShieldCheck, Bookmark, LayoutGrid } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { api, type Alert, type Draft, type Me, type Tenant, type WorkflowRow } from './api';
 import { CommandPalette, Menu, Toaster, type Command } from './components/ui';
@@ -10,6 +10,8 @@ import { ImpactPage } from './pages/Impact';
 import { DiscoverPage } from './pages/Discover';
 import { TrustPage } from './pages/Trust';
 import { MemoryPage } from './pages/Memory';
+import { ContactPage } from './pages/Contact';
+import { AdminPage } from './pages/Admin';
 import { Ribbon, type RibbonPalette } from './components/Ribbon';
 import { SettingsHub, type SettingsSection } from './pages/SettingsHub';
 import { AlertsBell } from './components/AlertsBell';
@@ -22,7 +24,7 @@ import { WorkflowsPage } from './pages/Workflows';
 
 const PAGE_FRESH_MS = 2 * 60_000;
 
-type Tab = 'home' | 'discover' | 'trust' | 'memory' | 'impact' | 'insights' | 'dashboards' | 'agents' | 'approvals' | 'activity' | 'knowledge' | 'settings';
+type Tab = 'home' | 'discover' | 'trust' | 'memory' | 'admin' | 'impact' | 'insights' | 'dashboards' | 'agents' | 'approvals' | 'activity' | 'knowledge' | 'settings';
 
 const NAV: { group?: string; items: { key: Tab; label: string; icon: ReactNode }[] }[] = [
   { items: [
@@ -60,9 +62,9 @@ const TOP_NAV: TopEntry[] = [
 ];
 
 // Each area has its own ribbon colours: you can tell where you are at a glance, without anything extra on screen.
-const RIBBON: Record<Tab, RibbonPalette> = { trust: 'silver', memory: 'dusk', home: 'sunset', discover: 'ocean', agents: 'dusk', activity: 'dusk', knowledge: 'dusk', approvals: 'amber', insights: 'mint', dashboards: 'mint', impact: 'mint', settings: 'silver' };
+const RIBBON: Record<Tab, RibbonPalette> = { admin: 'silver', trust: 'silver', memory: 'dusk', home: 'sunset', discover: 'ocean', agents: 'dusk', activity: 'dusk', knowledge: 'dusk', approvals: 'amber', insights: 'mint', dashboards: 'mint', impact: 'mint', settings: 'silver' };
 
-const LABEL: Record<Tab, string> = { home: 'Home', discover: 'Discover', trust: 'Trust center', memory: 'Memory', approvals: 'Approvals', agents: 'Agents', activity: 'Activity', knowledge: 'Knowledge', impact: 'Impact', insights: 'Insights', dashboards: 'Dashboards', settings: 'Settings' };
+const LABEL: Record<Tab, string> = { home: 'Home', discover: 'Discover', trust: 'Trust center', memory: 'Memory', admin: 'Super admin', approvals: 'Approvals', agents: 'Agents', activity: 'Activity', knowledge: 'Knowledge', impact: 'Impact', insights: 'Insights', dashboards: 'Dashboards', settings: 'Settings' };
 
 function useTheme() {
   const initial = (): 'light' | 'dark' => {
@@ -115,7 +117,7 @@ export function App() {
   const [layout, setLayout] = useState<'top' | 'side'>(() => { try { return localStorage.getItem('layout') === 'side' ? 'side' : 'top'; } catch { return 'top'; } });
   const switchLayout = () => { const next = layout === 'top' ? 'side' : 'top'; setLayout(next); try { localStorage.setItem('layout', next); } catch { /* ignore */ } };
   const [cmdk, setCmdk] = useState(false);
-  const [settingsAt, setSettingsAt] = useState<{ section: SettingsSection; connect?: boolean; n: number }>({ section: 'orgs', n: 0 });
+  const [settingsAt, setSettingsAt] = useState<{ section: SettingsSection; connect?: boolean; n: number }>({ section: new URLSearchParams(location.search).has('billing') ? 'plan' : 'orgs', n: 0 }); // back from Stripe: the Plan page
   const openSettings = (section: SettingsSection = 'orgs', connect = false) => { setSettingsAt((s) => ({ section, connect, n: s.n + 1 })); setTab('settings'); };
   const planValue = { ...planState, openPlans: () => openSettings('plan') };
   // An alert opens where it can be fixed: the org list for a disconnected org, else the agent's org and the Agents page.
@@ -172,6 +174,8 @@ export function App() {
   }, []);
   useEffect(() => { if (cmdk && tenantId) api.workflows(tenantId).then(setAgentList).catch(() => {}); }, [cmdk, tenantId]);
 
+  // The Contact page is public, signed in or not.
+  if (location.pathname === '/contact') return <ContactPage />;
   if (me === undefined) return <div className="pad muted">Loading…</div>;
   // An invitation or reset link opens the sign-in card even when someone is already signed in on this browser.
   const linkToken = /[?&](invite|reset)=/.test(location.search);
@@ -257,6 +261,7 @@ export function App() {
                     <button className="mi" onClick={() => { close(); setTab('settings'); }}><SettingsIcon size={15} /> Settings</button>
                     <button className="mi" onClick={() => { close(); openSettings('team'); }}><Users size={15} /> Team</button>
                     <button className="mi" onClick={() => { close(); setTab('memory'); }}><Bookmark size={15} /> Memory</button>
+                    {me.platformAdmin && <button className="mi" onClick={() => { close(); setTab('admin'); }}><LayoutGrid size={15} /> Super admin</button>}
                     <button className="mi" onClick={() => { close(); setTab('trust'); }}><ShieldCheck size={15} /> Trust center</button>
                     <button className="mi" onClick={() => { close(); toggleTheme(); }}>{theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />} {theme === 'dark' ? 'Light mode' : 'Dark mode'}</button>
                     <button className="mi" onClick={() => { close(); switchLayout(); }}><PanelLeft size={15} /> Navigation on the side</button>
@@ -277,13 +282,14 @@ export function App() {
           {pane('discover', <DiscoverPage tenant={tenant} openAgents={() => setTab('agents')} />)}
           {pane('trust', <TrustPage me={me} />)}
           {pane('memory', <MemoryPage me={me} tenants={tenants} />)}
+          {me.platformAdmin && pane('admin', <AdminPage />)}
           {pane('insights', !has('insights') ? <LockedPage feature="insights" title="Insights" /> : <InsightsPage key="ins" fixedView="overview" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
           {pane('dashboards', !has('insights') ? <LockedPage feature="insights" title="Dashboards" /> : <InsightsPage key="dash" fixedView="dashboards" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
           {pane('agents', <WorkflowsPage tenant={tenant} goConnections={() => setTab('settings')} incoming={incoming} onIncomingOpened={() => setIncoming(null)} prefill={prefill} onPrefillUsed={() => setPrefill(null)} />)}
           {pane('approvals', <ApprovalsPage tenant={tenant} onChange={refreshWaiting} me={me.email} />)}
           {pane('knowledge', <KnowledgePage tenant={tenant} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
           {pane('activity', <RunsPage tenant={tenant} goSettings={() => setTab('settings')} />)}
-          {pane('settings', <SettingsHub key={settingsAt.n} section={settingsAt.section} focusConnect={settingsAt.connect} tenants={tenants} tenant={tenant} onChange={reload} me={me} />)}
+          {pane('settings', <SettingsHub key={settingsAt.n} section={settingsAt.section} focusConnect={settingsAt.connect} tenants={tenants} tenant={tenant} onChange={reload} me={me} openAdmin={me.platformAdmin ? () => setTab('admin') : undefined} />)}
         </main>
         <CommandPalette open={cmdk} onClose={() => setCmdk(false)} commands={commands} />
         <UpgradePrompt me={me} />
@@ -373,13 +379,14 @@ export function App() {
           {pane('discover', <DiscoverPage tenant={tenant} openAgents={() => setTab('agents')} />)}
           {pane('trust', <TrustPage me={me} />)}
           {pane('memory', <MemoryPage me={me} tenants={tenants} />)}
+          {me.platformAdmin && pane('admin', <AdminPage />)}
           {pane('insights', !has('insights') ? <LockedPage feature="insights" title="Insights" /> : <InsightsPage key="ins" fixedView="overview" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
           {pane('dashboards', !has('insights') ? <LockedPage feature="insights" title="Dashboards" /> : <InsightsPage key="dash" fixedView="dashboards" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
           {pane('agents', <WorkflowsPage tenant={tenant} goConnections={() => setTab('settings')} incoming={incoming} onIncomingOpened={() => setIncoming(null)} prefill={prefill} onPrefillUsed={() => setPrefill(null)} />)}
           {pane('approvals', <ApprovalsPage tenant={tenant} onChange={refreshWaiting} me={me.email} />)}
           {pane('knowledge', <KnowledgePage tenant={tenant} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
           {pane('activity', <RunsPage tenant={tenant} goSettings={() => setTab('settings')} />)}
-          {pane('settings', <SettingsHub key={settingsAt.n} section={settingsAt.section} focusConnect={settingsAt.connect} tenants={tenants} tenant={tenant} onChange={reload} me={me} />)}
+          {pane('settings', <SettingsHub key={settingsAt.n} section={settingsAt.section} focusConnect={settingsAt.connect} tenants={tenants} tenant={tenant} onChange={reload} me={me} openAdmin={me.platformAdmin ? () => setTab('admin') : undefined} />)}
         </main>
       </div>
       <CommandPalette open={cmdk} onClose={() => setCmdk(false)} commands={commands} />

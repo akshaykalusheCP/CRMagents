@@ -18,7 +18,7 @@ const SECTIONS = [
 
 export type SettingsSection = 'orgs' | 'ai' | 'plan' | 'team' | 'rules';
 
-export function SettingsHub({ tenants, onChange, tenant, section, focusConnect, me }: { tenants: Tenant[]; onChange: () => void; tenant?: Tenant; section?: SettingsSection; focusConnect?: boolean; me: Me }) {
+export function SettingsHub({ tenants, onChange, tenant, section, focusConnect, me, openAdmin }: { tenants: Tenant[]; onChange: () => void; tenant?: Tenant; section?: SettingsSection; focusConnect?: boolean; me: Me; openAdmin?: () => void }) {
   const [tab, setTab] = useState<SettingsSection>(section ?? 'orgs');
   const cur = SECTIONS.find((s) => s.id === tab)!;
   return (
@@ -30,7 +30,7 @@ export function SettingsHub({ tenants, onChange, tenant, section, focusConnect, 
         </nav>
         <div>
           <div className="ph-text" style={{ marginBottom: 16 }}><h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>{cur.label}</h2><p className="ph-desc">{cur.desc}</p></div>
-          {tab === 'orgs' ? <ConnectionsPage tenants={tenants} onChange={onChange} goSettings={() => setTab('ai')} focusConnect={focusConnect} /> : tab === 'ai' ? <SettingsPage /> : tab === 'team' ? <TeamPage me={me} /> : tab === 'plan' ? <PlanPage me={me} /> : <RulesPage tenant={tenant} />}
+          {tab === 'orgs' ? <ConnectionsPage tenants={tenants} onChange={onChange} goSettings={() => setTab('ai')} focusConnect={focusConnect} /> : tab === 'ai' ? <SettingsPage /> : tab === 'team' ? <TeamPage me={me} /> : tab === 'plan' ? <PlanPage me={me} openAdmin={openAdmin} /> : <RulesPage tenant={tenant} />}
         </div>
       </div>
     </div>

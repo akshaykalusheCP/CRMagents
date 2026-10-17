@@ -37,7 +37,9 @@ import { publicChatInfo, registerPublicChat, setPublicChat } from './agent/publi
 import { addToRecordPage, addToUtilityBar, listPages } from './salesforce/pages.js';
 import { impact, setAssumptions } from './insights/impact.js';
 import { config } from './config.js';
-import { isPlatformAdmin, PlanError, planSummary } from './plans.js';
+import { PlanError, planSummary } from './plans.js';
+import { billingStatus, createCheckout, createPortal, handleStripeEvent, verifyStripeSignature } from './billing/stripe.js';
+import { registerPlatform } from './platform.js';
 import { overLimit } from './ratelimit.js';
 import { addMemory, deleteMemory, deleteRecordNote, listMemories, listRecordNotes, memoryOn, updateMemory } from './memory/store.js';
 import { deleteConversation, getConversation, listConversations } from './memory/conversations.js';
@@ -67,6 +69,7 @@ registerAuth(app);
 registerTeam(app);
 registerTwilio(app);
 registerAudit(app);
+registerPlatform(app);
 
 app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
   const code = err instanceof z.ZodError ? 400 : (err.statusCode ?? 500);
@@ -85,6 +88,19 @@ app.addHook('onSend', async (req, reply, payload) => {
 });
 
 app.get('/health', async () => ({ ok: true }));
+
+// The Contact page (no sign-in): sales, support, partnerships, anything else. Kept for staff in Super admin.
+app.post('/api/contact', async (req, reply) => {
+  if (await overLimit(`contact|${req.ip}`, 5, 3600)) return reply.code(429).send({ error: 'Too many messages. Try again later.' });
+  const b = z.object({
+    name: z.string().trim().min(1, 'Your name, please').max(120), email: z.string().trim().email('A valid email, please').max(200),
+    company: z.string().trim().max(160).optional(), topic: z.enum(['sales', 'support', 'partnership', 'billing', 'other']),
+    message: z.string().trim().min(5, 'Tell us a little more').max(4000),
+  }).parse(req.body);
+  await pool.query("insert into sales_inquiries (name, email, company, message, ip, topic, source) values ($1,$2,$3,$4,$5,$6,'contact')",
+    [b.name, b.email.toLowerCase(), b.company || '', b.message, req.ip, b.topic]);
+  return { ok: true };
+});
 
 // "Contact sales" on the pricing section (no sign-in). Kept for the sales team; a few per address per hour.
 app.post('/api/sales-inquiry', async (req, reply) => {
@@ -701,36 +717,34 @@ app.post('/api/plan/request', async (req) => {
   const u = req.user!;
   const b = z.object({ plan: z.enum(['plus', 'pro', 'promax']), note: z.string().max(1000).optional() }).parse(req.body);
   await pool.query('update accounts set requested_plan=$2 where id=$1', [u.accountId, b.plan]);
-  await pool.query('insert into sales_inquiries (name, email, company, size, message, ip) values ($1,$2,$3,$4,$5,$6)',
-    [u.email, u.email, u.accountName, null, `Upgrade request: ${b.plan}${b.note ? ` · ${b.note}` : ''}`, req.ip]);
+  await pool.query("insert into sales_inquiries (name, email, company, size, message, ip, topic, source, account_id) values ($1,$2,$3,$4,$5,$6,'upgrade','upgrade',$7)",
+    [u.email, u.email, u.accountName, null, `Upgrade request: ${b.plan}${b.note ? ` · ${b.note}` : ''}`, req.ip, u.accountId]);
   await audit(u.accountId, u.email, `Asked to upgrade to ${b.plan}`, { ip: req.ip });
   return { ok: true };
 });
 
-// ---- Platform admin (PLATFORM_ADMINS): set any workspace's plan. Invisible to everyone else. ----
-app.get('/api/platform/accounts', async (req, reply) => {
-  if (!isPlatformAdmin(req.user!.email)) return reply.code(404).send({ error: 'Not found' });
-  const { rows } = await pool.query(
-    `select a.id, a.name, a.plan, a.trial_ends_at as "trialEndsAt", a.requested_plan as "requestedPlan", a.plan_set_by as "planSetBy", a.created_at as "createdAt",
-            (select count(*)::int from tenants t where t.account_id = a.id) as orgs, (select count(*)::int from users u where u.account_id = a.id) as users,
-            (select min(email) from users u where u.account_id = a.id and u.role = 'owner') as owner
-     from accounts a order by a.created_at desc limit 500`);
-  return rows;
-});
-app.put('/api/platform/accounts/:id/plan', async (req, reply) => {
+// ---- Billing: Stripe Checkout and Customer Portal (off until the keys are set) ----
+app.get('/api/billing', async (req) => billingStatus(req.user!.accountId));
+app.post('/api/billing/checkout', async (req) => {
   const u = req.user!;
-  if (!isPlatformAdmin(u.email)) return reply.code(404).send({ error: 'Not found' });
-  const b = z.object({ plan: z.enum(['basic', 'plus', 'pro', 'promax']), trialDays: z.number().int().min(0).max(90).optional() }).parse(req.body);
-  const id = (req.params as { id: string }).id;
-  const trial = b.plan === 'basic' ? new Date(Date.now() + (b.trialDays ?? 14) * 86_400_000) : null;
-  const r = await pool.query(
-    `update accounts set plan=$2, trial_ends_at=$3, trial_ended_at=null, requested_plan=case when requested_plan=$2 then null else requested_plan end, plan_set_by=$4, plan_updated_at=now() where id=$1`,
-    [id, b.plan, trial, u.email]);
-  if (!r.rowCount) return reply.code(404).send({ error: 'Not found' });
-  // A trial pause is lifted for agents when the plan allows running again (people turn them back on themselves).
-  await pool.query(`update workflows w set paused_reason=null from tenants t where t.id = w.tenant_id and t.account_id=$1 and w.paused_reason like 'Your free trial ended%'`, [id]);
-  await audit(id, u.email, `Plan set to ${b.plan} by CRMagents`, {});
-  return { ok: true };
+  const b = z.object({ plan: z.enum(['plus', 'pro']), interval: z.enum(['month', 'year']).default('month') }).parse(req.body);
+  const r = await createCheckout({ accountId: u.accountId, email: u.email, accountName: u.accountName }, b.plan, b.interval);
+  await audit(u.accountId, u.email, `Started checkout for ${b.plan} (${b.interval === 'year' ? 'yearly' : 'monthly'})`, { ip: req.ip });
+  return r;
+});
+app.post('/api/billing/portal', async (req) => createPortal(req.user!.accountId));
+
+// Stripe tells us about payments and subscription changes. Verified with the webhook secret; no sign-in.
+app.post('/stripe/webhook', { bodyLimit: 1_000_000 }, async (req, reply) => {
+  const secret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
+  if (!secret) return reply.code(404).send({ error: 'Not set up' });
+  if (!verifyStripeSignature(req.rawBody ?? '', String(req.headers['stripe-signature'] ?? ''), secret)) return reply.code(400).send({ error: 'Bad signature' });
+  try {
+    return await handleStripeEvent(req.body as Parameters<typeof handleStripeEvent>[0]);
+  } catch (e) {
+    req.log.error({ err: String(e) }, 'stripe webhook failed');
+    return reply.code(500).send({ error: 'Failed; Stripe will retry' }); // retried by Stripe
+  }
 });
 
 // ---- Trust Center: what the AI saw, who did what, and the workspace's data ----

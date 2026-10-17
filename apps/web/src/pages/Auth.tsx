@@ -61,7 +61,7 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
         <div className="land-inner">
           <span className="land-brand"><span className="brand-mark"><LogoMark size={15} /></span>CRMagents</span>
           <nav className="land-links" aria-label="Product">
-            <a href="#agents">Agents</a><a href="#insights">Insights</a><a href="#dashboards">Dashboards</a><a href="#pricing">Pricing</a>
+            <a href="#agents">Agents</a><a href="#insights">Insights</a><a href="#dashboards">Dashboards</a><a href="#pricing">Pricing</a><a href="/contact">Contact</a>
           </nav>
           <div className="land-cta">
             <button className="land-btn ghost" onClick={() => go('login')}>Log in</button>
@@ -178,7 +178,7 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
         </div>
       </section>
       <Pricing onStart={(p) => { setPlanPick(p); go('signup'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
-      <footer className="land-foot"><div className="land-inner">CRMagents · AI agents and analytics for Salesforce</div></footer>
+      <footer className="land-foot"><div className="land-inner">CRMagents · AI agents and analytics for Salesforce · <a href="/contact">Contact</a></div></footer>
     </div>
   );
 }

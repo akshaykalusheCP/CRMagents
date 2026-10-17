@@ -8,8 +8,7 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function route(method: string, url: URL, body: any): Response {
   const p = url.pathname.replace(/^\/api\/tenants\/[^/]+/, '/t');
-  if (p === '/api/auth/me') return json({ id: 'demo', email: 'owner@demo-company.com', accountName: 'Demo Company', role: 'owner', platformAdmin: new URLSearchParams(location.search).get('plan') === 'basic' });
-  if (p === '/api/platform/accounts') return json([{ id: 'x1', name: 'Demo Company', plan: 'basic', trialEndsAt: new Date(Date.now() + 9 * 86_400_000).toISOString(), requestedPlan: 'pro', planSetBy: 'sign-up trial', createdAt: new Date().toISOString(), orgs: 1, users: 2, owner: 'owner@demo-company.com' }, { id: 'x2', name: 'CP', plan: 'promax', trialEndsAt: null, requestedPlan: null, planSetBy: 'existing workspace', createdAt: new Date().toISOString(), orgs: 3, users: 1, owner: 'akshay@cp.example' }]);
+  if (p === '/api/auth/me') return json({ id: 'demo', email: 'owner@demo-company.com', accountName: 'Demo Company', role: 'owner', platformAdmin: true });
   if (p === '/api/tenants') return json([fx.tenant]);
   if (p === '/api/plan') {
     // ?demo&plan=basic shows a Basic trial (locked pages, trial banner); otherwise everything is included.
@@ -19,6 +18,13 @@ function route(method: string, url: URL, body: any): Response {
       : { plan: 'promax', name: 'Pro Max', trialEndsAt: null, trialEnded: false, requestedPlan: null, features: ['panel', 'knowledge', 'emailReplies', 'insights', 'tests', 'memory', 'costCaps', 'websiteChat', 'textMessages', 'meetings', 'prove', 'xray', 'impact', 'trustLog'], limits: { orgs: null, users: null, liveAgents: null, assistants: null }, usage: { orgs: 1, users: 4, liveAgents: 3, assistants: 2 } });
   }
   if (p === '/api/plan/request') return json({ ok: true });
+  if (p === '/api/billing') return json({ configured: false, intervals: { plus: { month: false, year: false }, pro: { month: false, year: false } }, subscription: null });
+  if (p === '/api/platform/overview') return json(DEMO_ADMIN.overview);
+  if (p === '/api/platform/accounts') return json(DEMO_ADMIN.accounts);
+  if (/^\/api\/platform\/accounts\/[^/]+$/.test(p)) return json(DEMO_ADMIN.detail);
+  if (p === '/api/platform/users') return json(DEMO_ADMIN.users);
+  if (p === '/api/platform/payments') return json(DEMO_ADMIN.payments);
+  if (p === '/api/platform/requests') return json(DEMO_ADMIN.requests);
   if (p === '/api/team') return json(DEMO_TEAM);
   if (p === '/api/team/invites') return json({ id: 'i9', link: `${location.origin}/?invite=demo-link`, emailed: false });
   if (/^\/api\/team\/users\/[^/]+\/reset-link$/.test(p)) return json({ link: `${location.origin}/?reset=demo-link`, emailed: true });
@@ -345,3 +351,36 @@ const DEMO_XRAY = {
     { object: 'Opportunity', count: 2, kinds: { flow: 1, trigger: 1 }, rules: 2, findings: 0 },
   ],
 };
+
+const DEMO_ADMIN = (() => {
+  const d = (h: number) => new Date(Date.now() - h * 3600_000).toISOString();
+  const accounts = [
+    { id: 'w1', name: 'Northwind Service', plan: 'pro', trialEndsAt: null, requestedPlan: null, planSetBy: 'stripe', createdAt: d(900), orgs: 2, users: 14, owner: 'maria@northwind.example', lastActive: d(0.4), liveAgents: 9, aiCost30: 41.2, subStatus: 'active', subInterval: 'month', subAmountCents: 19900, renewsAt: d(-300), purchasedBy: 'maria@northwind.example', cancelAtPeriodEnd: false },
+    { id: 'w2', name: 'Acme Field Ops', plan: 'plus', trialEndsAt: null, requestedPlan: 'pro', planSetBy: 'stripe', createdAt: d(600), orgs: 1, users: 6, owner: 'dev@acme.example', lastActive: d(5), liveAgents: 4, aiCost30: 8.7, subStatus: 'past_due', subInterval: 'year', subAmountCents: 49000, renewsAt: d(-2000), purchasedBy: 'finance@acme.example', cancelAtPeriodEnd: false },
+    { id: 'w3', name: 'Globex Support', plan: 'basic', trialEndsAt: d(-48), requestedPlan: 'plus', planSetBy: 'sign-up trial', createdAt: d(290), orgs: 1, users: 2, owner: 'li@globex.example', lastActive: d(20), liveAgents: 2, aiCost30: 0.6, subStatus: null, subInterval: null, subAmountCents: null, renewsAt: null, purchasedBy: null, cancelAtPeriodEnd: null },
+    { id: 'w4', name: 'Initech', plan: 'basic', trialEndsAt: d(30), requestedPlan: null, planSetBy: 'sign-up trial', createdAt: d(380), orgs: 1, users: 1, owner: 'peter@initech.example', lastActive: d(120), liveAgents: 0, aiCost30: 0.1, subStatus: null, subInterval: null, subAmountCents: null, renewsAt: null, purchasedBy: null, cancelAtPeriodEnd: null },
+    { id: 'w5', name: 'Umbrella Partners', plan: 'promax', trialEndsAt: null, requestedPlan: null, planSetBy: 'owner@crmagents.example', createdAt: d(2000), orgs: 11, users: 32, owner: 'ops@umbrella.example', lastActive: d(1), liveAgents: 37, aiCost30: 212.4, subStatus: null, subInterval: null, subAmountCents: null, renewsAt: null, purchasedBy: null, cancelAtPeriodEnd: null },
+  ];
+  return {
+    overview: { plans: { basic: 2, plus: 1, pro: 1, promax: 1 }, subscriptions: 2, mrr: 239.83, trials: { active: 1, ending: 0, ended: 1 }, signups: { d30: 3, d7: 1, total: 5 }, users: { total: 55, active7: 31 }, ai: { cost30: 263.0, runs30: 18420 }, openRequests: 2, paymentIssues: 1, billingConfigured: false,
+      series: Array.from({ length: 30 }, (_, i) => ({ day: new Date(Date.now() - (29 - i) * 86_400_000).toISOString().slice(0, 10), signups: [0, 1, 0, 0, 2, 0, 1][i % 7] })) },
+    accounts,
+    detail: { account: accounts[1], plan: { plan: 'plus', name: 'Plus', trialEndsAt: null, trialEnded: false, requestedPlan: 'pro', features: [], limits: { orgs: 2, users: 10, liveAgents: 15, assistants: null }, usage: { orgs: 1, users: 6, liveAgents: 4, assistants: 3 } },
+      members: [{ email: 'dev@acme.example', role: 'owner', createdAt: d(600), lastLoginAt: d(5) }, { email: 'finance@acme.example', role: 'admin', createdAt: d(500), lastLoginAt: d(70) }, { email: 'agent1@acme.example', role: 'approver', createdAt: d(300), lastLoginAt: d(8) }],
+      invites: [{ email: 'new@acme.example', role: 'builder', invitedBy: 'dev@acme.example', expiresAt: d(-100) }],
+      orgs: [{ username: 'admin@acme.example', url: 'https://acme.my.salesforce.com', status: 'ready', usePackage: true, connectedAt: d(590) }],
+      subscription: { plan: 'plus', interval: 'year', status: 'past_due', amountCents: 49000, currency: 'usd', renewsAt: d(-2000), cancelAtPeriodEnd: false, purchasedBy: 'finance@acme.example', startedAt: d(580), customerId: 'cus_demo123', hasSubscription: true },
+      payments: [{ type: 'payment_failed', plan: null, amountCents: 49000, currency: 'usd', invoiceUrl: null, detail: null, createdAt: d(30) }, { type: 'subscription_started', plan: 'plus', amountCents: 49000, currency: 'usd', invoiceUrl: null, detail: 'Bought by finance@acme.example', createdAt: d(580) }],
+      planHistory: [{ from: 'basic', to: 'plus', by: 'stripe', reason: 'Subscription active', createdAt: d(580) }, { from: null, to: 'basic', by: 'sign-up', reason: '14-day trial', createdAt: d(600) }],
+      requests: [{ id: 3, topic: 'upgrade', source: 'upgrade', status: 'new', message: 'Upgrade request: pro', createdAt: d(10) }],
+      activity: [{ user: 'dev@acme.example', action: 'Turned an agent on', target: 'Case triage', createdAt: d(5) }, { user: 'finance@acme.example', action: 'Asked to upgrade to pro', target: null, createdAt: d(10) }],
+      usage30: { runs: 1840, cost: 8.7 } },
+    users: [{ id: 'u1', email: 'maria@northwind.example', role: 'owner', createdAt: d(900), lastLoginAt: d(0.4), accountId: 'w1', accountName: 'Northwind Service', plan: 'pro' }, { id: 'u2', email: 'dev@acme.example', role: 'owner', createdAt: d(600), lastLoginAt: d(5), accountId: 'w2', accountName: 'Acme Field Ops', plan: 'plus' }, { id: 'u3', email: 'li@globex.example', role: 'owner', createdAt: d(290), lastLoginAt: d(20), accountId: 'w3', accountName: 'Globex Support', plan: 'basic' }],
+    payments: [{ id: 1, type: 'payment_succeeded', plan: null, amountCents: 19900, currency: 'usd', invoiceUrl: 'https://invoice.stripe.example/1', detail: null, createdAt: d(20), accountId: 'w1', accountName: 'Northwind Service' }, { id: 2, type: 'payment_failed', plan: null, amountCents: 49000, currency: 'usd', invoiceUrl: null, detail: null, createdAt: d(30), accountId: 'w2', accountName: 'Acme Field Ops' }],
+    requests: [
+      { id: 3, name: 'finance@acme.example', email: 'finance@acme.example', company: 'Acme Field Ops', size: null, message: 'Upgrade request: pro', topic: 'upgrade', source: 'upgrade', status: 'new', notes: null, handledBy: null, createdAt: d(10), accountId: 'w2', accountName: 'Acme Field Ops' },
+      { id: 2, name: 'Sam Rivera', email: 'sam@bigco.example', company: 'BigCo', size: '1200', message: 'We run 4 orgs and want agents for service and sales. Can you host in the EU?', topic: 'sales', source: 'pricing', status: 'new', notes: null, handledBy: null, createdAt: d(26), accountId: null, accountName: null },
+      { id: 1, name: 'Jo Park', email: 'jo@consult.example', company: 'Park Consulting', size: null, message: 'Salesforce partner here: interested in rolling agents out to our clients.', topic: 'partnership', source: 'contact', status: 'contacted', notes: 'Call booked for Tuesday', handledBy: 'owner@crmagents.example', createdAt: d(80), accountId: null, accountName: null },
+    ],
+  };
+})();

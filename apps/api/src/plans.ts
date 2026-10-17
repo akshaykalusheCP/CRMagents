@@ -107,6 +107,7 @@ export async function endTrials(alert: (accountId: string) => Promise<unknown>) 
        from tenants t where t.id = w.tenant_id and t.account_id=$1 and w.live`, [a.id]);
     await pool.query('update agents a set public_enabled=false, sms_enabled=false from tenants t where t.id = a.tenant_id and t.account_id=$1', [a.id]);
     await pool.query('update accounts set trial_ended_at=now() where id=$1', [a.id]);
+    await pool.query("insert into plan_history (account_id, from_plan, to_plan, changed_by, reason) values ($1,'basic','basic','trial ended','Agents and website chat paused')", [a.id]);
     await alert(a.id).catch(() => undefined);
   }
   return rows.length;
@@ -133,4 +134,21 @@ export function requiredFeature(method: string, url: string): Feature | null {
   const write = !['GET', 'HEAD', 'OPTIONS'].includes(method);
   for (const [re, f, when] of ROUTES) if (re.test(path) && (when === 'any' || write)) return f;
   return null;
+}
+
+/** Every plan change goes through here (staff, Stripe, trial end), so it is always in the plan history. */
+export async function changePlan(accountId: string, to: PlanId, by: string, reason: string, o: { trialDays?: number } = {}) {
+  const { rows } = await pool.query('select plan from accounts where id=$1', [accountId]);
+  if (!rows[0]) throw Object.assign(new Error('Workspace not found'), { statusCode: 404 });
+  const trial = to === 'basic' && o.trialDays !== undefined ? new Date(Date.now() + o.trialDays * 86_400_000) : null;
+  await pool.query(
+    `update accounts set plan=$2, trial_ends_at=case when $2='basic' then coalesce($3, trial_ends_at) else null end,
+       trial_ended_at=case when $2='basic' and $3::timestamptz is null then trial_ended_at else null end,
+       requested_plan=case when requested_plan=$2 then null else requested_plan end, plan_set_by=$4, plan_updated_at=now() where id=$1`,
+    [accountId, to, trial, by]);
+  if (to !== 'basic') {
+    // Agents paused only because the trial ended can be turned on again (people do that themselves).
+    await pool.query(`update workflows w set paused_reason=null from tenants t where t.id = w.tenant_id and t.account_id=$1 and w.paused_reason like 'Your free trial ended%'`, [accountId]);
+  }
+  await pool.query('insert into plan_history (account_id, from_plan, to_plan, changed_by, reason) values ($1,$2,$3,$4,$5)', [accountId, rows[0].plan, to, by, reason]);
 }

@@ -66,7 +66,7 @@ const password = z.string().min(10, 'Password must be at least 10 characters').m
 const credentials = z.object({ email: z.string().email().max(200), password });
 
 // Reachable without a session.
-const PUBLIC = new Set(['/api/sales-inquiry', '/api/auth/signup', '/api/auth/login', '/api/auth/logout', '/api/auth/me', '/api/auth/forgot', '/api/auth/reset', '/api/auth/accept']);
+const PUBLIC = new Set(['/api/contact', '/api/sales-inquiry', '/api/auth/signup', '/api/auth/login', '/api/auth/logout', '/api/auth/me', '/api/auth/forgot', '/api/auth/reset', '/api/auth/accept']);
 const isPublic = (path: string) => PUBLIC.has(path) || path.startsWith('/api/auth/invite/');
 
 export function registerAuth(app: FastifyInstance) {
@@ -85,6 +85,8 @@ export function registerAuth(app: FastifyInstance) {
         "insert into users (account_id, email, password_hash, role) values ($1,$2,$3,'owner') returning id",
         [acc.rows[0].id, email, await hashPassword(b.password)],
       );
+      await client.query("insert into plan_history (account_id, from_plan, to_plan, changed_by, reason) values ($1, null, 'basic', 'sign-up', $2)",
+        [acc.rows[0].id, b.plan && b.plan !== 'basic' ? `14-day trial; picked ${b.plan} on the pricing page` : '14-day trial']);
       await client.query('commit');
       await createSession(reply, u.rows[0].id);
     } catch (e) { await client.query('rollback').catch(() => {}); throw e; } finally { client.release(); }
