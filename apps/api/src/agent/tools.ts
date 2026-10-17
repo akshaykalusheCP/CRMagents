@@ -371,6 +371,24 @@ export const TOOLS: Record<string, Tool> = {
       return { booked: true, ...r };
     },
   },
+  remember: {
+    write: false,
+    def: {
+      name: 'remember',
+      description: 'Save a lasting preference or fact for future conversations: about the person asking (scope "personal"), or a business definition for everyone (scope "team"). One short sentence. Never customers\' personal data.',
+      input_schema: { type: 'object', properties: { text: { type: 'string' }, scope: { type: 'string', enum: ['personal', 'team'] } }, required: ['text'] },
+    },
+    async run() { throw new Error('Memory is only available in conversations with a person.'); },
+  },
+  remember_about_record: {
+    write: false,
+    def: {
+      name: 'remember_about_record',
+      description: 'Keep a short note on a Salesforce record that will matter next time anyone or any agent works on it (for example "customer prefers email", "already asked for the invoice"). Never personal data.',
+      input_schema: { type: 'object', properties: { record_id: { type: 'string' }, note: { type: 'string' } }, required: ['record_id', 'note'] },
+    },
+    async run() { throw new Error('Record notes are only available inside a run.'); },
+  },
   meeting_times: {
     write: false,
     publicOnly: true,

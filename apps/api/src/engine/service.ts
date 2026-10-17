@@ -2,6 +2,7 @@ import { afterRunFailed } from '../alerts.js';
 import { journalFor } from '../trust/undo.js';
 import { checkCap } from './costplan.js';
 import { aiContext } from '../trust/aiLog.js';
+import { addRecordNote, memoryPrompt } from '../memory/store.js';
 import { auditRun } from '../salesforce/audit.js';
 import { aiClient } from '../agent/provider.js';
 import type { Prefetched } from './prefetch.js';
@@ -47,6 +48,9 @@ export interface RunSnapshot {
 async function makeEnv(tenantId: string, workflowId?: string, st?: RunState) {
   const sf = await SalesforceClient.forTenant(tenantId);
   const accountId = await accountOf(tenantId);
+  const runCtx: { runId?: string; dryRun?: boolean; author: string } = { author: 'Agent' };
+  if (workflowId) runCtx.author = (await pool.query('select name from workflows where id=$1', [workflowId])).rows[0]?.name ?? 'Agent';
+  const memory = async (question: string, recordId?: string) => (await memoryPrompt(accountId, tenantId, '', question, recordId)).text;
   // Masking and limits: the placeholder map and the counters live on the run so they survive pauses.
   const { masker, limits } = await runTrust(accountId, st ? (st.masks ??= {}) : undefined);
   const counters = st ? (st.counters ??= { aiCalls: 0, toolCalls: 0, tokens: 0 }) : undefined;
@@ -54,7 +58,14 @@ async function makeEnv(tenantId: string, workflowId?: string, st?: RunState) {
   const llm = async (): Promise<Llm> => {
     if (real) return real;
     const client = await aiClient(accountId, { tenantId, purpose: workflowId ? undefined : 'Preview' });
-    return (real = createLlm('', sf, spendGuard(accountId), client, await dbResultCache(accountId), { masker, limits, counters }));
+    return (real = createLlm('', sf, spendGuard(accountId), client, await dbResultCache(accountId), { masker, limits, counters,
+      // Notes on records, written by AI steps (not in previews: nothing is saved there).
+      exec: (name, input) => {
+        if (name !== 'remember_about_record') return undefined;
+        const i = (input ?? {}) as Record<string, unknown>;
+        if (runCtx.dryRun) return Promise.resolve('Noted (preview: not saved).');
+        return addRecordNote(tenantId, String(i.record_id ?? ''), String(i.note ?? ''), runCtx.author, runCtx.runId).then(() => 'Noted on the record.');
+      } }));
   };
   const lazy: Llm = {
     agent: async (o) => (await llm()).agent(o),
@@ -75,7 +86,7 @@ async function makeEnv(tenantId: string, workflowId?: string, st?: RunState) {
   const allGuards = userGuard || guard
     ? async (ctx: Parameters<NonNullable<typeof guard>>[0]) => { await userGuard?.(ctx); await guard?.(ctx); }
     : undefined;
-  return { sf, llm: lazy, guard: allGuards, unmask, ...(workflowId ? { examples: examplesFor(workflowId) } : {}) };
+  return { sf, llm: lazy, guard: allGuards, unmask, memory, runCtx, ...(workflowId ? { examples: examplesFor(workflowId) } : {}) };
 }
 
 /**
@@ -121,6 +132,7 @@ async function drive(runId: string, tenantId: string, graph: Workflow, st: RunSt
     const base = await makeEnv(tenantId, workflowId, st);
     // Everything this run changes in Salesforce is logged, so it can be undone.
     base.sf.journal = journalFor({ tenantId, runId, workflowId });
+    base.runCtx.runId = runId;
     const env = {
       ...base,
       run: { tenantId, runId, workflowId },
@@ -362,6 +374,7 @@ export async function previewWorkflow(tenantId: string, workflowId: string, limi
       : await env.sf.query(`SELECT ${cols} FROM ${object} ORDER BY LastModifiedDate DESC LIMIT ${Math.min(Math.max(limit, 1), 20)}`);
 
   const preview = { ...env, dryRun: true };
+  env.runCtx.dryRun = true;
   const out: PreviewRow[] = [];
   let total = emptyUsage();
   const queue = [...(recent.records as Record<string, string>[])];

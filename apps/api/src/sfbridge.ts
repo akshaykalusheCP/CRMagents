@@ -1,3 +1,5 @@
+import { ensureConversation, getConversation, listConversations } from './memory/conversations.js';
+import { recordNotes } from './memory/store.js';
 import { recordChanges, undoChanges } from './trust/undo.js';
 import { audit } from './trust/audit.js';
 import { ensureRemoteSite } from './salesforce/setup.js';
@@ -220,6 +222,8 @@ export function registerSfBridge(app: FastifyInstance) {
     /** Salesforce runs the assistant's Salesforce tools as the person asking (package 0.7+). */
     inOrg: z.boolean().optional(),
     userEmail: z.string().max(200).optional(),
+    /** Continue this saved conversation (package 0.10+). */
+    conversationId: z.string().uuid().nullish(),
   });
   const SYSTEM_FIELDS = /^(SystemModstamp|LastViewedDate|LastReferencedDate|IsDeleted|PhotoUrl|attributes)$/;
   app.post('/sf/v1/ask', { bodyLimit: 5_000_000 }, async (req) => {
@@ -248,19 +252,27 @@ FORMAT (mandatory, overrides any other style instruction): you are answering in 
 - If the user gives a record number (e.g. Case Number 00001066, with leading zeros), look that record up with soql_query before answering.` : ''}
 - When knowledge sections were used, end bullets with their number like [1] and add a last line "Sources: <document titles>".`;
     const spec = { id: rows[0].id, systemPrompt: system, tools: rows[0].tools };
+    // A person asking: the chat is saved (per person and record) and the assistant has memory.
+    const email = b.userEmail?.toLowerCase();
+    let conversationId: string | null = null;
+    if (email) {
+      const { rows: acc } = await pool.query('select account_id from tenants where id=$1', [tenantId]);
+      conversationId = await ensureConversation({ accountId: acc[0].account_id, tenantId, agentId: rows[0].id, userKey: email, channel: 'salesforce', recordId: b.recordId }, b.conversationId, b.question);
+    }
+    const memory = email ? { userKey: email, canWriteTeam: false, channel: 'salesforce' as const, conversationId, recordId: b.recordId } : undefined;
     if (b.async) {
       // Answer in the background; the panel checks GET /sf/v1/ask/:id (short calls, nothing held open in Salesforce).
       const runId = await new Promise<string>((resolve, reject) => {
-        runAgent(tenantId, spec, b.question, context, b.history, { onStarted: resolve, inOrg: b.inOrg, startedBy: b.userEmail?.toLowerCase() }).catch(reject);
+        runAgent(tenantId, spec, b.question, context, b.history, { onStarted: resolve, inOrg: b.inOrg, startedBy: email, memory }).catch(reject);
       });
-      return { runId, status: 'running' };
+      return { runId, status: 'running', conversationId };
     }
-    const r = await runAgent(tenantId, spec, b.question, context, b.history);
-    return { answer: r.output, runId: r.runId };
+    const r = await runAgent(tenantId, spec, b.question, context, b.history, { startedBy: email, memory });
+    return { answer: r.output, runId: r.runId, conversationId, remembered: r.remembered };
   });
 
   app.get('/sf/v1/ask/:id', async (req) => {
-    const { rows } = await pool.query('select status, output from runs where id=$1 and tenant_id=$2', [(req.params as { id: string }).id, req.sfTenant!.tenantId]);
+    const { rows } = await pool.query('select status, output, trace from runs where id=$1 and tenant_id=$2', [(req.params as { id: string }).id, req.sfTenant!.tenantId]);
     if (!rows[0]) throw Object.assign(new Error('Question not found'), { statusCode: 404 });
     const status = rows[0].status === 'done' ? 'done' : rows[0].status === 'error' ? 'error' : 'running';
     // Tool calls for Salesforce to run as the person asking.
@@ -268,7 +280,21 @@ FORMAT (mandatory, overrides any other style instruction): you are answering in 
       const calls = takeCalls((req.params as { id: string }).id);
       if (calls.length) return { status: 'tool', calls };
     }
-    return { status, ...(status === 'done' ? { answer: rows[0].output } : status === 'error' ? { error: rows[0].output } : {}) };
+    // What the assistant saved to memory during this answer (shown under it).
+    const remembered = ((rows[0].trace ?? []) as { tool: string; ok: boolean; input: Record<string, unknown> }[])
+      .filter((t) => t.ok && (t.tool === 'remember' || t.tool === 'remember_about_record'))
+      .map((t) => ({ kind: t.tool === 'remember' ? 'personal' : 'record', text: String(t.input?.text ?? t.input?.note ?? '') }));
+    return { status, ...(status === 'done' ? { answer: rows[0].output, remembered } : status === 'error' ? { error: rows[0].output } : {}) };
+  });
+
+  // The person's last conversation on this record, to pick up where they left off.
+  app.get('/sf/v1/conversations', async (req) => {
+    const q = z.object({ recordId: z.string().regex(/^[a-zA-Z0-9]{15,18}$/).optional(), userEmail: z.string().max(200), assistantId: z.string().uuid().optional() }).parse(req.query);
+    const tenantId = req.sfTenant!.tenantId;
+    const list = await listConversations(tenantId, q.userEmail, { recordId: q.recordId, agentId: q.assistantId, limit: 10 });
+    const latest = list[0] ? await getConversation(tenantId, q.userEmail, list[0].id) : null;
+    const notes = q.recordId ? await recordNotes(tenantId, q.recordId) : [];
+    return { conversations: list, latest, notes };
   });
 
   // Suggestions agents saved on a record, for the Suggestions card on its page.

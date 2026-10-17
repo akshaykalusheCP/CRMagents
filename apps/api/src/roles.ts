@@ -13,7 +13,7 @@ const ADMIN: RegExp[] = [
 ];
 
 const APPROVER: RegExp[] = [
-  /^\/api\/auth\//, /^\/api\/me\//, /^\/api\/alerts(\/|$)/, /^\/api\/knowledge\/search$/,
+  /^\/api\/auth\//, /^\/api\/me\//, /^\/api\/alerts(\/|$)/, /^\/api\/memories(\/[^/]+)?$/, /^T\/conversations\/[^/]+$/, /^\/api\/knowledge\/search$/,
   /^T\/runs\/[^/]+\/decision$/, /^T\/record-suggestions\/[^/]+$/, /^T\/suggestions\/[^/]+\/dismiss$/,
   /^T\/insights\/(ask|summary)$/, /^T\/dashboards\/(run|drill)$/,
   /^T\/agents\/[^/]+\/run$/, /^T\/workflows\/[^/]+\/feedback$/,

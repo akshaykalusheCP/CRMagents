@@ -36,6 +36,8 @@ import { publicChatInfo, registerPublicChat, setPublicChat } from './agent/publi
 import { addToRecordPage, addToUtilityBar, listPages } from './salesforce/pages.js';
 import { impact, setAssumptions } from './insights/impact.js';
 import { config } from './config.js';
+import { addMemory, deleteMemory, deleteRecordNote, listMemories, listRecordNotes, memoryOn, updateMemory } from './memory/store.js';
+import { deleteConversation, getConversation, listConversations } from './memory/conversations.js';
 import { audit, deleteWorkspace, exportWorkspace, listAudit, registerAudit, trustFacts } from './trust/audit.js';
 import { getAiCall, listAiCalls } from './trust/aiLog.js';
 import { roleAtLeast } from '@crmagents/shared';
@@ -164,6 +166,7 @@ const settingsBody = z.object({
   aiFastModel: z.string().max(100).regex(/^[\w.:/-]*$/, 'Model name').optional(),
   aiPriceIn: z.string().regex(/^(\d+(\.\d+)?)?$/, 'USD per million tokens').optional(),
   alertEmails: z.enum(['on', 'off', '']).optional(),
+  memoryEnabled: z.enum(['on', 'off', '']).optional(),
   twilioSid: z.string().regex(/^(AC[0-9a-fA-F]{32})?$/, 'Twilio Account SID starts with AC').optional(),
   twilioToken: z.string().max(100).optional(),
   twilioSms: z.string().regex(/^(\+\d{7,15})?$/, 'SMS number in international format, like +14155550100').optional(),
@@ -760,7 +763,7 @@ app.post('/api/tenants/:tenantId/undo', async (req) => {
   return undoChanges(tenantId, await SalesforceClient.forTenant(tenantId), ids, req.user!.email);
 });
 
-const runBody = z.object({ input: z.string().min(1), context: z.unknown().optional(), history: z.array(z.object({ role: z.enum(['user', 'assistant']), text: z.string().max(20000) })).max(40).optional() });
+const runBody = z.object({ input: z.string().min(1), context: z.unknown().optional(), history: z.array(z.object({ role: z.enum(['user', 'assistant']), text: z.string().max(20000) })).max(40).optional(), conversationId: z.string().uuid().nullish() });
 
 app.post('/api/tenants/:tenantId/agents/:agentId/run', async (req, reply) => {
   const { tenantId, agentId } = req.params as { tenantId: string; agentId: string };
@@ -776,7 +779,53 @@ app.post('/api/tenants/:tenantId/agents/:agentId/run', async (req, reply) => {
     b.input,
     b.context,
     b.history,
+    { startedBy: req.user!.email, memory: { userKey: req.user!.email, canWriteTeam: roleAtLeast(req.user!.role, 'builder'), channel: 'app', conversationId: b.conversationId } },
   );
+});
+
+// ---- Saved conversations (yours only) ----
+app.get('/api/tenants/:tenantId/conversations', async (req) => {
+  const { tenantId } = req.params as { tenantId: string };
+  const q = z.object({ agentId: z.string().uuid().optional() }).parse(req.query);
+  return listConversations(tenantId, req.user!.email, { agentId: q.agentId });
+});
+app.get('/api/tenants/:tenantId/conversations/:id', async (req) => {
+  const { tenantId, id } = req.params as { tenantId: string; id: string };
+  return getConversation(tenantId, req.user!.email, id);
+});
+app.delete('/api/tenants/:tenantId/conversations/:id', async (req) => {
+  const { tenantId, id } = req.params as { tenantId: string; id: string };
+  await deleteConversation(tenantId, req.user!.email, id);
+  return { ok: true };
+});
+
+// ---- Memory: personal (yours), team (builders and admins change it), notes on records ----
+const memBody = z.object({ text: z.string().max(1000), scope: z.enum(['personal', 'team']).default('personal') });
+app.get('/api/memories', async (req) => {
+  const u = req.user!;
+  return { on: await memoryOn(u.accountId), canTeam: roleAtLeast(u.role, 'builder'), memories: await listMemories(u.accountId, u.email), notes: await listRecordNotes(u.accountId) };
+});
+app.post('/api/memories', async (req, reply) => {
+  const u = req.user!;
+  const b = memBody.parse(req.body);
+  if (b.scope === 'team' && !roleAtLeast(u.role, 'builder')) return reply.code(403).send({ error: 'Team memories are kept by builders and admins.' });
+  const r = await addMemory(u.accountId, { scope: b.scope, owner: u.email, text: b.text, source: 'user', createdBy: u.email });
+  return r;
+});
+app.put('/api/memories/:id', async (req) => {
+  const u = req.user!;
+  const b = memBody.parse(req.body);
+  await updateMemory(u.accountId, (req.params as { id: string }).id, u.email, b.text, roleAtLeast(u.role, 'builder'));
+  return { ok: true };
+});
+app.delete('/api/memories/:id', async (req) => {
+  const u = req.user!;
+  await deleteMemory(u.accountId, (req.params as { id: string }).id, u.email, roleAtLeast(u.role, 'builder'));
+  return { ok: true };
+});
+app.delete('/api/memories/notes/:id', async (req) => {
+  await deleteRecordNote(req.user!.accountId, Number((req.params as { id: string }).id));
+  return { ok: true };
 });
 
 // ---- Workflows ----

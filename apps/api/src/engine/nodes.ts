@@ -32,6 +32,8 @@ export interface Env {
   examples?: (nodeId: string, text: string) => Promise<Example[]>;
   /** Inside a loop: writes collected here and sent together when the loop ends (sObject Collections). */
   writes?: WriteBuffer;
+  /** Team memory and the notes agents kept on a record, for AI steps (empty when memory is off). */
+  memory?: (question: string, recordId?: string) => Promise<string>;
   /** The run this step belongs to (absent in previews). */
   run?: { tenantId: string; runId: string; workflowId?: string };
 }
@@ -87,10 +89,15 @@ export const EXECUTORS: Record<string, Executor> = {
   async 'ai.agent'(node, scope, env) {
     const prompt = render(node.config.prompt, scope);
     if (!prompt.trim()) throw new Error('Task is empty');
+    // Memory: the team's definitions and what agents noted on this record before; and it may leave a note for next time.
+    const recordId = String(scope.trigger?.recordId ?? '');
+    const remembered = (await env.memory?.(prompt, recordId || undefined)) ?? '';
+    const baseTools = Array.isArray(node.config.tools) ? node.config.tools : [];
     const r = await env.llm.agent({
-      system: render(node.config.instructions, scope) || 'You are a helpful Salesforce assistant.',
+      system: [render(node.config.instructions, scope) || 'You are a helpful Salesforce assistant.', remembered,
+        remembered && recordId ? 'If you learn a lasting fact about this record that will matter next time, call remember_about_record. Never personal data.' : ''].filter(Boolean).join('\n\n'),
       prompt,
-      tools: Array.isArray(node.config.tools) ? node.config.tools : [],
+      tools: remembered && recordId ? [...new Set([...baseTools, 'remember_about_record'])] : baseTools,
       ...aiOptions(node),
     });
     return { output: { text: r.text }, usage: r.usage, trace: r.trace, reused: r.reused };

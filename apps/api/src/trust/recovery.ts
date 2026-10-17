@@ -73,7 +73,9 @@ export async function purgeOldRuns(): Promise<number> {
     const v = await getSetting(account, 'retentionDays');
     const days = v && /^\d+$/.test(v) ? Number(v) : 30;
     if (days === 0) continue; // 0 keeps everything
-    // What was sent to the AI goes after the same period as the run details.
+    // What was sent to the AI, and saved chats, go after the same period as the run details.
+    await pool.query("delete from conversation_messages m using conversations c where c.id = m.conversation_id and c.account_id=$1 and m.created_at < now() - ($2 || ' days')::interval", [account, String(days)]).catch(() => undefined);
+    await pool.query('delete from conversations c where c.account_id=$1 and not exists (select 1 from conversation_messages m where m.conversation_id = c.id) and c.updated_at < now() - interval \'1 day\'', [account]).catch(() => undefined);
     await pool.query("delete from ai_calls where account_id=$1 and created_at < now() - ($2 || ' days')::interval", [account, String(days)]).catch(() => undefined);
     const res = await pool.query(
       `update runs set input = null, state = null, trace = '[]',
