@@ -6,6 +6,8 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   });
   const j = await res.json().catch(() => ({}));
   if (res.status === 401 && !path.startsWith('/api/auth/')) window.dispatchEvent(new Event('crmagents:unauthorized'));
+  // Something the plan doesn't include: actions open the upgrade prompt (pages show their own locked state).
+  if (res.status === 402 && method !== 'GET') window.dispatchEvent(new CustomEvent('crmagents:upgrade', { detail: { message: j.error, plan: j.plan } }));
   if (!res.ok) throw new Error(j.error ?? `Request failed (${res.status})`);
   return j as T;
 }
@@ -129,7 +131,14 @@ export interface Settings {
   twilioSid?: string; twilioToken?: { set: boolean }; twilioSms?: string; twilioWhatsapp?: string;
 }
 
-export interface Me { id: string; email: string; accountName: string; role: string }
+export interface Me { id: string; email: string; accountName: string; role: string; platformAdmin?: boolean }
+export type PlanId = 'basic' | 'plus' | 'pro' | 'promax';
+export interface PlanSummary {
+  plan: PlanId; name: string; trialEndsAt: string | null; trialEnded: boolean; requestedPlan: PlanId | null; features: string[];
+  limits: { orgs: number | null; users: number | null; liveAgents: number | null; assistants: number | null };
+  usage: { orgs: number; users: number; liveAgents: number; assistants: number };
+}
+export interface PlatformAccount { id: string; name: string; plan: PlanId; trialEndsAt: string | null; requestedPlan: PlanId | null; planSetBy: string | null; createdAt: string; orgs: number; users: number; owner: string | null }
 export interface TeamUser { id: string; email: string; role: string; createdAt: string; lastLoginAt: string | null }
 export interface TeamInvite { id: string; email: string; role: string; invitedBy: string | null; expiresAt: string; createdAt: string }
 export interface RecordChange {
@@ -180,13 +189,17 @@ export const api = {
   startOAuth: (b: { sandbox?: boolean; domain?: string; clientId?: string; clientSecret?: string }) => req<{ url: string }>('POST', '/api/oauth/start', b),
   me: () => req<Me>('GET', '/api/auth/me'),
   login: (email: string, password: string) => req('POST', '/api/auth/login', { email, password }),
-  signup: (b: { accountName: string; email: string; password: string }) => req('POST', '/api/auth/signup', b),
+  signup: (b: { accountName: string; email: string; password: string; plan?: string }) => req('POST', '/api/auth/signup', b),
   forgot: (email: string) => req('POST', '/api/auth/forgot', { email }),
   resetPassword: (token: string, password: string) => req('POST', '/api/auth/reset', { token, password }),
   invite: (token: string) => req<{ email: string; role: string; invitedBy: string | null; accountName: string }>('GET', `/api/auth/invite/${encodeURIComponent(token)}`),
   acceptInvite: (token: string, password: string) => req('POST', '/api/auth/accept', { token, password }),
   changePassword: (current: string, password: string) => req('POST', '/api/auth/password', { current, password }),
   team: () => req<Team>('GET', '/api/team'),
+  plan: () => req<PlanSummary>('GET', '/api/plan'),
+  requestUpgrade: (plan: PlanId, note?: string) => req('POST', '/api/plan/request', { plan, note }),
+  platformAccounts: () => req<PlatformAccount[]>('GET', '/api/platform/accounts'),
+  setAccountPlan: (id: string, plan: PlanId, trialDays?: number) => req('PUT', `/api/platform/accounts/${id}/plan`, { plan, trialDays }),
   conversations: (t: string, agentId?: string) => req<Conversation[]>('GET', `/api/tenants/${t}/conversations${agentId ? `?agentId=${agentId}` : ''}`),
   conversation: (t: string, id: string) => req<Conversation & { messages: { role: 'user' | 'assistant'; text: string; createdAt: string }[] }>('GET', `/api/tenants/${t}/conversations/${id}`),
   deleteConversation: (t: string, id: string) => req('DELETE', `/api/tenants/${t}/conversations/${id}`),

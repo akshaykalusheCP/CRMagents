@@ -1,3 +1,7 @@
+import { endTrials } from '../plans.js';
+import { raiseAlert } from '../alerts.js';
+import { graphFeatures } from '@crmagents/shared';
+import { requireFeatureForTenant, requireRoomForTenant } from '../plans.js';
 import { purgeLimits } from '../ratelimit.js';
 import { tzOffset } from '../tz.js';
 export { tzOffset };
@@ -320,6 +324,8 @@ async function tick() {
         lastPurge = Date.now();
         await purgeOldRuns().catch(() => undefined);
         await purgeLimits().catch(() => undefined);
+        await endTrials((accountId) => raiseAlert({ accountId, kind: 'trial', title: 'Your free trial has ended',
+          body: 'Your live agents and website chat are paused; nothing has been deleted. Choose a plan in Settings → Plan to turn them back on.' })).catch(() => undefined);
         // Knowledge articles and Files libraries from Salesforce: refreshed once a day.
         await syncDue().catch(() => undefined);
       }
@@ -368,9 +374,13 @@ export async function setRealtime(tenantId: string, workflowId: string, on: bool
 
 /** Turn a workflow's server-side trigger on (from now, no backfill) or off. */
 export async function setLive(tenantId: string, workflowId: string, on: boolean) {
-  const { rows } = await pool.query('select graph from workflows where id=$1 and tenant_id=$2', [workflowId, tenantId]);
+  const { rows } = await pool.query('select graph, live from workflows where id=$1 and tenant_id=$2', [workflowId, tenantId]);
   if (!rows[0]) throw Object.assign(new Error('workflow not found'), { statusCode: 404 });
   const graph = rows[0].graph as Workflow;
+  if (on) {
+    for (const f of graphFeatures(graph)) await requireFeatureForTenant(tenantId, f);
+    if (!rows[0].live) await requireRoomForTenant(tenantId, 'liveAgents');
+  }
   const reset = "live=true, live_since=now(), watch_cursor=now(), watch_seen='[]', watch_state='{}', watch_error=null, paused_reason=null, poll_idle=0, poll_next_at=null";
   if (on) {
     if (graph.nodes.some((n) => n.type === 'trigger.schedule')) {

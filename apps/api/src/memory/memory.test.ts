@@ -23,7 +23,7 @@ test('memory: all memories when few, the closest when many', () => {
 });
 
 test('memory: personal stays with its owner, team is shared, duplicates are one; notes and chats are kept', async () => {
-  const { rows: acc } = await pool.query("insert into accounts (name) values ('memory-test') returning id");
+  const { rows: acc } = await pool.query("insert into accounts (name, plan) values ('memory-test', 'promax') returning id");
   const a = acc[0].id;
   const { rows: t } = await pool.query("insert into tenants (sf_org_id, sf_instance_url, refresh_token_enc, account_id) values ('00DMEMTEST00001','https://x.invalid','x',$1) returning id", [a]);
   const tenant = t[0].id;

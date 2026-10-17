@@ -1,3 +1,4 @@
+import { hasFeature, requireActive } from '../plans.js';
 import { aiClient } from './provider.js';
 import { pool } from '../db.js';
 import { SalesforceClient } from '../salesforce/client.js';
@@ -37,6 +38,10 @@ export async function runAgent(
 ) {
   const accountId = await accountOf(tenantId);
   checkRunRate(accountId);
+  await requireActive(accountId);
+  const meetings = await hasFeature(accountId, 'meetings');
+  const knowledge = await hasFeature(accountId, 'knowledge');
+  if (!meetings) agent = { ...agent, tools: agent.tools.filter((t) => !['find_meeting_times', 'book_meeting', 'meeting_times', 'book_meeting_slot'].includes(t)) };
   const client = await aiClient(accountId, { tenantId });
   const sf = await SalesforceClient.forTenant(tenantId);
   const { masker, limits } = await runTrust(accountId);
@@ -96,7 +101,7 @@ export async function runAgent(
       system: systemPrompt,
       prompt: context ? `${userInput}\n\nContext:\n${JSON.stringify(context)}` : userInput,
       // Once guides are uploaded, every assistant can look things up in them (read-only, no AI cost).
-      tools: !tools.includes('search_knowledge') && (await hasKnowledge(accountId)) ? [...tools, 'search_knowledge'] : tools,
+      tools: knowledge && !tools.includes('search_knowledge') && (await hasKnowledge(accountId)) ? [...tools, 'search_knowledge'] : knowledge ? tools : tools.filter((t) => t !== 'search_knowledge'),
       history,
     }));
     await pool.query(

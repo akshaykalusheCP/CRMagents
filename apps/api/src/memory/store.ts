@@ -1,3 +1,4 @@
+import { hasFeature } from '../plans.js';
 import { pool } from '../db.js';
 import { getSetting } from '../settings.js';
 import { Masker } from '../trust/mask.js';
@@ -14,7 +15,7 @@ export const MAX_NOTE = 400;
 const MAX_IN_PROMPT = 15;
 
 export async function memoryOn(accountId: string) {
-  return (await getSetting(accountId, 'memoryEnabled')) !== 'off';
+  return (await getSetting(accountId, 'memoryEnabled')) !== 'off' && (await hasFeature(accountId, 'memory'));
 }
 
 /** Why a memory can't be saved (personal data, too long, empty), or null. Pure; tested. */

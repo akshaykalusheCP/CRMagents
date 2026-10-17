@@ -1,3 +1,4 @@
+import { requireRoom } from '../plans.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { config } from '../config.js';
 import { encrypt } from '../crypto.js';
@@ -78,6 +79,8 @@ export async function handleCallback(code: string, state: string): Promise<strin
   const idRes = await fetch(tok.id, { headers: { Authorization: `Bearer ${tok.access_token}` } });
   const ident = idRes.ok ? ((await idRes.json()) as { username?: string }) : {};
 
+  const { rows: known } = await pool.query('select 1 from tenants where account_id=$1 and sf_org_id=$2', [ctx.accountId, orgId]);
+  if (!known.length) await requireRoom(ctx.accountId, 'orgs');
   const { rows } = await pool.query(
     `insert into tenants (account_id, sf_org_id, sf_instance_url, sf_username, refresh_token_enc, sf_client_id, sf_client_secret_enc, sf_user_id)
      values ($1,$2,$3,$4,$5,$6,$7,$8)

@@ -13,6 +13,8 @@ import { MemoryPage } from './pages/Memory';
 import { Ribbon, type RibbonPalette } from './components/Ribbon';
 import { SettingsHub, type SettingsSection } from './pages/SettingsHub';
 import { AlertsBell } from './components/AlertsBell';
+import { LockedPage, PlanProvider, PlanTag, TrialBanner, UpgradePrompt, usePlanState } from './components/Plan';
+import type { Feature } from '@crmagents/shared';
 import { LogoMark } from './components/Logo';
 import { AuthPage } from './pages/Auth';
 import { RunsPage } from './pages/Runs';
@@ -40,7 +42,7 @@ const NAV: { group?: string; items: { key: Tab; label: string; icon: ReactNode }
   ] },
 ];
 // Top navigation: five entries, two of them small menus (Stripe-style), so the bar stays calm.
-type TopEntry = { key: Tab; label: string } | { label: string; items: { key: Tab; label: string; desc: string }[] };
+type TopEntry = { key: Tab; label: string } | { label: string; items: { key: Tab; label: string; desc: string; feature?: Feature }[] };
 const TOP_NAV: TopEntry[] = [
   { key: 'home', label: 'Home' },
   { key: 'discover', label: 'Discover' },
@@ -51,9 +53,9 @@ const TOP_NAV: TopEntry[] = [
   ] },
   { key: 'approvals', label: 'Approvals' },
   { label: 'Analytics', items: [
-    { key: 'insights', label: 'Insights', desc: 'Your business at a glance' },
-    { key: 'dashboards', label: 'Dashboards', desc: 'Built from a sentence' },
-    { key: 'impact', label: 'Impact', desc: 'Time and money your agents saved' },
+    { key: 'insights', label: 'Insights', desc: 'Your business at a glance', feature: 'insights' },
+    { key: 'dashboards', label: 'Dashboards', desc: 'Built from a sentence', feature: 'insights' },
+    { key: 'impact', label: 'Impact', desc: 'Time and money your agents saved', feature: 'impact' },
   ] },
 ];
 
@@ -87,6 +89,8 @@ export function App() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [tenantId, setTenantId] = useState<string>(() => { try { return localStorage.getItem('tenantId') ?? ''; } catch { return ''; } });
   const [theme, toggleTheme] = useTheme();
+  const planState = usePlanState(!!me);
+  const { has } = planState;
   // Pages stay mounted once visited: switching back is instant (no reload flash) and keeps scroll position.
   // A page left alone for a couple of minutes reloads on return, so its numbers are fresh.
   const mainRef = useRef<HTMLElement>(null);
@@ -113,6 +117,7 @@ export function App() {
   const [cmdk, setCmdk] = useState(false);
   const [settingsAt, setSettingsAt] = useState<{ section: SettingsSection; connect?: boolean; n: number }>({ section: 'orgs', n: 0 });
   const openSettings = (section: SettingsSection = 'orgs', connect = false) => { setSettingsAt((s) => ({ section, connect, n: s.n + 1 })); setTab('settings'); };
+  const planValue = { ...planState, openPlans: () => openSettings('plan') };
   // An alert opens where it can be fixed: the org list for a disconnected org, else the agent's org and the Agents page.
   const openAlert = (a: Alert) => {
     if (a.tenantId && a.tenantId !== tenantId) setTenantId(a.tenantId);
@@ -185,6 +190,7 @@ export function App() {
 
   if (layout === 'top') {
     return (
+      <PlanProvider value={planValue}>
       <div className="app app-top">
         <header className="tnav">
           <div className="tnav-inner">
@@ -208,7 +214,7 @@ export function App() {
                 }}>
                   {(close) => it.items.map((x) => (
                     <button key={x.key} className={'mi nav-mi' + (tab === x.key ? ' on' : '')} onClick={() => { close(); setTab(x.key); }}>
-                      <span><b>{x.label}</b><small>{x.desc}</small></span>
+                      <span><b>{x.label}{x.feature && <PlanTag feature={x.feature} />}</b><small>{x.desc}</small></span>
                     </button>
                   ))}
                 </Menu>
@@ -262,16 +268,17 @@ export function App() {
             </div>
           </div>
         </header>
+        <TrialBanner />
         <main ref={mainRef} onScroll={onMainScroll} className={'stripe-main' + (tab === 'agents' ? ' full' : '')}>
           {/* Silk ribbon behind the top of every page, like stripe.com's hero. */}
           <Ribbon className="app-ribbon" strands={260} angle={0.6} width={0.3} palette={RIBBON[tab] ?? 'sunset'} />
           {pane('home', <HomePage me={me} tenant={tenant} go={setTab} newAgent={newAgent} />)}
-          {pane('impact', <ImpactPage tenant={tenant} />)}
+          {pane('impact', has('impact') ? <ImpactPage tenant={tenant} /> : <LockedPage feature="impact" title="Impact" />)}
           {pane('discover', <DiscoverPage tenant={tenant} openAgents={() => setTab('agents')} />)}
           {pane('trust', <TrustPage me={me} />)}
           {pane('memory', <MemoryPage me={me} tenants={tenants} />)}
-          {pane('insights', <InsightsPage key="ins" fixedView="overview" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
-          {pane('dashboards', <InsightsPage key="dash" fixedView="dashboards" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
+          {pane('insights', !has('insights') ? <LockedPage feature="insights" title="Insights" /> : <InsightsPage key="ins" fixedView="overview" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
+          {pane('dashboards', !has('insights') ? <LockedPage feature="insights" title="Dashboards" /> : <InsightsPage key="dash" fixedView="dashboards" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
           {pane('agents', <WorkflowsPage tenant={tenant} goConnections={() => setTab('settings')} incoming={incoming} onIncomingOpened={() => setIncoming(null)} prefill={prefill} onPrefillUsed={() => setPrefill(null)} />)}
           {pane('approvals', <ApprovalsPage tenant={tenant} onChange={refreshWaiting} me={me.email} />)}
           {pane('knowledge', <KnowledgePage tenant={tenant} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
@@ -279,12 +286,15 @@ export function App() {
           {pane('settings', <SettingsHub key={settingsAt.n} section={settingsAt.section} focusConnect={settingsAt.connect} tenants={tenants} tenant={tenant} onChange={reload} me={me} />)}
         </main>
         <CommandPalette open={cmdk} onClose={() => setCmdk(false)} commands={commands} />
+        <UpgradePrompt me={me} />
         <Toaster />
       </div>
+      </PlanProvider>
     );
   }
 
   return (
+    <PlanProvider value={planValue}>
     <div className="app">
       <aside className="side" aria-label="Main">
         <Menu className="ws-menu" trigger={() => (
@@ -356,15 +366,15 @@ export function App() {
             <button className="ghost icon" onClick={toggleTheme} title={theme === 'dark' ? 'Light mode' : 'Dark mode'}>{theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}</button>
           </div>
         </header>
-
+        <TrialBanner />
         <main ref={mainRef} onScroll={onMainScroll} className={tab === 'agents' ? 'full' : ''}>
           {pane('home', <HomePage me={me} tenant={tenant} go={setTab} newAgent={newAgent} />)}
-          {pane('impact', <ImpactPage tenant={tenant} />)}
+          {pane('impact', has('impact') ? <ImpactPage tenant={tenant} /> : <LockedPage feature="impact" title="Impact" />)}
           {pane('discover', <DiscoverPage tenant={tenant} openAgents={() => setTab('agents')} />)}
           {pane('trust', <TrustPage me={me} />)}
           {pane('memory', <MemoryPage me={me} tenants={tenants} />)}
-          {pane('insights', <InsightsPage key="ins" fixedView="overview" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
-          {pane('dashboards', <InsightsPage key="dash" fixedView="dashboards" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
+          {pane('insights', !has('insights') ? <LockedPage feature="insights" title="Insights" /> : <InsightsPage key="ins" fixedView="overview" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
+          {pane('dashboards', !has('insights') ? <LockedPage feature="insights" title="Dashboards" /> : <InsightsPage key="dash" fixedView="dashboards" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
           {pane('agents', <WorkflowsPage tenant={tenant} goConnections={() => setTab('settings')} incoming={incoming} onIncomingOpened={() => setIncoming(null)} prefill={prefill} onPrefillUsed={() => setPrefill(null)} />)}
           {pane('approvals', <ApprovalsPage tenant={tenant} onChange={refreshWaiting} me={me.email} />)}
           {pane('knowledge', <KnowledgePage tenant={tenant} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
@@ -373,7 +383,9 @@ export function App() {
         </main>
       </div>
       <CommandPalette open={cmdk} onClose={() => setCmdk(false)} commands={commands} />
+      <UpgradePrompt me={me} />
       <Toaster />
     </div>
+    </PlanProvider>
   );
 }

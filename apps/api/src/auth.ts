@@ -1,3 +1,4 @@
+import { accountPlan, isPlatformAdmin, limitReached, trialEnd } from './plans.js';
 import { createHash, randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -8,6 +9,7 @@ import { pool } from './db.js';
 import { sendMail } from './mailer.js';
 import { clearLimit, overLimit } from './ratelimit.js';
 import { requiredRole } from './roles.js';
+import { requiredFeature, requireFeature, type PlanError } from './plans.js';
 import { audit } from './trust/audit.js';
 import { createResetToken, resetEmail, resetLink } from './team.js';
 
@@ -70,14 +72,15 @@ const isPublic = (path: string) => PUBLIC.has(path) || path.startsWith('/api/aut
 export function registerAuth(app: FastifyInstance) {
   app.post('/api/auth/signup', async (req, reply) => {
     if (await overLimit(`signup|${req.ip}`, 10, 3600)) return reply.code(429).send({ error: 'Too many sign-ups from this address. Try again later.' });
-    const b = credentials.extend({ accountName: z.string().trim().min(1, 'Company name is required').max(100) }).parse(req.body);
+    const b = credentials.extend({ accountName: z.string().trim().min(1, 'Company name is required').max(100), plan: z.enum(['basic', 'plus', 'pro']).optional() }).parse(req.body);
     const email = b.email.trim().toLowerCase();
     const client = await pool.connect();
     try {
       await client.query('begin');
       const exists = await client.query('select 1 from users where lower(email)=$1', [email]);
       if (exists.rowCount) { await client.query('rollback'); return reply.code(409).send({ error: 'An account with this email already exists' }); }
-      const acc = await client.query('insert into accounts (name) values ($1) returning id', [b.accountName]);
+      const acc = await client.query("insert into accounts (name, plan, trial_ends_at, requested_plan, plan_set_by, plan_updated_at) values ($1, 'basic', $2, $3, 'sign-up trial', now()) returning id",
+        [b.accountName, trialEnd(), b.plan && b.plan !== 'basic' ? b.plan : null]);
       const u = await client.query(
         "insert into users (account_id, email, password_hash, role) values ($1,$2,$3,'owner') returning id",
         [acc.rows[0].id, email, await hashPassword(b.password)],
@@ -150,6 +153,10 @@ export function registerAuth(app: FastifyInstance) {
       if (!rows[0]) { await client.query('rollback'); return reply.code(400).send({ error: 'This invitation has expired or was already used. Ask for a new one.' }); }
       const exists = await client.query('select 1 from users where lower(email)=$1', [rows[0].email]);
       if (exists.rowCount) { await client.query('rollback'); return reply.code(409).send({ error: 'This email already has a CRMagents login. Sign in instead.' }); }
+      // The plan's people limit (people already in; this invitation was counted when it was sent).
+      const p = await accountPlan(rows[0].account_id);
+      const { rows: n } = await client.query('select count(*)::int n from users where account_id=$1', [rows[0].account_id]);
+      if (p.trialEnded || limitReached(p.plan, 'users', n[0].n)) { await client.query('rollback'); return reply.code(402).send({ error: 'This workspace has no room for another person on its plan. Ask its admin to upgrade.' }); }
       const u = await client.query('insert into users (account_id, email, password_hash, role) values ($1,$2,$3,$4) returning id',
         [rows[0].account_id, rows[0].email, await hashPassword(b.password), rows[0].role]);
       await client.query('commit');
@@ -182,7 +189,7 @@ export function registerAuth(app: FastifyInstance) {
   app.get('/api/auth/me', async (req, reply) => {
     const user = await loadUser(req);
     if (!user) return reply.code(401).send({ error: 'unauthorized' });
-    return user;
+    return { ...user, platformAdmin: isPlatformAdmin(user.email) };
   });
 
   // Everything else under /api requires a session, and tenant-scoped routes require the org to belong to the user's account.
@@ -195,6 +202,14 @@ export function registerAuth(app: FastifyInstance) {
     const need = requiredRole(req.method, req.url);
     if (!roleAtLeast(user.role, need)) {
       return reply.code(403).send({ error: need === 'admin' ? 'Only workspace admins can do this.' : 'Your role can review and approve, but not change agents. Ask an admin for the Builder role.' });
+    }
+    // The plan: pages and actions that belong to a higher plan answer 402 with what to upgrade to.
+    const feature = requiredFeature(req.method, req.url);
+    if (feature) {
+      try { await requireFeature(user.accountId, feature); } catch (e) {
+        const pe = e as PlanError;
+        return reply.code(402).send({ error: pe.message, plan: pe.detail });
+      }
     }
     const tenantId = (req.params as { tenantId?: string } | undefined)?.tenantId;
     if (tenantId) {

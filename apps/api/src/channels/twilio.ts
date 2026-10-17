@@ -1,3 +1,4 @@
+import { hasFeature } from '../plans.js';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { config } from '../config.js';
@@ -117,6 +118,7 @@ export function registerTwilio(app: FastifyInstance) {
       return reply.code(403).send();
     }
     reply.header('Content-Type', 'text/xml');
+    if (!(await hasFeature(a.account_id, 'textMessages'))) return EMPTY_TWIML;
     const fromRaw = String(params.From ?? ''), toRaw = String(params.To ?? ''), text = String(params.Body ?? '').trim();
     if (!a.sms_enabled || !fromRaw || !text) return EMPTY_TWIML;
     const channel: 'sms' | 'whatsapp' = fromRaw.startsWith('whatsapp:') ? 'whatsapp' : 'sms';

@@ -1,3 +1,5 @@
+import { graphFeatures } from '@crmagents/shared';
+import { requireActiveForTenant, requireFeatureForTenant } from '../plans.js';
 import { afterRunFailed } from '../alerts.js';
 import { journalFor } from '../trust/undo.js';
 import { checkCap } from './costplan.js';
@@ -242,6 +244,8 @@ async function createRun(tenantId: string, workflowId: string, trigger: TriggerP
   validateWorkflow(graph);
   if (!graph.nodes.some((n) => n.type.startsWith('trigger.'))) throw new Error('Add a trigger node first');
   await checkCap(tenantId, workflowId);
+  await requireActiveForTenant(tenantId);
+  for (const f of graphFeatures(graph)) await requireFeatureForTenant(tenantId, f);
   const { rows: r } = await pool.query(
     'insert into runs (tenant_id, workflow_id, input, status, started_by, heartbeat_at) values ($1,$2,$3,$4,$5,now()) returning id',
     [tenantId, workflowId, JSON.stringify(trigger), 'running', startedBy ?? null],

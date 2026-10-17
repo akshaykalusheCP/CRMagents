@@ -769,3 +769,52 @@ export const ROLES: { id: Exclude<Role, 'owner'>; label: string; help: string }[
 const RANK: Record<Role, number> = { approver: 1, builder: 2, admin: 3, owner: 4 };
 /** Does `role` include what `need` allows? */
 export const roleAtLeast = (role: string | undefined, need: Role) => (RANK[role as Role] ?? 0) >= RANK[need];
+
+// ---- Plans: what each plan includes. One definition for the server (enforcement), the app and the pricing page. ----
+export type PlanId = 'basic' | 'plus' | 'pro' | 'promax';
+export type Feature =
+  | 'panel'          // CRMagents package in Salesforce: record panel, utility bar, Flow actions, deploy as Flow
+  | 'knowledge'      // guides and Salesforce Knowledge sync
+  | 'emailReplies'   // read and reply to case emails
+  | 'insights'       // Insights and Dashboards
+  | 'tests'          // assistant test sets
+  | 'memory'         // assistant memory and record notes
+  | 'costCaps'       // monthly cost cap per agent
+  | 'websiteChat'    // website chat and self-service
+  | 'textMessages'   // SMS and WhatsApp
+  | 'meetings'       // meeting booking
+  | 'prove'          // Discover: build & prove, learn from your team
+  | 'xray'           // Automation X-ray
+  | 'impact'         // Impact and ROI
+  | 'trustLog';      // Trust center: AI call log, activity log, export
+export interface PlanLimits { orgs: number; users: number; liveAgents: number; assistants: number }
+export interface PlanDef { id: PlanId; name: string; limits: PlanLimits; features: Feature[] }
+const UNLIMITED = Number.POSITIVE_INFINITY;
+const PLUS_FEATURES: Feature[] = ['panel', 'knowledge', 'emailReplies', 'insights', 'tests', 'memory', 'costCaps'];
+const PRO_FEATURES: Feature[] = [...PLUS_FEATURES, 'websiteChat', 'textMessages', 'meetings', 'prove', 'xray', 'impact', 'trustLog'];
+export const PLAN_DEFS: Record<PlanId, PlanDef> = {
+  basic: { id: 'basic', name: 'Basic', limits: { orgs: 1, users: 3, liveAgents: 3, assistants: 2 }, features: [] },
+  plus: { id: 'plus', name: 'Plus', limits: { orgs: 2, users: 10, liveAgents: 15, assistants: UNLIMITED }, features: PLUS_FEATURES },
+  pro: { id: 'pro', name: 'Pro', limits: { orgs: 5, users: UNLIMITED, liveAgents: UNLIMITED, assistants: UNLIMITED }, features: PRO_FEATURES },
+  promax: { id: 'promax', name: 'Pro Max', limits: { orgs: UNLIMITED, users: UNLIMITED, liveAgents: UNLIMITED, assistants: UNLIMITED }, features: PRO_FEATURES },
+};
+export const TRIAL_DAYS = 14;
+export const FEATURE_LABEL: Record<Feature, string> = {
+  panel: 'The CRMagents panel and Flow actions in Salesforce', knowledge: 'The knowledge base', emailReplies: 'Email replies on cases',
+  insights: 'Insights and dashboards', tests: 'Assistant test sets', memory: 'Memory', costCaps: 'Monthly cost caps',
+  websiteChat: 'Website chat', textMessages: 'SMS and WhatsApp', meetings: 'Meeting booking', prove: 'Build & prove',
+  xray: 'The Automation X-ray', impact: 'Impact reporting', trustLog: 'The AI call log, activity log and export',
+};
+/** The lowest plan that includes a feature. */
+export const planFor = (f: Feature): PlanId => (PLUS_FEATURES.includes(f) ? 'plus' : 'pro');
+/** Features an agent needs, from its steps. */
+export function graphFeatures(g: { nodes: { type: string; config?: Record<string, unknown> }[] }): Feature[] {
+  const f = new Set<Feature>();
+  for (const n of g.nodes) {
+    if (n.type === 'sf.emailReply' || n.type === 'sf.emailThread') f.add('emailReplies');
+    if (n.type === 'notify.sms') f.add('textMessages');
+    if (n.type === 'sf.meetingTimes') f.add('meetings');
+    if (n.type === 'knowledge.search') f.add('knowledge');
+  }
+  return [...f];
+}

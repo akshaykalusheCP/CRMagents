@@ -4,7 +4,7 @@ import type { Role } from '@crmagents/shared';
 // one place (auth.ts calls it for every /api request), so a new route is "builder" unless listed.
 
 const ADMIN: RegExp[] = [
-  /^\/api\/settings$/, /^\/api\/oauth\/start$/, /^\/api\/team(\/|$)/, /^\/api\/impact\/assumptions$/,
+  /^\/api\/settings$/, /^\/api\/plan\/request$/, /^\/api\/oauth\/start$/, /^\/api\/team(\/|$)/, /^\/api\/impact\/assumptions$/,
   /^\/api\/knowledge\/sources(\/|$)/,
   /^T$/, // disconnecting an org (DELETE /api/tenants/:id)
   /^T\/(grant-access|package|provision|setup)$/, /^T\/salesforce\/pages\//,

@@ -1,3 +1,4 @@
+import { requireFeature } from './plans.js';
 import { ensureConversation, getConversation, listConversations } from './memory/conversations.js';
 import { recordNotes } from './memory/store.js';
 import { recordChanges, undoChanges } from './trust/undo.js';
@@ -82,6 +83,8 @@ export function registerSfBridge(app: FastifyInstance) {
       const expected = Buffer.from(sign(decrypt(t.sf_signing_secret_enc), ts, req.method, req.url, req.rawBody ?? ''), 'hex');
       if (expected.length === given.length && timingSafeEqual(expected, given)) {
         req.sfTenant = { tenantId: t.id, accountId: t.account_id };
+        // The panel, utility bar and Flow actions are part of Plus.
+        try { await requireFeature(t.account_id, 'panel'); } catch (e) { return reply.code(402).send({ error: (e as Error).message }); }
         return;
       }
     }

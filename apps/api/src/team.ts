@@ -1,3 +1,4 @@
+import { requireRoom } from './plans.js';
 import { createHash, randomBytes } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
@@ -58,6 +59,9 @@ export function registerTeam(app: FastifyInstance) {
     if (taken.rows[0]) {
       throw Object.assign(new Error(taken.rows[0].account_id === u.accountId ? 'They are already in this workspace.' : 'This email already has a CRMagents login in another company.'), { statusCode: 409 });
     }
+    // A new invitation replaces an open one for the same email, so it doesn't count twice.
+    const { rows: open } = await pool.query('select 1 from invites where account_id=$1 and lower(email)=$2 and accepted_at is null and expires_at > now()', [u.accountId, email]);
+    if (!open.length) await requireRoom(u.accountId, 'users');
     const token = randomBytes(32).toString('base64url');
     // One open invitation per email: a new one replaces the old.
     await pool.query('delete from invites where account_id=$1 and lower(email)=$2 and accepted_at is null', [u.accountId, email]);

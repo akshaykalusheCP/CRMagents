@@ -21,6 +21,7 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
   const [err, setErr] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
+  const [planPick, setPlanPick] = useState<string | undefined>();
   const [invite, setInvite] = useState<{ email: string; role: string; invitedBy: string | null; accountName: string } | null>(null);
 
   useEffect(() => {
@@ -33,7 +34,7 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
     setBusy(true); setErr(''); setNote('');
     try {
       if (mode === 'login') await api.login(f.email, f.password);
-      else if (mode === 'signup') await api.signup(f);
+      else if (mode === 'signup') await api.signup({ ...f, plan: planPick });
       else if (mode === 'forgot') {
         await api.forgot(f.email);
         setNote('If that email has a CRMagents login, a reset link is on its way. It works for 2 hours. No email? Ask an admin in your company for a reset link.');
@@ -91,6 +92,9 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
             )}
             {mode === 'reset' && <p className="auth-lede">Choose a new password. You'll be signed out on your other devices.</p>}
             {mode === 'forgot' && <p className="auth-lede">Enter the email you log in with and we'll send you a link to choose a new password.</p>}
+            {mode === 'signup' && planPick && planPick !== 'basic' && (
+              <p className="auth-lede">You picked {planPick === 'pro' ? 'Pro' : 'Plus'}. Every workspace starts with a 14-day free trial; we'll help you move to {planPick === 'pro' ? 'Pro' : 'Plus'} when you're ready.</p>
+            )}
             {mode === 'signup' && (
               <label>Company name<input id="auth-company" value={f.accountName} onChange={(e) => setF({ ...f, accountName: e.target.value })} required /></label>
             )}
@@ -173,7 +177,7 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
           </div>
         </div>
       </section>
-      <Pricing onStart={() => { go('signup'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
+      <Pricing onStart={(p) => { setPlanPick(p); go('signup'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
       <footer className="land-foot"><div className="land-inner">CRMagents · AI agents and analytics for Salesforce</div></footer>
     </div>
   );

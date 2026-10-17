@@ -4,6 +4,7 @@ import { api, type Discovery, type Opportunity, type Proof, type Tenant } from '
 import { Empty, PageHeader, Status, toast } from '../components/ui';
 import { XrayPanel } from '../components/Xray';
 import { Ribbon } from '../components/Ribbon';
+import { LockedPage, PlanTag, usePlan } from '../components/Plan';
 
 // What to automate, from the org's own data: a quick scan (counting only, no AI) finds the repetitive work, then
 // each opportunity can be built into an agent and proven on real records: what it would have done, and how often
@@ -20,6 +21,7 @@ export function DiscoverPage({ tenant, openAgents }: { tenant?: Tenant; openAgen
   const [busy, setBusy] = useState<string | null>(null);
   const [open, setOpen] = useState<string | null>(null);
   const [view, setView] = useState<'work' | 'xray'>('work');
+  const { has } = usePlan();
 
   useEffect(() => { setD(undefined); if (tenant) api.discovery(tenant.id).then(setD).catch(() => setD(null)); }, [tenant?.id]);
   if (!tenant) return <div className="pg"><PageHeader title="Discover" description="Connect a Salesforce org first." /></div>;
@@ -61,9 +63,9 @@ export function DiscoverPage({ tenant, openAgents }: { tenant?: Tenant; openAgen
       <PageHeader title="Discover" description="What your team does by hand that an agent could do, found in your own Salesforce data and proven on your own records." />
       <div className="ptabs dc-tabs" role="tablist">
         <button role="tab" aria-selected={view === 'work'} className={view === 'work' ? 'on' : ''} onClick={() => setView('work')}>Hand work</button>
-        <button role="tab" aria-selected={view === 'xray'} className={view === 'xray' ? 'on' : ''} onClick={() => setView('xray')}>Automation X-ray</button>
+        <button role="tab" aria-selected={view === 'xray'} className={view === 'xray' ? 'on' : ''} onClick={() => setView('xray')}>Automation X-ray<PlanTag feature="xray" /></button>
       </div>
-      {view === 'xray' ? <XrayPanel tenant={tenant} openAgents={openAgents} /> : <>
+      {view === 'xray' ? (has('xray') ? <XrayPanel tenant={tenant} openAgents={openAgents} /> : <LockedPage feature="xray" title="The Automation X-ray" />) : <>
       <section className="dc-hero">
         <Ribbon className="card-ribbon" strands={140} angle={0.62} width={0.42} palette="ocean" />
         <div className="dc-hero-main">
@@ -99,7 +101,7 @@ export function DiscoverPage({ tenant, openAgents }: { tenant?: Tenant; openAgen
                 <div className="dc-hours"><b>{hours(o.hoursPerMonth)}</b><span>{money(o.valuePerMonth)} / month</span></div>
                 <div className="dc-actions">
                   {p ? <button className="sm" onClick={() => setOpen(isOpen ? '' : o.id)}>{isOpen ? 'Hide proof' : 'See proof'}</button>
-                    : <button className="primary sm" onClick={() => void prove(o)} disabled={!!busy}>{busy === o.id ? <Loader2 size={14} className="spin" /> : <FlaskConical size={14} />} Build &amp; prove</button>}
+                    : <button className="primary sm" onClick={() => void prove(o)} disabled={!!busy}><PlanTag feature="prove" />{busy === o.id ? <Loader2 size={14} className="spin" /> : <FlaskConical size={14} />} Build &amp; prove</button>}
                 </div>
               </div>
 

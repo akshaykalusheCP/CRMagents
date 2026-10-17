@@ -1,3 +1,5 @@
+import { hasFeature, requireFeatureForTenant } from '../plans.js';
+import { accountOf as accountOfTenant } from '../tenants.js';
 import { randomBytes } from 'node:crypto';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -80,7 +82,7 @@ export function registerPublicChat(app: FastifyInstance) {
   app.post('/public/chat/:key', { bodyLimit: 100_000 }, async (req, reply) => {
     const key = (req.params as { key: string }).key;
     const a = await byKey(key);
-    if (!a || !a.public_enabled) return reply.code(404).send({ error: 'Chat not available' });
+    if (!a || !a.public_enabled || !(await hasFeature(await accountOfTenant(a.tenant_id), 'websiteChat'))) return reply.code(404).send({ error: 'Chat not available' });
     if (!cors(req, reply, a.public_origins)) return reply.code(403).send({ error: 'This website may not use this chat' });
     const b = z.object({
       messages: z.array(z.object({ role: z.enum(['user', 'assistant']), text: z.string().max(2000) })).min(1).max(40),
@@ -118,6 +120,12 @@ export function websiteSpec(a: { id: string; system_prompt: string; public_cases
 
 /** Turn website chat on/off for an assistant; the key is created on first use. */
 export async function setPublicChat(tenantId: string, agentId: string, b: { enabled: boolean; origins: string; cases: boolean; greeting: string; selfService?: unknown; sms?: boolean }) {
+  // Turning things on needs the plan; turning them off never does.
+  const { rows: cur } = await pool.query('select public_enabled, sms_enabled, public_config from agents where id=$1 and tenant_id=$2', [agentId, tenantId]);
+  if (b.enabled && !cur[0]?.public_enabled) await requireFeatureForTenant(tenantId, 'websiteChat');
+  if (b.sms && !cur[0]?.sms_enabled) await requireFeatureForTenant(tenantId, 'textMessages');
+  const wantsMeetings = !!(b.selfService as { meetings?: { enabled?: boolean } } | undefined)?.meetings?.enabled;
+  if (wantsMeetings && !(cur[0]?.public_config as { meetings?: { enabled?: boolean } } | undefined)?.meetings?.enabled) await requireFeatureForTenant(tenantId, 'meetings');
   const { rows } = await pool.query('select public_key from agents where id=$1 and tenant_id=$2', [agentId, tenantId]);
   if (!rows[0]) throw Object.assign(new Error('assistant not found'), { statusCode: 404 });
   const key = rows[0].public_key ?? `pc_${randomBytes(18).toString('base64url')}`;

@@ -1,3 +1,4 @@
+import { requireRoom } from './plans.js';
 import cookie from '@fastify/cookie';
 import Fastify from 'fastify';
 import { z } from 'zod';
@@ -36,6 +37,7 @@ import { publicChatInfo, registerPublicChat, setPublicChat } from './agent/publi
 import { addToRecordPage, addToUtilityBar, listPages } from './salesforce/pages.js';
 import { impact, setAssumptions } from './insights/impact.js';
 import { config } from './config.js';
+import { isPlatformAdmin, PlanError, planSummary } from './plans.js';
 import { overLimit } from './ratelimit.js';
 import { addMemory, deleteMemory, deleteRecordNote, listMemories, listRecordNotes, memoryOn, updateMemory } from './memory/store.js';
 import { deleteConversation, getConversation, listConversations } from './memory/conversations.js';
@@ -68,7 +70,7 @@ registerAudit(app);
 
 app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
   const code = err instanceof z.ZodError ? 400 : (err.statusCode ?? 500);
-  reply.code(code).send({ error: err instanceof z.ZodError ? err.issues.map((i) => i.message).join('; ') : err.message });
+  reply.code(code).send({ error: err instanceof z.ZodError ? err.issues.map((i) => i.message).join('; ') : err.message, ...(err instanceof PlanError ? { plan: err.detail } : {}) });
 });
 
 // Security headers on every response (the web app sets its own in production hosting).
@@ -613,6 +615,7 @@ app.get('/api/tenants/:tenantId/agents', async (req) => {
 app.post('/api/tenants/:tenantId/agents', async (req) => {
   const { tenantId } = req.params as { tenantId: string };
   const b = agentBody.parse(req.body);
+  await requireRoom(req.user!.accountId, 'assistants');
   const { rows } = await pool.query(
     'insert into agents (tenant_id, name, system_prompt, tools) values ($1,$2,$3,$4) returning id',
     [tenantId, b.name, b.systemPrompt, b.tools],
@@ -690,6 +693,44 @@ app.post('/api/tenants/:tenantId/agents/:agentId/tests/run', async (req) => {
   const { tenantId, agentId } = req.params as { tenantId: string; agentId: string };
   const b = z.object({ channel: z.enum(['internal', 'website']).default('internal') }).parse(req.body ?? {});
   return startTestRun(tenantId, agentId, b.channel, req.user!.email);
+});
+
+// ---- Plan: what this workspace includes, its usage and trial; upgrades are requested (Stripe comes later) ----
+app.get('/api/plan', async (req) => planSummary(req.user!.accountId));
+app.post('/api/plan/request', async (req) => {
+  const u = req.user!;
+  const b = z.object({ plan: z.enum(['plus', 'pro', 'promax']), note: z.string().max(1000).optional() }).parse(req.body);
+  await pool.query('update accounts set requested_plan=$2 where id=$1', [u.accountId, b.plan]);
+  await pool.query('insert into sales_inquiries (name, email, company, size, message, ip) values ($1,$2,$3,$4,$5,$6)',
+    [u.email, u.email, u.accountName, null, `Upgrade request: ${b.plan}${b.note ? ` · ${b.note}` : ''}`, req.ip]);
+  await audit(u.accountId, u.email, `Asked to upgrade to ${b.plan}`, { ip: req.ip });
+  return { ok: true };
+});
+
+// ---- Platform admin (PLATFORM_ADMINS): set any workspace's plan. Invisible to everyone else. ----
+app.get('/api/platform/accounts', async (req, reply) => {
+  if (!isPlatformAdmin(req.user!.email)) return reply.code(404).send({ error: 'Not found' });
+  const { rows } = await pool.query(
+    `select a.id, a.name, a.plan, a.trial_ends_at as "trialEndsAt", a.requested_plan as "requestedPlan", a.plan_set_by as "planSetBy", a.created_at as "createdAt",
+            (select count(*)::int from tenants t where t.account_id = a.id) as orgs, (select count(*)::int from users u where u.account_id = a.id) as users,
+            (select min(email) from users u where u.account_id = a.id and u.role = 'owner') as owner
+     from accounts a order by a.created_at desc limit 500`);
+  return rows;
+});
+app.put('/api/platform/accounts/:id/plan', async (req, reply) => {
+  const u = req.user!;
+  if (!isPlatformAdmin(u.email)) return reply.code(404).send({ error: 'Not found' });
+  const b = z.object({ plan: z.enum(['basic', 'plus', 'pro', 'promax']), trialDays: z.number().int().min(0).max(90).optional() }).parse(req.body);
+  const id = (req.params as { id: string }).id;
+  const trial = b.plan === 'basic' ? new Date(Date.now() + (b.trialDays ?? 14) * 86_400_000) : null;
+  const r = await pool.query(
+    `update accounts set plan=$2, trial_ends_at=$3, trial_ended_at=null, requested_plan=case when requested_plan=$2 then null else requested_plan end, plan_set_by=$4, plan_updated_at=now() where id=$1`,
+    [id, b.plan, trial, u.email]);
+  if (!r.rowCount) return reply.code(404).send({ error: 'Not found' });
+  // A trial pause is lifted for agents when the plan allows running again (people turn them back on themselves).
+  await pool.query(`update workflows w set paused_reason=null from tenants t where t.id = w.tenant_id and t.account_id=$1 and w.paused_reason like 'Your free trial ended%'`, [id]);
+  await audit(id, u.email, `Plan set to ${b.plan} by CRMagents`, {});
+  return { ok: true };
 });
 
 // ---- Trust Center: what the AI saw, who did what, and the workspace's data ----

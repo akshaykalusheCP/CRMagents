@@ -8,8 +8,17 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function route(method: string, url: URL, body: any): Response {
   const p = url.pathname.replace(/^\/api\/tenants\/[^/]+/, '/t');
-  if (p === '/api/auth/me') return json({ id: 'demo', email: 'owner@demo-company.com', accountName: 'Demo Company', role: 'owner' });
+  if (p === '/api/auth/me') return json({ id: 'demo', email: 'owner@demo-company.com', accountName: 'Demo Company', role: 'owner', platformAdmin: new URLSearchParams(location.search).get('plan') === 'basic' });
+  if (p === '/api/platform/accounts') return json([{ id: 'x1', name: 'Demo Company', plan: 'basic', trialEndsAt: new Date(Date.now() + 9 * 86_400_000).toISOString(), requestedPlan: 'pro', planSetBy: 'sign-up trial', createdAt: new Date().toISOString(), orgs: 1, users: 2, owner: 'owner@demo-company.com' }, { id: 'x2', name: 'CP', plan: 'promax', trialEndsAt: null, requestedPlan: null, planSetBy: 'existing workspace', createdAt: new Date().toISOString(), orgs: 3, users: 1, owner: 'akshay@cp.example' }]);
   if (p === '/api/tenants') return json([fx.tenant]);
+  if (p === '/api/plan') {
+    // ?demo&plan=basic shows a Basic trial (locked pages, trial banner); otherwise everything is included.
+    const basic = new URLSearchParams(location.search).get('plan') === 'basic';
+    return json(basic
+      ? { plan: 'basic', name: 'Basic', trialEndsAt: new Date(Date.now() + 9 * 86_400_000).toISOString(), trialEnded: false, requestedPlan: null, features: [], limits: { orgs: 1, users: 3, liveAgents: 3, assistants: 2 }, usage: { orgs: 1, users: 2, liveAgents: 2, assistants: 1 } }
+      : { plan: 'promax', name: 'Pro Max', trialEndsAt: null, trialEnded: false, requestedPlan: null, features: ['panel', 'knowledge', 'emailReplies', 'insights', 'tests', 'memory', 'costCaps', 'websiteChat', 'textMessages', 'meetings', 'prove', 'xray', 'impact', 'trustLog'], limits: { orgs: null, users: null, liveAgents: null, assistants: null }, usage: { orgs: 1, users: 4, liveAgents: 3, assistants: 2 } });
+  }
+  if (p === '/api/plan/request') return json({ ok: true });
   if (p === '/api/team') return json(DEMO_TEAM);
   if (p === '/api/team/invites') return json({ id: 'i9', link: `${location.origin}/?invite=demo-link`, emailed: false });
   if (/^\/api\/team\/users\/[^/]+\/reset-link$/.test(p)) return json({ link: `${location.origin}/?reset=demo-link`, emailed: true });
