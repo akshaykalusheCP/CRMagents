@@ -1,4 +1,5 @@
 import { afterRunFailed } from '../alerts.js';
+import { journalFor } from '../trust/undo.js';
 import { auditRun } from '../salesforce/audit.js';
 import { aiClient } from '../agent/provider.js';
 import type { Prefetched } from './prefetch.js';
@@ -115,8 +116,11 @@ async function drive(runId: string, tenantId: string, graph: Workflow, st: RunSt
   // "Still working" signal for the recovery check, plus a saved checkpoint after every finished step.
   const beat = setInterval(() => { void pool.query('update runs set heartbeat_at=now() where id=$1', [runId]).catch(() => {}); }, 30_000);
   try {
+    const base = await makeEnv(tenantId, workflowId, st);
+    // Everything this run changes in Salesforce is logged, so it can be undone.
+    base.sf.journal = journalFor({ tenantId, runId, workflowId });
     const env = {
-      ...(await makeEnv(tenantId, workflowId, st)),
+      ...base,
       run: { tenantId, runId, workflowId },
       checkpoint: async (snap: unknown) => {
         const { rows } = await pool.query(

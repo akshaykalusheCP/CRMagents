@@ -743,3 +743,21 @@ select.sm { height: 30px; padding: 0 28px 0 8px; font-size: 13px; width: auto; }
 :root .msg.ai .save-test { align-self: flex-start; margin: 4px 0 0 2px; font-size: 12.5px; }
 :root .tm { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--border); }
 :root .tm h3 { margin: 0; font-size: 15px; font-weight: 600; }
+
+/* ---- Changes and undo ---- */
+:root .chg { display: flex; flex-direction: column; gap: 10px; }
+:root .chg-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+:root .chg-list { list-style: none; margin: 0; padding: 0; border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+:root .chg-list > li { padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; font-size: 13.5px; }
+:root .chg-list > li + li { border-top: 1px solid var(--border); }
+:root .chg-list > li.undone { opacity: .6; }
+:root .chg-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+:root .chg-row a { color: var(--text); text-decoration: none; font-weight: 500; }
+:root .chg-row a:hover { text-decoration: underline; }
+:root .chg-when { margin-left: auto; }
+:root .chg-fields { display: flex; flex-direction: column; gap: 3px; padding-left: 2px; font-size: 12.5px; color: var(--text-2, var(--muted)); }
+:root .chg-fields span { display: inline-flex; align-items: center; gap: 6px; flex-wrap: wrap; overflow-wrap: anywhere; }
+:root .chg-fields code { font-size: 12px; }
+:root .chg-note { font-size: 12px; color: var(--muted); display: inline-flex; align-items: center; gap: 4px; }
+:root .chg-note.warn { color: var(--warn); }
+:root .chg-report { list-style: none; margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--surface-2); display: flex; flex-direction: column; gap: 6px; font-size: 13px; }

@@ -25,7 +25,47 @@ export function forgetAccessToken(tenantId: string): void {
   accessCache.delete(tenantId);
 }
 
+/** One record change, as the change log keeps it (before values make it undoable). */
+export interface Change { op: 'create' | 'update' | 'delete'; object: string; recordId: string; before?: Record<string, unknown> | null; after?: Record<string, unknown> | null; undoable: boolean }
+export type Journal = (changes: Change[]) => Promise<void>;
+
+const FIELD = /^[A-Za-z][A-Za-z0-9_]*$/;
+const id15 = (id: string) => String(id ?? '').slice(0, 15);
+
 export class SalesforceClient {
+  /**
+   * Set for an agent run: every create, update and delete through this client is logged with the values it
+   * replaced (one extra read per change, batched), so the run can be undone later. CRMagents' own objects are not logged.
+   */
+  journal?: Journal;
+
+  private logs(sobject: string) { return !!this.journal && !/^CRMagents_/i.test(sobject); }
+
+  /** Current values of these fields (or every field) for some records, by 15-character Id. Never throws. */
+  private async valuesOf(sobject: string, ids: string[], fields: string[] | 'ALL'): Promise<Map<string, Record<string, unknown>>> {
+    const out = new Map<string, Record<string, unknown>>();
+    const list = fields === 'ALL' ? 'FIELDS(ALL)' : [...new Set(['Id', ...fields.filter((f) => FIELD.test(f) && f !== 'Id')])].join(', ');
+    for (let i = 0; i < ids.length; i += 200) {
+      const part = ids.slice(i, i + 200).filter((x) => /^[a-zA-Z0-9]{15,18}$/.test(x));
+      if (!part.length) continue;
+      try {
+        const r = await this.query(`SELECT ${list} FROM ${sobject} WHERE Id IN (${part.map((x) => `'${x}'`).join(',')})${fields === 'ALL' ? ' LIMIT 200' : ''}`);
+        for (const rec of r.records as Record<string, unknown>[]) {
+          const { attributes: _a, ...rest } = rec as Record<string, unknown> & { attributes?: unknown };
+          // Empty fields are left out of results: "it was empty" matters for undo.
+          if (fields !== 'ALL') for (const f of fields) if (FIELD.test(f) && !(f in rest)) rest[f] = null;
+          out.set(id15(String(rec.Id)), rest);
+        }
+      } catch { /* not readable: those changes are logged as not undoable */ }
+    }
+    return out;
+  }
+
+  private async log(changes: Change[]) {
+    if (!changes.length || !this.journal) return;
+    await this.journal(changes).catch(() => undefined);
+  }
+
   private constructor(
     readonly tenantId: string,
     readonly accountId: string,
@@ -286,12 +326,16 @@ export class SalesforceClient {
     return compactRecord(first.outputValues ?? {}) as Record<string, unknown>;
   }
 
-  createRecord(sobject: string, fields: Record<string, unknown>) {
-    return this.call<{ id: string }>('POST', `/sobjects/${encodeURIComponent(sobject)}`, fields);
+  async createRecord(sobject: string, fields: Record<string, unknown>) {
+    const r = await this.call<{ id: string }>('POST', `/sobjects/${encodeURIComponent(sobject)}`, fields);
+    if (this.logs(sobject)) await this.log([{ op: 'create', object: sobject, recordId: r.id, after: fields, undoable: true }]);
+    return r;
   }
 
-  updateRecord(sobject: string, id: string, fields: Record<string, unknown>) {
-    return this.call<void>('PATCH', `/sobjects/${encodeURIComponent(sobject)}/${encodeURIComponent(id)}`, fields);
+  async updateRecord(sobject: string, id: string, fields: Record<string, unknown>) {
+    const before = this.logs(sobject) ? (await this.valuesOf(sobject, [id], Object.keys(fields))).get(id15(id)) : undefined;
+    await this.call<void>('PATCH', `/sobjects/${encodeURIComponent(sobject)}/${encodeURIComponent(id)}`, fields);
+    if (this.logs(sobject)) await this.log([{ op: 'update', object: sobject, recordId: id, before: before ? pick(before, Object.keys(fields)) : null, after: fields, undoable: !!before }]);
   }
 
   /** Files attached to a record (latest versions), newest first. */
@@ -317,17 +361,46 @@ export class SalesforceClient {
     const r = await this.call<{ id: string }>('POST', '/sobjects/ContentVersion', {
       Title: title.slice(0, 255), PathOnClient: fileName, VersionData: data.toString('base64'), FirstPublishLocationId: recordId,
     });
+    if (this.journal) await this.log([{ op: 'create', object: 'ContentVersion', recordId: r.id, after: { Title: title, attachedTo: recordId }, undoable: true }]);
     return { versionId: r.id };
   }
 
-  deleteRecord(sobject: string, id: string) {
-    return this.call<void>('DELETE', `/sobjects/${encodeURIComponent(sobject)}/${encodeURIComponent(id)}`);
+  async deleteRecord(sobject: string, id: string) {
+    const before = this.logs(sobject) ? (await this.valuesOf(sobject, [id], 'ALL')).get(id15(id)) : undefined;
+    await this.call<void>('DELETE', `/sobjects/${encodeURIComponent(sobject)}/${encodeURIComponent(id)}`);
+    if (this.logs(sobject)) await this.log([{ op: 'delete', object: sobject, recordId: id, before: before ?? null, undoable: true }]);
   }
 
   /** Creates or updates by an external Id field: no lookup call needed to know whether the record exists. */
   async upsertRecord(sobject: string, externalIdField: string, externalId: string, fields: Record<string, unknown>) {
+    let before: Record<string, unknown> | undefined;
+    if (this.logs(sobject) && FIELD.test(externalIdField)) {
+      const q = await this.query(`SELECT Id, ${[...new Set(Object.keys(fields).filter((f) => FIELD.test(f) && f !== 'Id'))].join(', ') || 'Name'} FROM ${sobject} WHERE ${externalIdField} = '${externalId.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}' LIMIT 1`).catch(() => null);
+      before = q?.records[0] as Record<string, unknown> | undefined;
+    }
     const r = await this.call<{ id: string; created: boolean } | undefined>('PATCH', `/sobjects/${encodeURIComponent(sobject)}/${encodeURIComponent(externalIdField)}/${encodeURIComponent(externalId)}`, fields);
-    return { id: r?.id ?? '', created: r?.created ?? false };
+    const out = { id: r?.id ?? String(before?.Id ?? ''), created: r?.created ?? false };
+    if (this.logs(sobject) && out.id) {
+      await this.log([out.created
+        ? { op: 'create', object: sobject, recordId: out.id, after: fields, undoable: true }
+        : { op: 'update', object: sobject, recordId: out.id, before: before ? pick(before, Object.keys(fields)) : null, after: fields, undoable: !!before }]);
+    }
+    return out;
+  }
+
+  /** Bring deleted records back from the Recycle Bin (SOAP API: REST has no undelete). */
+  async undelete(ids: string[]): Promise<{ id: string; ok: boolean; error?: string }[]> {
+    if (!ids.length) return [];
+    const { token } = await this.session();
+    const xml = `<?xml version="1.0" encoding="utf-8"?><soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/" xmlns:urn="urn:partner.soap.sforce.com"><soapenv:Header><urn:SessionHeader><urn:sessionId>${token}</urn:sessionId></urn:SessionHeader></soapenv:Header><soapenv:Body><urn:undelete>${ids.map((i) => `<urn:ids>${i.replace(/[^a-zA-Z0-9]/g, '')}</urn:ids>`).join('')}</urn:undelete></soapenv:Body></soapenv:Envelope>`;
+    const res = await fetch(`${this.instanceUrl}/services/Soap/u/${config.sf.apiVersion.replace(/^v/, '')}`, { method: 'POST', headers: { 'Content-Type': 'text/xml; charset=UTF-8', SOAPAction: 'undelete' }, body: xml });
+    const text = await res.text();
+    if (!res.ok && !/<result>/.test(text)) throw new Error(`Undelete failed: ${(text.match(/<faultstring>([^<]*)/)?.[1] ?? res.status)}`);
+    return [...text.matchAll(/<result>([\s\S]*?)<\/result>/g)].map((m, i) => ({
+      id: m[1].match(/<id>([^<]*)/)?.[1] || ids[i],
+      ok: /<success>true<\/success>/.test(m[1]),
+      error: m[1].match(/<message>([^<]*)/)?.[1],
+    }));
   }
 
   /** Deleted records too (the Recycle Bin keeps them 15 days): one page of an ALL ROWS query. */
@@ -342,6 +415,36 @@ export class SalesforceClient {
    * Results come back in the same order as `ops`.
    */
   async saveMany(ops: SaveOp[]): Promise<SaveResult[]> {
+    // The change log: read what updates and deletes will replace (one query per 200 records), unless it's a bulk job.
+    const befores = new Map<string, Map<string, Record<string, unknown>>>();
+    if (this.journal) {
+      const want = new Map<string, { ids: string[]; fields: Set<string> | 'ALL' }>();
+      for (const op of ops) {
+        if (op.kind === 'create' || !op.id || !this.logs(op.sobject)) continue;
+        const k = `${op.kind}:${op.sobject}`;
+        const w = want.get(k) ?? { ids: [], fields: op.kind === 'delete' ? 'ALL' : new Set<string>() };
+        w.ids.push(op.id);
+        if (w.fields !== 'ALL') Object.keys(op.fields).forEach((f) => (w.fields as Set<string>).add(f));
+        want.set(k, w);
+      }
+      for (const [k, w] of want) if (w.ids.length <= BULK_OVER) befores.set(k, await this.valuesOf(k.slice(k.indexOf(':') + 1), w.ids, w.fields === 'ALL' ? 'ALL' : [...w.fields]));
+    }
+    const results = await this.saveManyRaw(ops);
+    if (this.journal) {
+      const changes: Change[] = [];
+      ops.forEach((op, i) => {
+        if (!results[i]?.ok || !this.logs(op.sobject)) return;
+        const b = op.id ? befores.get(`${op.kind}:${op.sobject}`)?.get(id15(op.id)) : undefined;
+        if (op.kind === 'create') changes.push({ op: 'create', object: op.sobject, recordId: String(results[i].id), after: op.fields, undoable: true });
+        else if (op.kind === 'update') changes.push({ op: 'update', object: op.sobject, recordId: String(op.id), before: b ? pick(b, Object.keys(op.fields)) : null, after: op.fields, undoable: !!b });
+        else changes.push({ op: 'delete', object: op.sobject, recordId: String(op.id), before: b ?? null, undoable: true });
+      });
+      for (let i = 0; i < changes.length; i += 500) await this.log(changes.slice(i, i + 500));
+    }
+    return results;
+  }
+
+  private async saveManyRaw(ops: SaveOp[]): Promise<SaveResult[]> {
     const results: SaveResult[] = new Array(ops.length);
     const groups = new Map<string, number[]>();
     ops.forEach((op, i) => {
@@ -416,6 +519,11 @@ const COLLECTION_SIZE = 200; // sObject Collections: records per call
 export const BULK_OVER = 10_000;
 
 export interface RecordFile { documentId: string; versionId: string; title: string; extension: string; size: number }
+
+/** Just these keys of a record. */
+function pick(rec: Record<string, unknown>, keys: string[]) {
+  return Object.fromEntries(keys.filter((k) => k in rec).map((k) => [k, rec[k] ?? null]));
+}
 
 export interface SaveOp { kind: 'create' | 'update' | 'delete'; sobject: string; id?: string; fields: Record<string, unknown> }
 export interface SaveResult { ok: boolean; id?: string; error?: string }

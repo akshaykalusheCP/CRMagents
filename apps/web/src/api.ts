@@ -132,6 +132,12 @@ export interface Settings {
 export interface Me { id: string; email: string; accountName: string; role: string }
 export interface TeamUser { id: string; email: string; role: string; createdAt: string; lastLoginAt: string | null }
 export interface TeamInvite { id: string; email: string; role: string; invitedBy: string | null; expiresAt: string; createdAt: string }
+export interface RecordChange {
+  id: number; run_id: string; op: 'create' | 'update' | 'delete'; object: string; record_id: string;
+  before: Record<string, unknown> | null; after: Record<string, unknown> | null; undoable: boolean;
+  undone_at: string | null; undone_by: string | null; undo_result: string | null; created_at: string; agent_name: string | null;
+}
+export interface UndoReport { restored: number; deleted: number; recovered: number; skipped: { recordId: string; object: string; why: string }[]; failed: { recordId: string; object: string; error: string }[] }
 export interface Team { me: string; canManage: boolean; users: TeamUser[]; invites: TeamInvite[] }
 export interface Alert { id: string; kind: string; title: string; body: string; tenantId: string | null; workflowId: string | null; readAt: string | null; createdAt: string }
 
@@ -152,6 +158,8 @@ export const api = {
   acceptInvite: (token: string, password: string) => req('POST', '/api/auth/accept', { token, password }),
   changePassword: (current: string, password: string) => req('POST', '/api/auth/password', { current, password }),
   team: () => req<Team>('GET', '/api/team'),
+  changes: (t: string, q: { runId?: string; workflowId?: string; since?: string }) => req<{ changes: RecordChange[]; outside: { runId: string; label: string }[] }>('GET', `/api/tenants/${t}/changes?${new URLSearchParams(Object.entries(q).filter(([, v]) => v) as [string, string][])}`),
+  undo: (t: string, b: { runId?: string; workflowId?: string; since?: string; changeIds?: number[] }) => req<UndoReport>('POST', `/api/tenants/${t}/undo`, b),
   tests: (t: string, a: string) => req<{ tests: AssistantTest[]; runs: TestRun[] }>('GET', `/api/tenants/${t}/agents/${a}/tests`),
   recentQuestions: (t: string, a: string) => req<{ question: string; answer: string }[]>('GET', `/api/tenants/${t}/agents/${a}/tests/recent`),
   saveTest: (t: string, a: string, b: Omit<AssistantTest, 'id'>, id?: string) => req<{ id: string }>(id ? 'PUT' : 'POST', `/api/tenants/${t}/agents/${a}/tests${id ? `/${id}` : ''}`, b),

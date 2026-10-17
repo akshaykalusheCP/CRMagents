@@ -8,6 +8,7 @@ import { dbResultCache } from './resultCache.js';
 import { runTrust } from '../trust/policy.js';
 import { hasKnowledge } from '../knowledge/store.js';
 import { endRemote, remoteExecutor } from './remote.js';
+import { journalFor } from '../trust/undo.js';
 
 export interface AgentSpec {
   id?: string;
@@ -41,6 +42,7 @@ export async function runAgent(
     [tenantId, agent.id ?? null, JSON.stringify({ userInput, context, ...(opts.meta ?? {}) }), opts.startedBy ?? null],
   );
   const runId = rows[0].id as string;
+  sf.journal = journalFor({ tenantId, runId, agentId: agent.id ?? null });
   if (opts.inOrg) remote.exec = remoteExecutor(runId);
   else if (opts.exec) remote.exec = opts.exec;
   opts.onStarted?.(runId);

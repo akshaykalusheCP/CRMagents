@@ -36,6 +36,7 @@ import { publicChatInfo, registerPublicChat, setPublicChat } from './agent/publi
 import { addToRecordPage, addToUtilityBar, listPages } from './salesforce/pages.js';
 import { impact, setAssumptions } from './insights/impact.js';
 import { config } from './config.js';
+import { listChanges, notUndoable, undoChanges } from './trust/undo.js';
 import { deleteTest, listTestRuns, listTests, recentQuestions, saveTest, startTestRun } from './agent/tests.js';
 import { registerTeam } from './team.js';
 import { registerTwilio } from './channels/twilio.js';
@@ -656,6 +657,24 @@ app.post('/api/tenants/:tenantId/agents/:agentId/tests/run', async (req) => {
   const { tenantId, agentId } = req.params as { tenantId: string; agentId: string };
   const b = z.object({ channel: z.enum(['internal', 'website']).default('internal') }).parse(req.body ?? {});
   return startTestRun(tenantId, agentId, b.channel, req.user!.email);
+});
+
+// ---- Undo: what agents changed in Salesforce, and putting it back ----
+app.get('/api/tenants/:tenantId/changes', async (req) => {
+  const { tenantId } = req.params as { tenantId: string };
+  const q = z.object({ runId: z.string().uuid().optional(), workflowId: z.string().uuid().optional(), since: z.string().datetime().optional() }).parse(req.query);
+  const changes = await listChanges(tenantId, { runId: q.runId, workflowId: q.workflowId, since: q.since ? new Date(q.since) : undefined });
+  const runIds = q.runId ? [q.runId] : [...new Set(changes.map((c) => c.run_id as string))].slice(0, 500);
+  return { changes, outside: await notUndoable(tenantId, runIds) };
+});
+app.post('/api/tenants/:tenantId/undo', async (req) => {
+  const { tenantId } = req.params as { tenantId: string };
+  const b = z.object({ runId: z.string().uuid().optional(), workflowId: z.string().uuid().optional(), since: z.string().datetime().optional(), changeIds: z.array(z.number().int()).max(2000).optional() })
+    .refine((x) => x.runId || x.workflowId || x.changeIds?.length, 'Say what to undo').parse(req.body);
+  const ids = b.changeIds?.length ? b.changeIds
+    : (await listChanges(tenantId, { runId: b.runId, workflowId: b.workflowId, since: b.since ? new Date(b.since) : undefined })).filter((c) => !c.undone_at).map((c) => Number(c.id));
+  if (!ids.length) return { restored: 0, deleted: 0, recovered: 0, skipped: [], failed: [] };
+  return undoChanges(tenantId, await SalesforceClient.forTenant(tenantId), ids, req.user!.email);
 });
 
 const runBody = z.object({ input: z.string().min(1), context: z.unknown().optional(), history: z.array(z.object({ role: z.enum(['user', 'assistant']), text: z.string().max(20000) })).max(40).optional() });

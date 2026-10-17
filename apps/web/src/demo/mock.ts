@@ -14,6 +14,8 @@ function route(method: string, url: URL, body: any): Response {
   if (p === '/api/team/invites') return json({ id: 'i9', link: `${location.origin}/?invite=demo-link`, emailed: false });
   if (/^\/api\/team\/users\/[^/]+\/reset-link$/.test(p)) return json({ link: `${location.origin}/?reset=demo-link`, emailed: true });
   if (p === '/api/alerts') return json(DEMO_ALERTS);
+  if (p === '/t/changes') return json(DEMO_CHANGES);
+  if (p === '/t/undo') return json({ restored: 2, deleted: 1, recovered: 0, skipped: [{ recordId: '500Qy00000KHt2aIAD', object: 'Case', why: 'Changed by someone since, kept: Priority' }], failed: [] });
   if (/^\/t\/agents\/[^/]+\/tests$/.test(p) && method === 'GET') return json(DEMO_TESTS);
   if (/^\/t\/agents\/[^/]+\/tests\/recent$/.test(p)) return json([{ question: 'Which accounts have more than 3 open cases?', answer: 'Two accounts: Acme Corp (5) and Globex (4).' }]);
   if (p === '/t/insights') return json((fx.insights as Record<string, unknown>)[url.searchParams.get('period') ?? '30'] ?? fx.insights['30']);
@@ -225,5 +227,15 @@ const DEMO_TESTS = {
       { testId: 'x3', question: 'Create a follow-up task for case 00001042', answer: 'Which case do you mean? Please send the Case ID.', pass: false, reasons: ['Missing "00001042"', 'It asked for the case again instead of creating the task.'], tools: [], costUsd: 0.008, ms: 3900 },
     ] },
     { id: 'r0', channel: 'internal', status: 'done', passed: 3, total: 3, costUsd: 0.017, startedBy: 'owner@demo-company.com', createdAt: ago(30), finishedAt: ago(30), results: [] },
+  ],
+};
+
+const DEMO_CHANGES = {
+  outside: [{ runId: 'r1', label: 'Email reply: Suggest email reply' }],
+  changes: [
+    { id: 4, run_id: 'r1', op: 'create', object: 'Task', record_id: '00TQy00000EsA7fMAF', before: null, after: { Subject: 'Call back about refund', WhatId: '500Qy00000KHt2aIAD' }, undoable: true, undone_at: null, undone_by: null, undo_result: null, created_at: ago(0.5), agent_name: 'Case triage' },
+    { id: 3, run_id: 'r1', op: 'update', object: 'Case', record_id: '500Qy00000KHt2aIAD', before: { Priority: 'Low', Status: 'New' }, after: { Priority: 'High', Status: 'Escalated' }, undoable: true, undone_at: null, undone_by: null, undo_result: null, created_at: ago(0.5), agent_name: 'Case triage' },
+    { id: 2, run_id: 'r2', op: 'update', object: 'Case', record_id: '500Qy00000KHt9bIAD', before: { Priority: 'Medium' }, after: { Priority: 'High' }, undoable: true, undone_at: null, undone_by: null, undo_result: null, created_at: ago(3), agent_name: 'Case triage' },
+    { id: 1, run_id: 'r3', op: 'update', object: 'Case', record_id: '500Qy00000KHsZ1IAL', before: { Status: 'New' }, after: { Status: 'Working' }, undoable: true, undone_at: ago(20), undone_by: 'owner@demo-company.com', undo_result: 'Restored', created_at: ago(22), agent_name: 'Case triage' },
   ],
 };

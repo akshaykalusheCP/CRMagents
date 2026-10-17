@@ -2,6 +2,7 @@ import { Loader2, RefreshCw, Wrench } from 'lucide-react';
 import { Markdown } from '../components/Markdown';
 import { useEffect, useMemo, useState } from 'react';
 import { api, type Diagnosis, type Run, type Tenant, type UsageSummary } from '../api';
+import { ChangesList } from '../components/Changes';
 import { Drawer, Empty, Facts, FilterTabs, Meter, PageHeader, Panel, SkeletonRows, Status, Table, toast, type Column } from '../components/ui';
 import { runLabel, runTone } from './Home';
 
@@ -145,6 +146,9 @@ export function RunsPage({ tenant, goSettings, workflowId, embedded }: { tenant?
                   </div>
                 )}
             </div>
+          )}
+          {tenant && ['done', 'error', 'stopped', 'cancelled'].includes(open.status) && (
+            <div className="dsec"><h3>Changes in Salesforce</h3><ChangesList tenant={tenant} runId={open.id} compact /></div>
           )}
           {open.output && <div className="dsec"><h3>Result</h3><Markdown className="output-md" text={open.output} /></div>}
           {open.steps?.length > 0 && (

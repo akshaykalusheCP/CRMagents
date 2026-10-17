@@ -1,3 +1,4 @@
+import { ChangesList } from '../components/Changes';
 import { ArrowLeft, ChevronRight, History, Loader2, Pencil, Power, Trash2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { Edge } from '@xyflow/react';
@@ -27,6 +28,21 @@ function triggerText(w: WorkflowRow) {
     return `When a ${t.config.objectApiName ?? 'record'} is ${t.config.event ?? 'created'}${changed && t.config.event !== 'created' && t.config.event !== 'deleted' ? ` and ${changed.split(/\s*,\s*/).join(' or ')} changes` : ''}`;
   }
   return 'When you run it';
+}
+
+/** Everything this agent changed in Salesforce over a period, with one Undo for all of it. */
+function AgentChanges({ tenant, workflowId }: { tenant: Tenant; workflowId: string }) {
+  const [hours, setHours] = useState(24);
+  const since = new Date(Math.floor((Date.now() - hours * 3600_000) / 60_000) * 60_000).toISOString();
+  return (
+    <Panel title="Changes in Salesforce" action={
+      <select className="sm" value={hours} onChange={(e) => setHours(Number(e.target.value))} aria-label="Period">
+        <option value={1}>Last hour</option><option value={24}>Last 24 hours</option><option value={168}>Last 7 days</option><option value={720}>Last 30 days</option>
+      </select>
+    }>
+      <ChangesList key={hours} tenant={tenant} workflowId={workflowId} since={since} compact />
+    </Panel>
+  );
 }
 
 export function AgentPage({ tenant, row, onBack, onEdit, onChanged, onDeleted }: {
@@ -154,7 +170,10 @@ export function AgentPage({ tenant, row, onBack, onEdit, onChanged, onDeleted }:
         </Panel>
       </>}
 
-      {tab === 'runs' && <RunsPage tenant={tenant} workflowId={row.id} embedded />}
+      {tab === 'runs' && <>
+        <AgentChanges tenant={tenant} workflowId={row.id} />
+        <RunsPage tenant={tenant} workflowId={row.id} embedded />
+      </>}
 
       {tab === 'settings' && (
         <div className="smart-col" style={{ maxWidth: 720 }}>
