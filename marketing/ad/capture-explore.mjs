@@ -1,0 +1,12 @@
+import { open } from './cdp.mjs';
+const b = await open(process.cwd(), 1440, 900, 1);
+await b.go('http://localhost:5173/?demo&tab=agents', 4000);
+console.log('row', await b.click('tbody tr', 'Case triage')); await b.sleep(2500); await b.shot('shots/x-agent.png');
+await b.go('http://localhost:5173/?demo&tab=agents', 4000);
+console.log('new', await b.click('button', 'New agent')); await b.sleep(2500); await b.shot('shots/x-new.png');
+await b.go('http://localhost:5173/?demo&tab=activity', 4000);
+console.log('run', await b.click('tbody tr', 'Case triage')); await b.sleep(2500); await b.shot('shots/x-run.png');
+await b.go('http://localhost:5173/?demo&tab=trust', 4000);
+console.log('ai', await b.click('button, a', 'What the AI saw')); await b.sleep(2500); await b.shot('shots/x-aisaw.png');
+console.log(await b.js(`[...document.querySelectorAll('button')].map(x=>x.textContent.trim()).filter(Boolean).slice(0,60).join(' | ')`));
+console.log(b.logs.join('\n') || 'no errors'); b.close(); process.exit(0);

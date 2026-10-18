@@ -1,0 +1,398 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Nimbus ad</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  /* Nimbus product ad. One stage, 1920x1080; render(t) sets every element for time t (seconds), so each frame is exact. */
+  :root { --navy: #0a1628; --ink: #0a2540; --violet: #7a5cff; --blurple: #533afd; --coral: #ff7a45; --pink: #f25cc4; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; width: 1920px; height: 1080px; overflow: hidden; background: #000; font-family: Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .abs { position: absolute; }
+  #stage { position: absolute; inset: 0; overflow: hidden; perspective: 2200px; background: #000; }
+  #bg { position: absolute; inset: 0; background: radial-gradient(1200px 800px at 70% 30%, #13284a 0%, #0a1628 55%, #050b16 100%); }
+  #ribbon { position: absolute; inset: -10%; width: 120%; height: 120%; mix-blend-mode: screen; }
+  #glow { position: absolute; width: 1400px; height: 1400px; border-radius: 50%; background: radial-gradient(circle, rgba(83,58,253,.35), rgba(83,58,253,0) 60%); filter: blur(10px); }
+  #grain { position: absolute; inset: -60px; opacity: .045; pointer-events: none; mix-blend-mode: overlay; }
+  #vignette { position: absolute; inset: 0; background: radial-gradient(ellipse at center, rgba(0,0,0,0) 50%, rgba(0,0,0,.6) 100%); pointer-events: none; }
+  #flare { position: absolute; width: 900px; height: 2200px; top: -560px; background: linear-gradient(90deg, rgba(255,255,255,0), rgba(255,220,200,.22), rgba(255,255,255,0)); transform: rotate(18deg); mix-blend-mode: screen; pointer-events: none; }
+  #fade { position: absolute; inset: 0; background: #000; pointer-events: none; }
+
+  /* Logo */
+  #logo { position: absolute; left: 50%; top: 50%; transform-origin: center; display: flex; flex-direction: column; align-items: center; gap: 26px; }
+  .lockup { display: flex; align-items: center; gap: 34px; }
+  .tile { width: 168px; height: 168px; border-radius: 45px; background: linear-gradient(135deg, #7a5cff, #533afd 60%, #ff7a45); display: grid; place-items: center; box-shadow: 0 30px 80px rgba(83,58,253,.45), inset 0 1px 0 rgba(255,255,255,.25); }
+  .tile svg { width: 98px; height: 98px; overflow: visible; }
+  .word { font-size: 128px; font-weight: 700; letter-spacing: -0.035em; color: #fff; overflow: hidden; line-height: 1.05; padding-bottom: 6px; }
+  .word span { display: inline-block; }
+  .tag { font-size: 40px; font-weight: 500; color: #c8d3ea; letter-spacing: -0.01em; }
+
+  /* Headlines (full-screen beats) */
+  .head { position: absolute; left: 0; right: 0; top: 50%; text-align: center; font-weight: 750; font-size: 112px; letter-spacing: -0.04em; line-height: 1.04; color: #fff; }
+  .head em { font-style: normal; background: linear-gradient(90deg, #b9a8ff, #f6a6e3 50%, #ffb38e); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .head .sub { display: block; margin-top: 26px; font-size: 40px; font-weight: 500; letter-spacing: -0.01em; color: #9fb0cc; }
+  .big { font-size: 220px; letter-spacing: -0.05em; }
+
+  /* Product window */
+  #win { position: absolute; left: 240px; top: 64px; width: 1440px; height: 940px; transform-style: preserve-3d; transform-origin: 50% 50%; }
+  .chrome { position: absolute; inset: 0; border-radius: 18px; overflow: hidden; background: #fff; box-shadow: 0 60px 160px rgba(0,0,0,.6), 0 0 0 1px rgba(255,255,255,.12); }
+  .bar { position: absolute; left: 0; right: 0; top: 0; height: 40px; background: #f3f5f9; border-bottom: 1px solid #e3e8ee; display: flex; align-items: center; gap: 8px; padding-left: 16px; z-index: 3; }
+  .bar i { width: 12px; height: 12px; border-radius: 50%; display: block; }
+  .url { position: absolute; left: 50%; transform: translateX(-50%); height: 24px; width: 420px; border-radius: 7px; background: #fff; border: 1px solid #e3e8ee; font-size: 13px; color: #5b6b82; display: flex; align-items: center; justify-content: center; gap: 7px; }
+  .viewport { position: absolute; left: 0; right: 0; top: 40px; bottom: 0; overflow: hidden; background: #fff; }
+  #content { position: absolute; left: 0; top: 0; width: 1440px; height: 900px; transform-origin: 0 0; }
+  #content img { position: absolute; left: 0; top: 0; width: 1440px; height: 900px; }
+  .spot { position: absolute; border-radius: 14px; box-shadow: 0 0 0 4000px rgba(10,22,40,.55); pointer-events: none; }
+  .ring { position: absolute; border-radius: 12px; border: 3px solid #7a5cff; box-shadow: 0 0 0 6px rgba(122,92,255,.25), 0 0 40px rgba(122,92,255,.5); pointer-events: none; }
+  .typed { position: absolute; background: #fff; border: 1.5px solid #533afd; border-radius: 10px; padding: 10px 14px; font-size: 14.5px; line-height: 1.45; color: #0a2540; box-shadow: 0 0 0 4px rgba(83,58,253,.15); }
+  .caret { display: inline-block; width: 2px; height: 17px; background: #533afd; vertical-align: -3px; margin-left: 1px; }
+  .okbtn { position: absolute; border-radius: 6px; background: #12a150; color: #fff; font-size: 13px; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 6px; }
+  .toast { position: absolute; background: #0a2540; color: #fff; border-radius: 10px; padding: 12px 16px; font-size: 14px; font-weight: 500; display: flex; align-items: center; gap: 10px; box-shadow: 0 12px 30px rgba(10,37,64,.35); white-space: nowrap; }
+  .toast b { color: #6ee7a8; font-weight: 700; }
+  .restored { position: absolute; background: rgba(240,253,244,.94); border: 1.5px solid #12a150; border-radius: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: #0b6b35; font-weight: 600; font-size: 18px; }
+  .restored small { font-size: 13px; font-weight: 500; color: #3c6e52; }
+  .mask { position: absolute; background: #0a2540; color: #fff; border-radius: 10px; padding: 12px 18px; font: 600 17px 'SFMono-Regular', ui-monospace, Menlo, monospace; box-shadow: 0 16px 40px rgba(10,37,64,.35); white-space: nowrap; }
+  .mask .to { color: #b9a8ff; }
+  #cursor { position: absolute; width: 30px; height: 30px; left: 0; top: 0; transform-origin: 0 0; z-index: 20; }
+  .ripple { position: absolute; border-radius: 50%; border: 3px solid rgba(83,58,253,.85); pointer-events: none; }
+
+  /* Captions */
+  #cap { position: absolute; left: 50%; bottom: 52px; transform: translateX(-50%); padding: 16px 30px; border-radius: 999px; background: rgba(10,22,40,.72); backdrop-filter: blur(18px); border: 1px solid rgba(255,255,255,.14); color: #fff; font-size: 30px; font-weight: 600; letter-spacing: -0.015em; white-space: nowrap; box-shadow: 0 20px 50px rgba(0,0,0,.35); z-index: 30; }
+
+  /* Slack */
+  #slack { position: absolute; width: 760px; border-radius: 16px; background: #fff; box-shadow: 0 50px 140px rgba(0,0,0,.6), 0 0 0 1px rgba(0,0,0,.06); overflow: hidden; z-index: 25; }
+  .sl-top { height: 46px; background: #3f0e40; display: flex; align-items: center; gap: 10px; padding: 0 18px; color: #fff; font-weight: 700; font-size: 16px; }
+  .sl-top span { font-weight: 400; opacity: .7; }
+  .sl-body { padding: 22px 24px 24px; display: flex; gap: 14px; }
+  .sl-av { width: 46px; height: 46px; border-radius: 9px; background: linear-gradient(135deg, #7a5cff, #533afd 60%, #ff7a45); display: grid; place-items: center; flex: none; }
+  .sl-av svg { width: 28px; height: 28px; }
+  .sl-name { font-weight: 800; font-size: 17px; color: #1d1c1d; }
+  .sl-name small { font-weight: 400; color: #616061; font-size: 13px; margin-left: 6px; }
+  .sl-app { display: inline-block; font-size: 11px; font-weight: 700; background: #e8e8e8; color: #616061; border-radius: 3px; padding: 1px 4px; margin-left: 6px; vertical-align: 2px; }
+  .sl-text { font-size: 17px; color: #1d1c1d; line-height: 1.5; margin-top: 4px; }
+  .sl-text ul { margin: 6px 0 0; padding-left: 22px; }
+  .sl-ctx { font-size: 14px; color: #616061; margin-top: 10px; }
+  .sl-btns { display: flex; gap: 10px; margin-top: 14px; }
+  .sl-btn { height: 38px; padding: 0 18px; border-radius: 6px; border: 1px solid #bbb; font-weight: 700; font-size: 15px; display: flex; align-items: center; color: #1d1c1d; background: #fff; }
+  .sl-btn.ok { background: #007a5a; border-color: #007a5a; color: #fff; }
+  .sl-btn.no { color: #e01e5a; border-color: #e01e5a; }
+  .sl-done { font-size: 15px; color: #1d1c1d; margin-top: 12px; display: flex; align-items: center; gap: 8px; }
+
+  /* End card */
+  #pills { position: absolute; left: 50%; transform: translateX(-50%); display: flex; gap: 14px; }
+  .pill { padding: 12px 22px; border-radius: 999px; border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06); color: #dbe4f5; font-size: 24px; font-weight: 500; white-space: nowrap; }
+  #cta { position: absolute; left: 50%; transform: translateX(-50%); padding: 22px 46px; border-radius: 14px; background: #533afd; color: #fff; font-size: 34px; font-weight: 700; letter-spacing: -0.01em; box-shadow: 0 20px 60px rgba(83,58,253,.6); white-space: nowrap; }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="bg"></div>
+  <div id="glow"></div>
+  <svg id="ribbon" viewBox="0 0 2304 1296" preserveAspectRatio="none"><defs>
+    <linearGradient id="rg" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#7a5cff" stop-opacity="0"/><stop offset=".35" stop-color="#9a7bff"/><stop offset=".65" stop-color="#f25cc4"/><stop offset="1" stop-color="#ff9a5c" stop-opacity=".2"/></linearGradient>
+  </defs><g id="rlines" fill="none" stroke="url(#rg)" stroke-width="1.6"></g></svg>
+
+  <div id="vignette"></div>
+
+  <!-- Logo -->
+  <div id="logo">
+    <div class="lockup">
+      <div class="tile" id="tile"><svg viewBox="2 2 28 28">
+        <mask id="cm"><rect x="0" y="0" width="32" height="32" fill="#fff"/><circle cx="16" cy="24.44" r="4.4" fill="#000"/></mask>
+        <g id="cloud" style="transform-origin: 16px 16px"><path d="M8.33 23.94a6 6 0 0 1-1.1-11.9 8 8 0 0 1 15.3-2.1 6.6 6.6 0 0 1 .4 13.9Z" fill="#fff" mask="url(#cm)"/></g>
+        <circle id="dot" cx="16" cy="24.44" r="2.5" fill="#fff"/>
+      </svg></div>
+      <div class="word" id="word"></div>
+    </div>
+    <div class="tag" id="tag">AI agents for Salesforce</div>
+  </div>
+
+  <!-- Headlines -->
+  <div class="head" id="h1">Cases pile up.</div>
+  <div class="head" id="h2">Leads go cold.</div>
+  <div class="head" id="h3"><span class="big"><em id="h3num">$0.0M</em></span><span class="sub">of pipeline, stuck past its close date.</span></div>
+  <div class="head" id="h4">Describe the job.<span class="sub">Nimbus builds the agent.</span></div>
+  <div class="head" id="h5">Nothing changes<br><em>until you say so.</em></div>
+  <div class="head" id="h6">Changed your mind?</div>
+  <div class="head" id="h7">Your data <em>stays yours.</em></div>
+  <div class="head" id="h8">See what's working.</div>
+
+  <!-- Product window -->
+  <div id="win">
+    <div class="chrome">
+      <div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i>
+        <div class="url"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#5b6b82" stroke-width="2.4"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Nimbus · AI agents for Salesforce</div></div>
+      <div class="viewport"><div id="content">
+        <img id="i-builder" src="shots/builder.png"><img id="i-built" src="shots/builder-built.png"><img id="i-agent" src="shots/agent.png">
+        <img id="i-approvals" src="shots/approvals.png"><img id="i-run" src="shots/run.png"><img id="i-trust" src="shots/trust.png">
+        <img id="i-insights" src="shots/insights.png"><img id="i-discover" src="shots/discover.png"><img id="i-impact" src="shots/impact.png">
+        <div class="spot" id="spot"></div>
+        <div class="ring" id="ring"></div>
+        <div class="typed" id="typed"><span id="typedText"></span><span class="caret" id="caret"></span></div>
+        <div class="okbtn" id="okbtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 7"/></svg>Approved</div>
+        <div class="toast" id="toast1"><b>✓</b> Approved · 2 changes made in Salesforce</div>
+        <div class="restored" id="restored"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#12a150" stroke-width="2.4"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>3 changes undone<small>Old values are back · later edits by people are kept</small></div>
+        <div class="toast" id="toast2"><b>↺</b> Restored in Salesforce</div>
+        <div class="mask" id="mask"></div>
+        <div class="ripple" id="ripple"></div>
+        <svg id="cursor" viewBox="0 0 30 30"><path d="M5 3l18 11.5-8.2 1.7L10.6 25z" fill="#0a2540" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg>
+      </div></div>
+    </div>
+  </div>
+
+  <!-- Slack -->
+  <div id="slack">
+    <div class="sl-top"># approvals <span>· Northwind</span></div>
+    <div class="sl-body">
+      <div class="sl-av"><svg viewBox="2 2 28 28"><mask id="cm2"><rect x="0" y="0" width="32" height="32" fill="#fff"/><circle cx="16" cy="24.44" r="4.4" fill="#000"/></mask><path d="M8.33 23.94a6 6 0 0 1-1.1-11.9 8 8 0 0 1 15.3-2.1 6.6 6.6 0 0 1 .4 13.9Z" fill="#fff" mask="url(#cm2)"/><circle cx="16" cy="24.44" r="2.5" fill="#fff"/></svg></div>
+      <div style="flex:1">
+        <div class="sl-name">Nimbus<span class="sl-app">APP</span><small>9:41 AM</small></div>
+        <div class="sl-text"><b>Case triage needs approval</b><br>Approve these changes?<ul><li>Case 00001042: Priority Medium → High</li><li>Create Task "Triage: Billing" for the owner</li></ul></div>
+        <div class="sl-ctx">For support leads · Nothing changes until someone decides</div>
+        <div class="sl-btns" id="slBtns"><div class="sl-btn ok" id="slOk">Approve</div><div class="sl-btn no">Reject</div><div class="sl-btn">Open in Nimbus</div></div>
+        <div class="sl-done" id="slDone">✅ <b>Approved</b> by maria.gonzalez@northwind.example in Slack</div>
+      </div>
+    </div>
+  </div>
+  <svg id="cursor2" class="abs" viewBox="0 0 30 30" style="width:34px;height:34px;z-index:40"><path d="M5 3l18 11.5-8.2 1.7L10.6 25z" fill="#0a2540" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg>
+  <div class="ripple" id="ripple2" style="z-index:39"></div>
+
+  <div id="cap"></div>
+  <div id="pills"><div class="pill">Approval before every change</div><div class="pill">One-click undo</div><div class="pill">No Agentforce licence needed</div></div>
+  <div id="cta">Start free</div>
+
+  <svg id="grain"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg>
+  <div id="flare"></div>
+  <div id="fade"></div>
+</div>
+
+<script id="targets" type="application/json">__TARGETS__</script>
+<script>
+const T = JSON.parse(document.getElementById('targets').textContent);
+// ---------- helpers ----------
+const $ = (id) => document.getElementById(id);
+const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
+const lerp = (a, b, k) => a + (b - a) * k;
+const E = {
+  inOut: (k) => (k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2),
+  out: (k) => 1 - Math.pow(1 - k, 3),
+  outQuint: (k) => 1 - Math.pow(1 - k, 5),
+  in: (k) => k * k * k,
+  back: (k) => { const c1 = 1.70158, c3 = c1 + 1; return 1 + c3 * Math.pow(k - 1, 3) + c1 * Math.pow(k - 1, 2); },
+  bounce: (k) => { const n = 7.5625, d = 2.75; if (k < 1 / d) return n * k * k; if (k < 2 / d) return n * (k -= 1.5 / d) * k + .75; if (k < 2.5 / d) return n * (k -= 2.25 / d) * k + .9375; return n * (k -= 2.625 / d) * k + .984375; },
+};
+// progress of t through [a,b], eased
+const P = (t, a, b, e = E.inOut) => e(clamp((t - a) / (b - a)));
+// keyframes: [[time, {props}], ...] -> interpolated props (each segment eased)
+function K(t, keys, e = E.inOut) {
+  if (t <= keys[0][0]) return { ...keys[0][1] };
+  for (let i = 0; i < keys.length - 1; i++) {
+    const [t0, a] = keys[i], [t1, b] = keys[i + 1];
+    if (t <= t1) { const k = e(clamp((t - t0) / (t1 - t0))); const o = {}; for (const p in b) o[p] = lerp(a[p] ?? b[p], b[p], k); return o; }
+  }
+  return { ...keys[keys.length - 1][1] };
+}
+// in/out envelope: fades in over [a, a+fi], out over [b-fo, b]
+const env = (t, a, b, fi = .5, fo = .5) => Math.min(P(t, a, a + fi, E.out), 1 - P(t, b - fo, b, E.in));
+const set = (el, s) => { for (const k in s) el.style[k] = s[k]; };
+const show = (el, o) => { el.style.opacity = o; el.style.visibility = o > 0.001 ? 'visible' : 'hidden'; };
+const center = (r) => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 });
+
+// ---------- static setup ----------
+const word = $('word'); word.innerHTML = 'Nimbus'.split('').map((c) => `<span>${c}</span>`).join('');
+const rl = $('rlines');
+const LINES = 46;
+for (let i = 0; i < LINES; i++) { const p = document.createElementNS('http://www.w3.org/2000/svg', 'path'); p.setAttribute('opacity', (0.15 + 0.6 * Math.sin(Math.PI * i / LINES)).toFixed(2)); rl.appendChild(p); }
+function ribbon(t, strength) {
+  const ps = rl.children;
+  for (let i = 0; i < ps.length; i++) {
+    const o = i * 21, w = Math.sin(t * .35 + i * .09) * 80;
+    ps[i].setAttribute('d', `M ${-100 + o} ${1450 - o * .2} C ${700 + w + o * .5} ${1100 - o * .8}, ${1100 - w + o} ${300 + o * .6 + w}, ${2500 + o * .3} ${-120 + o * .9}`);
+  }
+  $('ribbon').style.opacity = strength;
+}
+const imgs = ['builder', 'built', 'agent', 'approvals', 'run', 'trust', 'insights', 'discover', 'impact'];
+
+// camera inside the window: zoom z, focus point (fx, fy) in page px; clamped so the page edges never show
+function cam(z, fx, fy) {
+  const vw = 1440, vh = 900;
+  let tx = vw / 2 - fx * z, ty = vh / 2 - fy * z;
+  tx = Math.min(0, Math.max(vw - vw * z, tx)); ty = Math.min(0, Math.max(vh - vh * z, ty));
+  $('content').style.transform = `translate(${tx}px, ${ty}px) scale(${z})`;
+  return { z };
+}
+// window placement: 3D tilt, depth, offset
+function win(o) {
+  $('win').style.transform = `translate3d(${o.x || 0}px, ${o.y || 0}px, ${o.zz || 0}px) rotateX(${o.rx || 0}deg) rotateY(${o.ry || 0}deg) rotateZ(${o.rz || 0}deg) scale(${o.s ?? 1})`;
+  $('win').style.filter = o.blur ? `blur(${o.blur}px)` : 'none';
+  show($('win'), o.o ?? 1);
+}
+function cursorAt(x, y, z, o) { const c = $('cursor'); c.style.transform = `translate(${x}px, ${y}px) scale(${1 / z})`; show(c, o); }
+function ripple(el, x, y, k, z = 1) { const r = 10 + 46 * k; set(el, { left: x - r / z + 'px', top: y - r / z + 'px', width: 2 * r / z + 'px', height: 2 * r / z + 'px', borderWidth: 3 / z + 'px' }); show(el, k > 0 && k < 1 ? 1 - k : 0); }
+function box(el, r, pad = 8) { set(el, { left: r.x - pad + 'px', top: r.y - pad + 'px', width: r.w + 2 * pad + 'px', height: r.h + 2 * pad + 'px' }); }
+function caption(t, list) {
+  let txt = '', o = 0, top = false;
+  for (const [a, b, s, pos] of list) { const e = env(t, a, b, .45, .4); if (e > o) { o = e; txt = s; top = pos === 'top'; } }
+  const c = $('cap'); if (c.textContent !== txt) c.textContent = txt;
+  set(c, { bottom: top ? 'auto' : '52px', top: top ? '28px' : 'auto' });
+  c.style.opacity = o; c.style.transform = `translateX(-50%) translateY(${(1 - o) * (top ? -18 : 18)}px)`;
+}
+function headline(id, t, a, b) {
+  const el = $(id); const k = env(t, a, b, .55, .45);
+  const inK = P(t, a, a + .7, E.outQuint), outK = P(t, b - .45, b, E.in);
+  set(el, { transform: `translateY(calc(-50% + ${(1 - inK) * 40 - outK * 30}px)) scale(${1 + outK * .04})`, filter: `blur(${(1 - inK) * 16 + outK * 14}px)`, letterSpacing: `${-0.04 + (1 - inK) * .02}em` });
+  show(el, k);
+}
+function scramble(from, to, k) {
+  // characters settle left to right into the masked placeholder
+  const n = Math.max(from.length, to.length), chars = '▒░▓#@$%&*';
+  let s = '';
+  const kk = k * 1.3; // fully settled at k = 1
+  for (let i = 0; i < n; i++) { const th = i / n; s += kk > th + .3 ? (to[i] ?? '') : kk > th ? chars[(i * 7 + Math.floor(k * 40)) % chars.length] : (from[i] ?? ''); }
+  return s;
+}
+
+// ---------- the timeline ----------
+window.DURATION = 56;
+window.render = function (t) {
+  // background
+  ribbon(t, .25 + .35 * env(t, 0.6, 11.5, 1.2, 1) + .25 * env(t, 47.5, 56, 1, 1.5));
+  const g = $('glow'); g.style.transform = `translate(${600 + Math.sin(t * .25) * 260}px, ${-260 + Math.cos(t * .2) * 120}px)`;
+  $('grain').style.transform = `translate(${(Math.floor(t * 24) * 37) % 60 - 30}px, ${(Math.floor(t * 24) * 53) % 60 - 30}px)`;
+  // flares at scene cuts
+  const fl = [4.3, 11.0, 19.6, 26.6, 33.6, 40.0, 47.6].map((s) => P(t, s, s + 1.1, E.inOut)).find((k) => k > 0 && k < 1) ?? 0;
+  set($('flare'), { left: `${-1000 + fl * 3200}px`, opacity: fl > 0 && fl < 1 ? Math.sin(fl * Math.PI) : 0 });
+  $('fade').style.opacity = 1 - P(t, 0, 0.9, E.out) + P(t, 54.6, 56, E.inOut);
+
+  // ----- 1. logo (0-5) and end card (48-56) -----
+  const logoOn = t < 5.2 ? 1 : t > 48 ? 1 : 0;
+  const L = $('logo'); show(L, logoOn);
+  if (logoOn) {
+    const s0 = t < 5.2 ? 0.6 : 48.4; // start of assembly
+    const tile = P(t, s0, s0 + 1.0, E.outQuint), cloud = P(t, s0 + .35, s0 + 1.3, E.back), dot = P(t, s0 + 1.0, s0 + 1.7, E.bounce);
+    set($('tile'), { transform: `scale(${.7 + .3 * tile}) rotate(${(1 - tile) * -8}deg)`, filter: `blur(${(1 - tile) * 18}px)`, opacity: tile });
+    $('cloud').style.transform = `scale(${.4 + .6 * cloud})`; $('cloud').style.opacity = clamp(cloud * 1.5);
+    $('dot').setAttribute('cy', (16 + 8.44 * dot).toFixed(2)); $('dot').style.opacity = dot > 0 ? 1 : 0;
+    [...word.children].forEach((c, i) => { const k = P(t, s0 + 1.1 + i * .07, s0 + 1.75 + i * .07, E.outQuint); set(c, { transform: `translateY(${(1 - k) * 110}%)`, opacity: k }); });
+    const tg = P(t, s0 + 1.9, s0 + 2.6, E.out); set($('tag'), { opacity: tg, transform: `translateY(${(1 - tg) * 16}px)`, filter: `blur(${(1 - tg) * 6}px)` });
+    // intro exits by zooming through; end card lifts the lockup to make room
+    const out = t < 5.2 ? P(t, 4.2, 5.1, E.in) : 0;
+    const lift = t > 48 ? P(t, 50.2, 51.1, E.inOut) : 0;
+    set(L, { transform: `translate(-50%, calc(-50% - ${lift * 120}px)) scale(${1 + out * .9})`, filter: `blur(${out * 26}px)`, opacity: 1 - out });
+  }
+  const pills = P(t, 50.8, 51.6, E.out); set($('pills'), { top: '640px', opacity: pills, transform: `translateX(-50%) translateY(${(1 - pills) * 20}px)` });
+  const cta = P(t, 51.6, 52.3, E.back); set($('cta'), { top: '760px', opacity: clamp(cta), transform: `translateX(-50%) scale(${.85 + .15 * cta})`, boxShadow: `0 20px ${60 + 30 * Math.sin(t * 4)}px rgba(83,58,253,${.45 + .2 * Math.sin(t * 4)})` });
+
+  // ----- 2. problem (5-11) -----
+  headline('h1', t, 5.0, 6.9); headline('h2', t, 6.9, 8.8); headline('h3', t, 8.8, 11.1);
+  $('h3num').textContent = `$${(2.6 * P(t, 9.0, 10.3, E.out)).toFixed(1)}M`;
+
+  // ----- headlines between product beats -----
+  headline('h4', t, 11.1, 12.7); headline('h5', t, 19.5, 21.0); headline('h6', t, 26.5, 27.9); headline('h7', t, 33.5, 35.0); headline('h8', t, 40.0, 41.4);
+
+  // ----- product window -----
+  let W = { o: 0 }, C = { z: 1, fx: 720, fy: 450 }, img = null, img2 = null, mix = 0;
+  const hide = ['spot', 'ring', 'typed', 'okbtn', 'toast1', 'restored', 'toast2', 'mask', 'ripple', 'cursor'];
+  hide.forEach((id) => show($(id), 0));
+  show($('slack'), 0); show($('cursor2'), 0); show($('ripple2'), 0);
+
+  if (t >= 12.3 && t < 19.8) {
+    // 3. Build: type the request, then the agent appears
+    const inK = P(t, 12.3, 13.4, E.outQuint), outK = P(t, 19.2, 19.8, E.in);
+    W = { o: Math.min(inK * 1.4, 1) * (1 - outK), y: (1 - inK) * 160, zz: (1 - inK) * -500, rx: (1 - inK) * 22, ry: (1 - inK) * -6, blur: outK * 14, s: 1 + outK * .08 };
+    const inp = T.builder.input;
+    if (t < 16.7) {
+      img = 'builder';
+      C = K(t, [[12.3, { z: 1, fx: 720, fy: 450 }], [13.3, { z: 1, fx: 720, fy: 450 }], [14.2, { z: 1.55, fx: 300, fy: 720 }], [16.7, { z: 1.6, fx: 300, fy: 720 }]]);
+      const cz = C.z;
+      const cp = K(t, [[13.2, { x: 700, y: 520 }], [14.3, { x: inp.x + 60, y: inp.y + 28 }]]);
+      cursorAt(cp.x, cp.y, cz, env(t, 13.1, 16.4, .3, .3));
+      ripple($('ripple'), inp.x + 60, inp.y + 28, P(t, 14.35, 14.9, E.out), cz);
+      const full = 'When a new case comes in, sort it by urgency and create a follow-up task for the owner';
+      const n = Math.floor(full.length * P(t, 14.5, 16.3, (k) => k));
+      $('typedText').textContent = full.slice(0, n);
+      set($('typed'), { left: inp.x + 'px', top: inp.y - 34 + 'px', width: inp.w + 'px', minHeight: inp.h + 34 + 'px' });
+      show($('typed'), P(t, 14.4, 14.6)); $('caret').style.opacity = Math.floor(t * 2.5) % 2 ? 1 : 0.15;
+    } else if (t < 17.5) {
+      img = 'built'; img2 = 'agent'; mix = P(t, 17.05, 17.2);
+      W.blur = 12 * Math.sin(Math.PI * P(t, 16.75, 17.5, (x) => x)); W.s = 1 + .05 * Math.sin(Math.PI * P(t, 16.75, 17.5, (x) => x));
+      C = K(t, [[16.7, { z: 1.6, fx: 300, fy: 720 }], [17.0, { z: 1.3, fx: 260, fy: 300 }], [17.5, { z: 1.0, fx: 720, fy: 450 }]]);
+    } else {
+      img = 'agent';
+      const st = T.agent.steps;
+      C = K(t, [[17.5, { z: 1.0, fx: 720, fy: 450 }], [19.4, { z: 1.22, fx: st.x + st.w / 2 + 160, fy: st.y + 90 }]]);
+    }
+    caption(t, [[13.0, 16.6, 'Say it in plain English.', 'top'], [17.3, 19.4, 'Get a working agent, step by step.']]);
+  } else if (t >= 20.7 && t < 26.7) {
+    // 4. Approve, in the app and in Slack
+    img = 'approvals';
+    const inK = P(t, 20.7, 21.7, E.outQuint), slackK = P(t, 24.2, 25.0, E.inOut), outK = P(t, 26.2, 26.7, E.in);
+    W = { o: Math.min(inK * 1.4, 1) * (1 - outK), y: (1 - inK) * 120 + slackK * 30, zz: (1 - inK) * -400 - slackK * 260, ry: (1 - inK) * 10 + slackK * 16, rx: slackK * 4, x: -slackK * 300, blur: slackK * 3 + outK * 10 };
+    const card = T.approvals.card, ap = T.approvals.approve;
+    C = K(t, [[20.7, { z: 1, fx: 720, fy: 450 }], [21.5, { z: 1, fx: 720, fy: 450 }], [22.4, { z: 1.48, fx: card.x + card.w / 2, fy: card.y + card.h / 2 + 24 }]]);
+    box($('spot'), card, 10); show($('spot'), env(t, 21.9, 24.4, .5, .5));
+    const cp = K(t, [[22.4, { x: 980, y: 620 }], [23.2, { x: ap.x + 40, y: ap.y + 18 }]]);
+    cursorAt(cp.x, cp.y, C.z, env(t, 22.3, 24.2, .3, .3));
+    ripple($('ripple'), ap.x + 40, ap.y + 18, P(t, 23.3, 23.8, E.out), C.z);
+    box($('okbtn'), ap, 0); show($('okbtn'), P(t, 23.35, 23.5));
+    set($('toast1'), { left: ap.x - 40 + 'px', top: ap.y + 52 + 'px', transform: `translateY(${(1 - P(t, 23.5, 23.9, E.back)) * 14}px)` }); show($('toast1'), env(t, 23.5, 24.6, .3, .3));
+    // Slack card
+    const sk = P(t, 24.3, 25.1, E.outQuint), sOut = P(t, 26.2, 26.7, E.in);
+    set($('slack'), { left: `${1060 + (1 - sk) * 600}px`, top: '300px', transform: `perspective(1600px) rotateY(${(1 - sk) * -24}deg) scale(${1 + sOut * .06})`, filter: `blur(${sOut * 10}px)` });
+    show($('slack'), Math.min(sk * 1.3, 1) * (1 - sOut));
+    const okR = $('slOk').getBoundingClientRect(); const slOk = { x: okR.x + okR.width * .45, y: okR.y + okR.height * .55 }; // the Approve button, wherever the card is
+    const c2 = K(t, [[24.9, { x: 1500, y: 860 }], [25.6, { x: slOk.x, y: slOk.y }]]);
+    set($('cursor2'), { left: c2.x + 'px', top: c2.y + 'px' }); show($('cursor2'), env(t, 24.9, 26.4, .25, .3));
+    const rk = P(t, 25.7, 26.2, E.out); const r = 10 + 46 * rk; set($('ripple2'), { left: slOk.x - r + 'px', top: slOk.y - r + 'px', width: 2 * r + 'px', height: 2 * r + 'px' }); show($('ripple2'), rk > 0 && rk < 1 ? 1 - rk : 0);
+    const done = P(t, 25.75, 25.9); show($('slBtns'), 1 - done); $('slBtns').style.display = done >= 1 ? 'none' : 'flex'; show($('slDone'), done); $('slDone').style.display = done >= 1 ? 'flex' : 'none';
+    caption(t, [[21.6, 24.2, 'Every change waits for a person.'], [24.6, 26.4, 'Or approve right in Slack.']]);
+  } else if (t >= 27.7 && t < 33.8) {
+    // 5. Undo
+    img = 'run';
+    const inK = P(t, 27.7, 28.7, E.outQuint), outK = P(t, 33.2, 33.8, E.in);
+    W = { o: Math.min(inK * 1.4, 1) * (1 - outK), y: (1 - inK) * 120, zz: (1 - inK) * -400, rx: (1 - inK) * -14, blur: outK * 12, s: 1 + outK * .08 };
+    const ch = T.run.changes, ud = T.run.undo;
+    C = K(t, [[27.7, { z: 1, fx: 720, fy: 450 }], [28.5, { z: 1, fx: 720, fy: 450 }], [29.5, { z: 1.62, fx: ch.x + ch.w / 2, fy: ch.y + ch.h / 2 - 20 }]]);
+    box($('spot'), { x: ch.x, y: ch.y, w: ch.w, h: ch.h }, 8); show($('spot'), env(t, 29.0, 32.9, .5, .4));
+    const cp = K(t, [[29.6, { x: ch.x + 160, y: ch.y + 260 }], [30.4, { x: ud.x + 60, y: ud.y + 13 }]]);
+    cursorAt(cp.x, cp.y, C.z, env(t, 29.5, 31.4, .3, .3));
+    ripple($('ripple'), ud.x + 60, ud.y + 13, P(t, 30.5, 31.0, E.out), C.z);
+    const rs = P(t, 30.7, 31.2, E.out);
+    set($('restored'), { left: ch.x + 8 + 'px', top: ch.y + 44 + 'px', width: ch.w - 16 + 'px', height: ch.h - 60 + 'px', transform: `scale(${.96 + .04 * rs})` }); show($('restored'), rs);
+    caption(t, [[28.6, 30.4, 'Every change is logged with its old value.'], [30.8, 33.2, 'Undo it in one click.']]);
+  } else if (t >= 34.7 && t < 40.4) {
+    // 6. Trust: masking
+    img = 'trust';
+    const inK = P(t, 34.7, 35.8, E.outQuint), outK = P(t, 39.8, 40.4, E.in);
+    W = { o: Math.min(inK * 1.4, 1) * (1 - outK), y: (1 - inK) * 120, zz: (1 - inK) * -500, ry: (1 - inK) * -14 + Math.sin(t * .6) * 1.2, blur: outK * 12, s: 1 + outK * .08 };
+    const m = T.trust.masked;
+    C = K(t, [[34.7, { z: 1, fx: 720, fy: 450 }], [35.8, { z: 1.05, fx: 720, fy: 420 }], [36.8, { z: 1.85, fx: m.x + m.w / 2 + 60, fy: m.y + m.h / 2 + 40 }]]);
+    box($('ring'), m, 10); show($('ring'), env(t, 36.6, 39.6, .4, .4));
+    const k = P(t, 37.6, 38.9, (x) => x);
+    $('mask').innerHTML = `<span class="to">→</span> ${scramble('maria.gonzalez@northwind.example', '[EMAIL_1]', k)}`;
+    set($('mask'), { left: m.x + m.w + 'px', top: m.y - 66 + 'px', transform: `translateX(-100%) translateY(${(1 - P(t, 37.0, 37.5, E.back)) * 16}px)` }); show($('mask'), env(t, 37.0, 39.7, .35, .35));
+    caption(t, [[35.8, 39.6, 'Personal data is masked before the AI sees it.']]);
+  } else if (t >= 41.3 && t < 48.1) {
+    // 7. Montage
+    const parts = [['insights', 41.3, 43.7, T.insights.briefing, 1.35, 'A plain-English briefing, every morning.'], ['discover', 43.7, 45.9, T.discover.total, 1.45, 'Find the work worth automating.'], ['impact', 45.9, 48.1, { x: 172, y: 231, w: 1096, h: 120 }, 1.28, 'Prove the return.']];
+    const cur = parts.find((p) => t < p[2]) ?? parts[2];
+    const [name, a, b, r, z] = cur;
+    img = name;
+    const inK = P(t, a, a + .55, E.outQuint), outK = P(t, b - .45, b, E.in);
+    const dir = parts.indexOf(cur) % 2 ? -1 : 1;
+    W = { o: Math.min(inK * 1.6, 1) * (1 - outK), x: (1 - inK) * 380 * dir - outK * 380 * dir, ry: (1 - inK) * -18 * dir + outK * 18 * dir, zz: -outK * 200, blur: (1 - inK) * 10 + outK * 10, s: .98 };
+    C = K(t, [[a, { z: 1.05, fx: 720, fy: 450 }], [a + .5, { z: 1.05, fx: 720, fy: 450 }], [b - .2, { z, fx: r.x + r.w / 2, fy: r.y + r.h / 2 }]]);
+    caption(t, parts.map((p) => [p[1] + .4, p[2] - .2, p[5]]));
+  } else {
+    caption(t, []);
+  }
+  if (img) {
+    imgs.forEach((n) => show($('i-' + n), n === img ? 1 : n === img2 ? mix : 0));
+    if (img2) $('i-' + img).style.opacity = 1;
+  }
+  win(W); cam(C.z, C.fx, C.fy);
+};
+</script>
+</body>
+</html>

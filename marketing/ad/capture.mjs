@@ -1,0 +1,20 @@
+// Final screen captures for the ad: real Nimbus screens (demo mode, agentforce demo data) at 2x for sharp zooms.
+import { open } from './cdp.mjs';
+const b = await open(process.cwd(), 1440, 900, 2);
+const go = (t, w = 4500) => b.go(`http://localhost:5173/?demo&tab=${t}`, w);
+const hideScroll = () => b.js(`(() => { const s = document.createElement('style'); s.textContent = '*::-webkit-scrollbar{display:none!important} *{scrollbar-width:none!important}'; document.head.appendChild(s); })()`);
+const shot = async (n) => { await hideScroll(); await b.sleep(300); await b.shot(`shots/${n}.png`); console.log('shot', n); };
+await go('home'); await shot('home');
+await go('discover'); await shot('discover');
+await go('agents'); await shot('agents');
+await b.click('tbody tr', 'Case triage'); await b.sleep(2500); await shot('agent');
+await go('agents'); await b.click('button', 'New agent'); await b.sleep(2500); await shot('builder');
+console.log('suggestion', await b.click('button', 'When a new case comes in')); await b.sleep(6000); await shot('builder-built');
+await go('approvals'); await shot('approvals');
+await go('activity'); await b.click('tbody tr', 'Case triage'); await b.sleep(2500); await shot('run');
+await go('trust'); await shot('trust');
+await go('insights'); await shot('insights');
+await go('impact'); await shot('impact');
+await go('dashboards'); console.log('dash', await b.click('button, a, div', 'Sales & Service Overview')); await b.sleep(4500); await shot('dashboard');
+await b.go('http://localhost:5173/', 6000); await shot('landing');
+console.log(b.logs.join('\n') || 'no errors'); b.close(); process.exit(0);
