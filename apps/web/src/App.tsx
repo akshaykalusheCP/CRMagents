@@ -14,7 +14,7 @@ import { ContactPage } from './pages/Contact';
 import { AdminConsole } from './pages/Admin';
 import { LEGAL_PATHS, LegalPage } from './pages/Legal';
 import { Ribbon, type RibbonPalette } from './components/Ribbon';
-import { SettingsHub, type SettingsSection } from './pages/SettingsHub';
+import { SETTINGS_SECTIONS, SettingsHub, type SettingsSection } from './pages/SettingsHub';
 import { AlertsBell } from './components/AlertsBell';
 import { LinkPrompt } from './components/PersonLink';
 import { LockedPage, PlanProvider, PlanTag, TrialBanner, UpgradePrompt, usePlanState } from './components/Plan';
@@ -119,7 +119,7 @@ export function App() {
   const [layout, setLayout] = useState<'top' | 'side'>(() => { try { return localStorage.getItem('layout') === 'side' ? 'side' : 'top'; } catch { return 'top'; } });
   const switchLayout = () => { const next = layout === 'top' ? 'side' : 'top'; setLayout(next); try { localStorage.setItem('layout', next); } catch { /* ignore */ } };
   const [cmdk, setCmdk] = useState(false);
-  const [settingsAt, setSettingsAt] = useState<{ section: SettingsSection; connect?: boolean; n: number }>({ section: new URLSearchParams(location.search).has('billing') ? 'plan' : 'orgs', n: 0 }); // back from Stripe: the Plan page
+  const [settingsAt, setSettingsAt] = useState<{ section: SettingsSection; connect?: boolean; n: number }>({ section: new URLSearchParams(location.search).has('billing') ? 'plan' : (SETTINGS_SECTIONS.find((x) => x === new URLSearchParams(location.search).get('section')) ?? 'orgs'), n: 0 }); // back from Stripe: the Plan page
   const openSettings = (section: SettingsSection = 'orgs', connect = false) => { setSettingsAt((s) => ({ section, connect, n: s.n + 1 })); setTab('settings'); };
   const planValue = { ...planState, openPlans: () => openSettings('plan') };
   // An alert opens where it can be fixed: the org list for a disconnected org, else the agent's org and the Agents page.

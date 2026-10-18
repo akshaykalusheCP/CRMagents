@@ -24,7 +24,7 @@ shows the same controls with each workspace's live settings, and prints as a rep
 | Salesforce ↔ CRMagents | every call from the package is HMAC-SHA256 signed with a per-org secret and a timestamp (replay window) |
 | Agent safety | approvals before changes, field limits, rules checked in code, per-run limits, daily budget, monthly cap per agent |
 | Changes | every record change logged with its old values; one-click undo that never overwrites a person's later edit |
-| Webhooks | Twilio requests verified with Twilio's signature; agent webhooks with a per-agent secret |
+| Webhooks | Twilio requests verified with Twilio's signature; Slack button clicks with Slack's signing secret (5-minute window), counted only for a workspace member whose Slack email matches; agent webhooks with a per-agent secret |
 | Website chat | origin allow-list, per-visitor and per-assistant rate limits, email one-time codes before showing personal data |
 | Requests | JSON-only API (form posts accepted only on the Twilio webhook); security headers (nosniff, frame deny, referrer policy, HSTS on HTTPS); no-store on API responses |
 | Outbound calls | HTTP steps go through a guarded fetch that blocks private and internal addresses |

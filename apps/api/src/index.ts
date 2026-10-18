@@ -7,6 +7,7 @@ import { provisionOrg, registerSfBridge } from './sfbridge.js';
 import { dailyBudgetUsd } from './spend.js';
 import { grantAccessToAll, setupOrg } from './salesforce/setup.js';
 import { loadSample, removeSample, sampleStatus } from './salesforce/sample.js';
+import { registerChatApprovals } from './channels/chatApprovals.js';
 import { TOOLS } from './agent/tools.js';
 import { validateWorkflow, type Workflow } from '@crmagents/shared';
 import { runAgent } from './agent/runner.js';
@@ -72,6 +73,7 @@ registerTeam(app);
 registerTwilio(app);
 registerAudit(app);
 registerPlatform(app);
+registerChatApprovals(app);
 
 app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
   const code = err instanceof z.ZodError ? 400 : (err.statusCode ?? 500);

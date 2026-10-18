@@ -152,6 +152,8 @@ async function drive(runId: string, tenantId: string, graph: Workflow, st: RunSt
       const node = graph.nodes.find((n) => n.id === st.pending);
       const who = await resolveApprover(tenantId, env.sf, node?.config ?? {}, st.scope.trigger ?? {}).catch(() => ({ email: null, label: 'Anyone in the workspace' }));
       await pool.query('update runs set assigned_to=$2, assigned_label=$3 where id=$1', [runId, who.email, who.label]);
+      // Also to the workspace's Slack channel and Teams, if connected.
+      void import('../channels/chatApprovals.js').then((m) => m.postApproval(runId)).catch(() => undefined);
     }
     // Live update for the Salesforce panel, and a bell notification when someone needs to approve.
     void notifySalesforce(tenantId, runId);
@@ -316,7 +318,8 @@ export async function getRun(tenantId: string, runId: string): Promise<RunSnapsh
   };
 }
 
-export async function decideRun(tenantId: string, runId: string, approve: boolean, note?: string, who?: string, role?: string) {
+/** Approve or reject a waiting run. `background`: return once the decision is checked and recorded (the agent carries on). */
+export async function decideRun(tenantId: string, runId: string, approve: boolean, note?: string, who?: string, role?: string, o: { background?: boolean; where?: string } = {}) {
   const { rows } = await pool.query('select status, state, workflow_id, started_by, assigned_to from runs where id=$1 and tenant_id=$2', [runId, tenantId]);
   if (!rows[0]) throw Object.assign(new Error('run not found'), { statusCode: 404 });
   if (who) {
@@ -331,7 +334,15 @@ export async function decideRun(tenantId: string, runId: string, approve: boolea
   const { st, graph } = rows[0].state as { st: RunState; graph: Workflow };
   if (!st.pending) throw new Error('No pending approval');
   st.decision = { nodeId: st.pending, approve };
-  await pool.query("update runs set status='running', decision_note=$2, decided_at=now(), decided_by=$3, heartbeat_at=now() where id=$1", [runId, note?.trim().slice(0, 500) || null, who ?? null]);
+  // Only one decision counts, even if two people click at the same moment (app, Salesforce, Slack).
+  const { rowCount } = await pool.query("update runs set status='running', decision_note=$2, decided_at=now(), decided_by=$3, heartbeat_at=now() where id=$1 and status='waiting'", [runId, note?.trim().slice(0, 500) || null, who ?? null]);
+  if (!rowCount) throw Object.assign(new Error('Someone else already decided this one.'), { statusCode: 409 });
+  // The Slack message (if any) shows who decided, wherever they did.
+  void import('../channels/chatApprovals.js').then((m) => m.closeApproval(runId, approve, who ?? 'someone', o.where ?? 'in CRMagents')).catch(() => undefined);
+  if (o.background) {
+    void drive(runId, tenantId, graph, st, rows[0].workflow_id ?? undefined).catch(() => undefined);
+    return { runId, status: 'running' as const };
+  }
   return drive(runId, tenantId, graph, st, rows[0].workflow_id ?? undefined);
 }
 

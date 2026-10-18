@@ -25,6 +25,7 @@ export const SUBPROCESSORS: { name: string; purpose: string; data: string; when:
   { name: 'OpenAI, Google (Gemini) or another compatible provider', purpose: 'AI model, if the workspace chooses it instead', data: 'As above', when: "Only if the workspace picks it and adds its own key; that provider's terms for the workspace's account apply" },
   { name: 'Stripe', purpose: 'Payments and invoices', data: 'Billing contact, plan, payment status. Card details go to Stripe directly and never reach CRMagents', when: 'When a workspace buys a plan' },
   { name: 'Resend', purpose: 'Email from CRMagents: invitations, password resets, alerts', data: 'Recipient email address and the message', when: 'When email is sent' },
+  { name: 'Slack, Microsoft Teams', purpose: 'Approval requests in chat', data: 'The approval request: agent name, the proposed change, a link to the record', when: 'Only if the workspace connects them' },
   { name: 'Twilio', purpose: 'Text and WhatsApp messages', data: 'Recipient phone number and the message', when: 'Only if the workspace turns on text messages' },
 ];
 

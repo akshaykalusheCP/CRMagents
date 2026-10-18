@@ -5,7 +5,7 @@ import type { Role } from '@crmagents/shared';
 
 const ADMIN: RegExp[] = [
   /^\/api\/settings$/, /^\/api\/plan\/request$/, /^\/api\/billing\//, /^\/api\/oauth\/start$/, /^\/api\/team(\/|$)/, /^\/api\/impact\/assumptions$/,
-  /^\/api\/knowledge\/sources(\/|$)/,
+  /^\/api\/knowledge\/sources(\/|$)/, /^\/api\/chat-approvals(\/|$)/,
   /^T$/, // disconnecting an org (DELETE /api/tenants/:id)
   /^T\/(grant-access|package|provision|setup|sample-data)$/, /^T\/salesforce\/pages\//,
   /^T\/agents\/[^/]+\/public$/, /^T\/rules(\/|$)/,

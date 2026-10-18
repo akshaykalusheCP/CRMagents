@@ -99,9 +99,10 @@ async function byKey(key: string) {
 const EMPTY_TWIML = '<?xml version="1.0" encoding="UTF-8"?><Response></Response>';
 
 export function registerTwilio(app: FastifyInstance) {
-  // Twilio posts form fields. Only its webhook accepts them: everything else takes JSON only, which a plain
-  // cross-site HTML form can't send.
+  // Twilio and Slack post form fields. Only their webhooks accept them: everything else takes JSON only, which a
+  // plain cross-site HTML form can't send. Slack's stays raw: its signature is over the exact body.
   app.addContentTypeParser('application/x-www-form-urlencoded', { parseAs: 'string' }, (req, body, done) => {
+    if (req.url === '/public/slack/interactions') return done(null, String(body ?? ''));
     if (!req.url.startsWith('/public/twilio/')) return done(Object.assign(new Error('Unsupported content type'), { statusCode: 415 }), undefined);
     done(null, Object.fromEntries(new URLSearchParams(String(body ?? ''))));
   });

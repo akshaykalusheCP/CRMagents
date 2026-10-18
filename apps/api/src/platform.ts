@@ -6,6 +6,7 @@ import { changePlan, isPlatformAdmin, planSummary } from './plans.js';
 import { audit } from './trust/audit.js';
 import { billingConfigured } from './billing/stripe.js';
 import { mailConfig, viaResend } from './mailer.js';
+import { slackAvailable } from './channels/chatApprovals.js';
 import { PLATFORM, setSetting } from './settings.js';
 
 // Staff console (CRMagents staff, PLATFORM_ADMINS only; "Not found" for anyone else). Tracks every client: stage
@@ -282,6 +283,9 @@ export function registerPlatform(app: FastifyInstance) {
       [Number((req.params as { id: string }).id), b.status ?? null, b.notes ?? null, b.assignedTo ?? null, b.assignedTo !== undefined, req.user!.email]);
     return { ok: true };
   });
+
+  // What's switched on platform-wide (set where the app is hosted).
+  app.get('/api/platform/integrations', async () => ({ stripe: billingConfigured(), slack: slackAvailable() }));
 
   // Platform email (invitations, password resets, alerts): a Resend key and a From address, stored encrypted.
   app.get('/api/platform/email', async () => {

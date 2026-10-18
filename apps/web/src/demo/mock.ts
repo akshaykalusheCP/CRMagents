@@ -27,6 +27,9 @@ function route(method: string, url: URL, body: any): Response {
   }
   if (/^\/api\/platform\/accounts\/[^/]+\/(meta|notes|trial|plan)$/.test(p) || /^\/api\/platform\/(notes|requests)\/[^/]+$/.test(p)) return json({ ok: true });
   if (p === '/api/platform/revenue') return json(DEMO_ADMIN.revenue);
+  if (p === '/api/platform/integrations') return json({ stripe: false, slack: false });
+  if (p === '/api/chat-approvals') return json({ slack: { available: true, connected: true, team: 'Demo Company', channel: '#approvals', by: 'owner@demo-company.com' }, teams: { connected: false, by: null } });
+  if (p === '/api/chat-approvals/test') return json({ ok: true });
   if (p === '/api/platform/email') return json(method === 'GET' ? { configured: false, from: 'CRMagents <noreply@crmagents.app>', keyHint: null } : { ok: true });
   if (p === '/api/platform/email/test') return json({ ok: false, error: 'No Resend key set' });
   if (p === '/api/platform/staff') return json(['owner@demo-company.com', 'sales@crmagents.example']);

@@ -16,7 +16,7 @@ function parse(r: Run) {
 export function ApprovalsPage({ tenant, onChange, me }: { tenant?: Tenant; onChange: () => void; me?: string }) {
   const [items, setItems] = useState<Run[]>([]);
   const [loaded, setLoaded] = useState(false);
-  const [sel, setSel] = useState<string>();
+  const [sel, setSel] = useState<string | undefined>(() => new URLSearchParams(location.search).get('run') ?? undefined); // ?run= from a Slack or Teams message
   const [busy, setBusy] = useState('');
   const [err, setErr] = useState('');
   const [note, setNote] = useState('');

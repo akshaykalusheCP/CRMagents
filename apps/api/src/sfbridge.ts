@@ -354,7 +354,7 @@ FORMAT (mandatory, overrides any other style instruction): you are answering in 
 
   app.post('/sf/v1/runs/:id/decision', async (req) => {
     const { approve, note, userEmail } = z.object({ approve: z.boolean(), note: z.string().max(500).optional(), userEmail: z.string().max(200).optional() }).parse(req.body);
-    await decideRun(req.sfTenant!.tenantId, (req.params as { id: string }).id, approve, note, userEmail?.toLowerCase());
+    await decideRun(req.sfTenant!.tenantId, (req.params as { id: string }).id, approve, note, userEmail?.toLowerCase(), undefined, { where: 'in Salesforce' });
     return getRun(req.sfTenant!.tenantId, (req.params as { id: string }).id);
   });
 }

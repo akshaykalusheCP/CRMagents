@@ -446,6 +446,8 @@ function StaffLog({ rows, open }: { rows: StaffLogItem[]; open: (id: string) => 
 // ---------- Platform settings ----------
 function PlatformSettings({ me, billing }: { me: Me; billing: boolean }) {
   const [mail, setMail] = useState<Awaited<ReturnType<typeof api.adminEmail>>>();
+  const [slack, setSlack] = useState<boolean>();
+  useEffect(() => { api.adminIntegrations().then((x) => setSlack(x.slack)).catch(() => {}); }, []);
   const [key, setKey] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState(me.email);
@@ -487,6 +489,10 @@ function PlatformSettings({ me, billing }: { me: Me; billing: boolean }) {
       <section className="sc-card">
         <header><h2>Online payment</h2>{billing ? <Status tone="ok">Stripe connected</Status> : <Status tone="neutral">Off</Status>}</header>
         <p className="sc-muted" style={{ margin: 0 }}>{billing ? 'Customers can buy Plus and Pro from the app; subscriptions and payments show under Revenue.' : 'Checkout is off until the server has the Stripe keys and prices: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET and STRIPE_PRICE_PLUS_MONTHLY / _YEARLY, STRIPE_PRICE_PRO_MONTHLY / _YEARLY. They are set where the app is hosted, not here, so they never pass through a browser.'}</p>
+      </section>
+      <section className="sc-card">
+        <header><h2>Slack approvals</h2>{slack ? <Status tone="ok">Available to workspaces</Status> : <Status tone="neutral">Off</Status>}</header>
+        <p className="sc-muted" style={{ margin: 0 }}>{slack ? 'Workspaces can add CRMagents to a Slack channel and approve right in the message (Settings → Slack & Teams).' : "Off until CRMagents' Slack app is created and the server has SLACK_CLIENT_ID, SLACK_CLIENT_SECRET and SLACK_SIGNING_SECRET. In the Slack app: scopes chat:write, users:read, users:read.email, incoming-webhook; redirect URL <public URL>/public/slack/oauth; interactivity URL <public URL>/public/slack/interactions. Teams needs nothing from us."}</p>
       </section>
     </>
   );
