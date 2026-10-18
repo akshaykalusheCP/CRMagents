@@ -184,7 +184,8 @@ export async function runTiles(sf: SalesforceClient, tiles: (TileSpec & { id: st
   // All tiles' queries start together, so they reach Salesforce as one composite batch (one API call per 25).
   return Promise.all(tiles.map(async (t) => {
     const soql = applyDateFilter(t.soql, t.date_field, range);
-    const key = `${sf.tenantId}|${soql}`;
+    // Per person when acting as them: one person's results are never served to another.
+    const key = `${sf.tenantId}|${sf.personId ?? ''}|${soql}`;
     const hit = tileCache.get(key);
     if (hit && (low || (!refresh && Date.now() - hit.at < TILE_TTL))) return { ...t, ...hit.data, cachedAt: new Date(hit.at).toISOString() };
     try {

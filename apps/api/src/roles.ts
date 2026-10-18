@@ -17,6 +17,7 @@ const APPROVER: RegExp[] = [
   /^T\/runs\/[^/]+\/decision$/, /^T\/record-suggestions\/[^/]+$/, /^T\/suggestions\/[^/]+\/dismiss$/,
   /^T\/insights\/(ask|summary)$/, /^T\/dashboards\/(run|drill)$/,
   /^T\/agents\/[^/]+\/run$/, /^T\/workflows\/[^/]+\/feedback$/,
+  /^T\/my-salesforce(\/link)?$/, // each person links (or unlinks) their own Salesforce login
 ];
 
 /** The least role allowed to make this request. Pure; tested. */

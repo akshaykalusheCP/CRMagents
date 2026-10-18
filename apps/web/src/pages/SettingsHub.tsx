@@ -30,7 +30,7 @@ export function SettingsHub({ tenants, onChange, tenant, section, focusConnect, 
         </nav>
         <div>
           <div className="ph-text" style={{ marginBottom: 16 }}><h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>{cur.label}</h2><p className="ph-desc">{cur.desc}</p></div>
-          {tab === 'orgs' ? <ConnectionsPage tenants={tenants} onChange={onChange} goSettings={() => setTab('ai')} focusConnect={focusConnect} /> : tab === 'ai' ? <SettingsPage /> : tab === 'team' ? <TeamPage me={me} /> : tab === 'plan' ? <PlanPage me={me} openAdmin={openAdmin} /> : <RulesPage tenant={tenant} />}
+          {tab === 'orgs' ? <ConnectionsPage tenants={tenants} onChange={onChange} goSettings={() => setTab('ai')} focusConnect={focusConnect} /> : tab === 'ai' ? <SettingsPage /> : tab === 'team' ? <TeamPage me={me} tenant={tenant} /> : tab === 'plan' ? <PlanPage me={me} openAdmin={openAdmin} /> : <RulesPage tenant={tenant} />}
         </div>
       </div>
     </div>

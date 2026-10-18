@@ -8,6 +8,8 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   if (res.status === 401 && !path.startsWith('/api/auth/')) window.dispatchEvent(new Event('crmagents:unauthorized'));
   // Something the plan doesn't include: actions open the upgrade prompt (pages show their own locked state).
   if (res.status === 402 && method !== 'GET') window.dispatchEvent(new CustomEvent('crmagents:upgrade', { detail: { message: j.error, plan: j.plan } }));
+  // The workspace acts as each person in Salesforce and this person hasn't linked their login: ask them to.
+  if (res.status === 409 && j.code === 'sf_link_required') window.dispatchEvent(new CustomEvent('crmagents:sf-link', { detail: { message: j.error, tenantId: path.match(/^\/api\/tenants\/([0-9a-f-]{36})/i)?.[1] } }));
   if (!res.ok) throw new Error(j.error ?? `Request failed (${res.status})`);
   return j as T;
 }
@@ -126,6 +128,7 @@ export interface Settings {
   callbackUrl: string; sfClientId: string; sfLoginUrl: string;
   sfClientSecret: { set: boolean }; anthropicKey: { set: boolean }; dailyBudgetUsd: string; anthropicWorkspaceId: string; aiCacheHours: string;
   maskPii?: string; maskFields?: string; maxAiCalls?: string; maxToolCalls?: string; maxTokens?: string; retentionDays?: string;
+  actAsPerson?: string; memoryEnabled?: string;
   aiProvider?: string; providerKey?: { set: boolean }; aiBaseUrl?: string; aiModel?: string; aiFastModel?: string; aiPriceIn?: string; aiPriceOut?: string;
   auditInSalesforce?: string; alertEmails?: string; autoPauseAfter?: string;
   twilioSid?: string; twilioToken?: { set: boolean }; twilioSms?: string; twilioWhatsapp?: string;
@@ -393,6 +396,10 @@ export const api = {
   sampleStatus: (t: string) => req<SampleStatus>('GET', `/api/tenants/${t}/sample-data`),
   loadSample: (t: string) => req<{ counts: Record<string, number>; failures: string[] }>('POST', `/api/tenants/${t}/sample-data`),
   removeSample: (t: string) => req<{ removed: number; failures: string[] }>('DELETE', `/api/tenants/${t}/sample-data`),
+  mySalesforce: (t: string) => req<{ required: boolean; linked: boolean; sfUsername: string | null; linkedAt: string | null }>('GET', `/api/tenants/${t}/my-salesforce`),
+  linkMySalesforce: (t: string) => req<{ url: string }>('POST', `/api/tenants/${t}/my-salesforce/link`),
+  unlinkMySalesforce: (t: string) => req<{ ok: true }>('DELETE', `/api/tenants/${t}/my-salesforce`),
+  personLinks: (t: string) => req<{ email: string; role: string; sfUsername: string | null; linkedAt: string | null }[]>('GET', `/api/tenants/${t}/person-links`),
   grantAccess: (t: string) => req<{ granted: number; total: number }>('POST', `/api/tenants/${t}/grant-access`),
   workflows: (t: string) => req<WorkflowRow[]>('GET', `/api/tenants/${t}/workflows`),
   createWorkflow: (t: string, b: { name: string; graph: Workflow }) => req<{ id: string }>('POST', `/api/tenants/${t}/workflows`, b),

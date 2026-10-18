@@ -7,6 +7,7 @@ import { parseCsv } from './csv.js';
 
 export const RECONNECT_MESSAGE =
   'The Salesforce login for this org has expired or was revoked. Reconnect the org on the Connections page.';
+export const RELINK_MESSAGE = 'Your Salesforce login link has expired or was revoked. Link your Salesforce login again to keep using assistants.';
 
 // Access tokens are shared per org across requests, and refreshes are single-flight: with refresh-token
 // rotation every refresh returns a new refresh token and retires the old one, so two concurrent refreshes with
@@ -23,6 +24,11 @@ export function primeAccessToken(tenantId: string, token: string): void {
 /** Forget the cached access token (tests, or after a disconnect). */
 export function forgetAccessToken(tenantId: string): void {
   accessCache.delete(tenantId);
+}
+
+/** Forget one person's cached token (they linked again, or unlinked). */
+export function forgetPersonToken(tenantId: string, userId: string): void {
+  accessCache.delete(`${tenantId}:${userId}`);
 }
 
 /** One record change, as the change log keeps it (before values make it undoable). */
@@ -72,7 +78,20 @@ export class SalesforceClient {
     readonly accountId: string,
     private own: { clientId: string; clientSecret: string } | undefined,
     readonly instanceUrl: string,
+    /** Set when acting as one person (their own linked Salesforce login): Salesforce enforces their access. */
+    readonly personId?: string,
   ) {}
+
+  /** Tokens are cached per org, or per person in the org. */
+  private get key() { return this.personId ? `${this.tenantId}:${this.personId}` : this.tenantId; }
+
+  /** The org as one CRMagents person, through their own Salesforce login. Throws (409) when they haven't linked it. */
+  static async forPerson(tenantId: string, userId: string): Promise<SalesforceClient> {
+    const base = await SalesforceClient.forTenant(tenantId);
+    const { rowCount } = await pool.query('select 1 from person_sf_links where user_id=$1 and tenant_id=$2', [userId, tenantId]);
+    if (!rowCount) throw Object.assign(new Error('Link your own Salesforce login first, so assistants see and change only what you can in Salesforce.'), { statusCode: 409, code: 'sf_link_required' });
+    return new SalesforceClient(tenantId, base.accountId, base.own, base.instanceUrl, userId);
+  }
 
   static async forTenant(tenantId: string): Promise<SalesforceClient> {
     const { rows } = await pool.query(
@@ -91,17 +110,17 @@ export class SalesforceClient {
 
   /** Instance URL and a current access token, for the streaming client. `fresh` drops the cached token first. */
   async session(fresh = false): Promise<{ instanceUrl: string; token: string }> {
-    if (fresh) accessCache.delete(this.tenantId);
+    if (fresh) accessCache.delete(this.key);
     return { instanceUrl: this.instanceUrl, token: await this.token() };
   }
 
   private async token(): Promise<string> {
-    const cached = accessCache.get(this.tenantId);
+    const cached = accessCache.get(this.key);
     if (cached && Date.now() < cached.expiresAt) return cached.token;
-    let p = refreshing.get(this.tenantId);
+    let p = refreshing.get(this.key);
     if (!p) {
-      p = this.refresh().finally(() => refreshing.delete(this.tenantId));
-      refreshing.set(this.tenantId, p);
+      p = (this.personId ? this.refreshPerson(this.personId) : this.refresh()).finally(() => refreshing.delete(this.key));
+      refreshing.set(this.key, p);
     }
     return p;
   }
@@ -144,6 +163,43 @@ export class SalesforceClient {
     }
   }
 
+  /** A person's token: same single-flight refresh and rotation as the org's, from their own link. */
+  private async refreshPerson(userId: string): Promise<string> {
+    const sf = this.own ?? (await getSfConfig(this.accountId));
+    const db = await pool.connect();
+    try {
+      await db.query('begin');
+      const { rows } = await db.query('select refresh_token_enc from person_sf_links where user_id=$1 and tenant_id=$2 for update', [userId, this.tenantId]);
+      if (!rows[0]) throw Object.assign(new Error(RELINK_MESSAGE), { statusCode: 409, code: 'sf_link_required' });
+      const refreshToken = decrypt(rows[0].refresh_token_enc);
+      const body = new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken, client_id: sf.clientId });
+      if (sf.clientSecret) body.set('client_secret', sf.clientSecret);
+      const res = await fetch(`${this.instanceUrl}/services/oauth2/token`, { method: 'POST', body });
+      if (!res.ok) {
+        const text = await res.text();
+        if (/invalid_grant/.test(text)) {
+          // Revoked, expired, or the person was deactivated in Salesforce: drop the link; they link again.
+          await db.query('delete from person_sf_links where user_id=$1 and tenant_id=$2', [userId, this.tenantId]);
+          await db.query('commit');
+          throw Object.assign(new Error(RELINK_MESSAGE), { statusCode: 409, code: 'sf_link_required' });
+        }
+        throw new Error(`Salesforce token refresh failed: ${text}`);
+      }
+      const j = (await res.json()) as { access_token: string; refresh_token?: string };
+      if (j.refresh_token && j.refresh_token !== refreshToken) {
+        await db.query('update person_sf_links set refresh_token_enc=$3 where user_id=$1 and tenant_id=$2', [userId, this.tenantId, encrypt(j.refresh_token)]);
+      }
+      await db.query('commit');
+      accessCache.set(this.key, { token: j.access_token, expiresAt: Date.now() + ACCESS_TTL_MS });
+      return j.access_token;
+    } catch (e) {
+      await db.query('rollback').catch(() => {});
+      throw e;
+    } finally {
+      db.release();
+    }
+  }
+
   /**
    * One HTTP request to the org. `path` is relative to /services/data/vXX unless it starts with /services/.
    * Every response reports the org's API usage, which feeds the budget (limits.ts).
@@ -163,7 +219,7 @@ export class SalesforceClient {
     recordUsage(this.tenantId, res.headers.get('sforce-limit-info'));
     if (res.status === 401 && !retried) {
       // Access token expired or was revoked early: drop it and retry once with a fresh one.
-      accessCache.delete(this.tenantId);
+      accessCache.delete(this.key);
       return this.request(method, path, o, true);
     }
     if (!res.ok) {

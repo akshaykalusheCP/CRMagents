@@ -1,7 +1,7 @@
 import { BarChart3, BookOpen, Bot, TrendingUp, ChevronRight, PanelLeft, PanelTop, ChevronDown, Check, ChevronsUpDown, History, House, Inbox, LayoutDashboard, LogOut, Moon, Plus, Search, Settings as SettingsIcon, Sun, Users, Radar, ShieldCheck, Bookmark, LayoutGrid } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { api, type Alert, type Draft, type Me, type Tenant, type WorkflowRow } from './api';
-import { CommandPalette, Menu, Toaster, type Command } from './components/ui';
+import { CommandPalette, Menu, Toaster, toast, type Command } from './components/ui';
 import { ApprovalsPage } from './pages/Approvals';
 import { HomePage } from './pages/Home';
 import { InsightsPage } from './pages/Insights';
@@ -16,6 +16,7 @@ import { LEGAL_PATHS, LegalPage } from './pages/Legal';
 import { Ribbon, type RibbonPalette } from './components/Ribbon';
 import { SettingsHub, type SettingsSection } from './pages/SettingsHub';
 import { AlertsBell } from './components/AlertsBell';
+import { LinkPrompt } from './components/PersonLink';
 import { LockedPage, PlanProvider, PlanTag, TrialBanner, UpgradePrompt, usePlanState } from './components/Plan';
 import type { Feature } from '@crmagents/shared';
 import { LogoMark } from './components/Logo';
@@ -145,7 +146,12 @@ export function App() {
     if (!me) return;
     const params = new URLSearchParams(location.search);
     const connected = params.get('connected');
-    if (connected) {
+    const linked = params.get('linked');
+    if (linked) {
+      setTenantId(linked);
+      toast('Salesforce login linked: assistants now act as you');
+      history.replaceState(null, '', '/');
+    } else if (connected) {
       setTenantId(connected);
       setTab('settings');
       history.replaceState(null, '', '/');
@@ -297,6 +303,7 @@ export function App() {
         </main>
         <CommandPalette open={cmdk} onClose={() => setCmdk(false)} commands={commands} />
         <UpgradePrompt me={me} />
+        <LinkPrompt tenants={tenants} />
         <Toaster />
       </div>
       </PlanProvider>
@@ -394,6 +401,7 @@ export function App() {
       </div>
       <CommandPalette open={cmdk} onClose={() => setCmdk(false)} commands={commands} />
       <UpgradePrompt me={me} />
+      <LinkPrompt tenants={tenants} />
       <Toaster />
     </div>
     </PlanProvider>

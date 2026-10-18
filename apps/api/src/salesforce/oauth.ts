@@ -1,14 +1,14 @@
 import { requireRoom } from '../plans.js';
 import { createHash, randomBytes } from 'node:crypto';
 import { config } from '../config.js';
-import { encrypt } from '../crypto.js';
+import { decrypt, encrypt } from '../crypto.js';
 import { pool } from '../db.js';
 import { getSfConfig } from '../settings.js';
-import { primeAccessToken } from './client.js';
+import { forgetPersonToken, primeAccessToken } from './client.js';
 
 // Phase 1: in-memory. Move to Postgres/Redis before running more than one instance.
 interface OwnApp { clientId: string; clientSecret?: string }
-const pending = new Map<string, { verifier: string; loginUrl: string; accountId: string; own?: OwnApp }>();
+const pending = new Map<string, { verifier: string; loginUrl: string; accountId: string; own?: OwnApp; person?: { userId: string; tenantId: string; orgId: string } }>();
 
 export const redirectUri = () => `${config.publicUrl}/oauth/callback`;
 const b64url = (b: Buffer) => b.toString('base64url');
@@ -50,7 +50,25 @@ export async function buildAuthorizeUrl(accountId: string, sandbox = false, cust
   return `${loginUrl}/services/oauth2/authorize?${p}`;
 }
 
-export async function handleCallback(code: string, state: string): Promise<string> {
+/** A person links their own Salesforce login to an org the workspace already connected (logs in on that org's domain). */
+export async function buildPersonAuthorizeUrl(accountId: string, tenantId: string, userId: string): Promise<string> {
+  const { rows } = await pool.query('select sf_org_id, sf_instance_url, sf_client_id, sf_client_secret_enc from tenants where id=$1 and account_id=$2', [tenantId, accountId]);
+  if (!rows[0]) throw Object.assign(new Error('Unknown org'), { statusCode: 404 });
+  const t = rows[0];
+  const own = t.sf_client_id ? { clientId: t.sf_client_id as string, clientSecret: t.sf_client_secret_enc ? decrypt(t.sf_client_secret_enc) : undefined } : undefined;
+  const clientId = own?.clientId ?? (await getSfConfig(accountId)).clientId;
+  const verifier = b64url(randomBytes(32));
+  const challenge = b64url(createHash('sha256').update(verifier).digest());
+  const state = b64url(randomBytes(16));
+  const loginUrl = normalizeLoginUrl(t.sf_instance_url);
+  pending.set(state, { verifier, loginUrl, accountId, own, person: { userId, tenantId, orgId: t.sf_org_id } });
+  const p = new URLSearchParams({ response_type: 'code', client_id: clientId, redirect_uri: redirectUri(), scope: 'api refresh_token', code_challenge: challenge, code_challenge_method: 'S256', prompt: 'login consent', state });
+  return `${loginUrl}/services/oauth2/authorize?${p}`;
+}
+
+export type CallbackResult = { kind: 'org'; tenantId: string } | { kind: 'person'; tenantId: string };
+
+export async function handleCallback(code: string, state: string): Promise<CallbackResult> {
   const ctx = pending.get(state);
   if (!ctx) throw new Error('Unknown or expired OAuth state');
   pending.delete(state);
@@ -79,6 +97,20 @@ export async function handleCallback(code: string, state: string): Promise<strin
   const idRes = await fetch(tok.id, { headers: { Authorization: `Bearer ${tok.access_token}` } });
   const ident = idRes.ok ? ((await idRes.json()) as { username?: string }) : {};
 
+  if (ctx.person) {
+    // Must be the same org the workspace connected; otherwise drop the token straight away.
+    if (orgId !== ctx.person.orgId) {
+      await fetch(`${tok.instance_url}/services/oauth2/revoke`, { method: 'POST', body: new URLSearchParams({ token: tok.refresh_token }) }).catch(() => undefined);
+      throw new Error('That login is for a different Salesforce org. Log in with your user in the org this workspace is connected to.');
+    }
+    await pool.query(
+      `insert into person_sf_links (user_id, tenant_id, sf_user_id, sf_username, refresh_token_enc) values ($1,$2,$3,$4,$5)
+       on conflict (user_id, tenant_id) do update set sf_user_id=excluded.sf_user_id, sf_username=excluded.sf_username, refresh_token_enc=excluded.refresh_token_enc, created_at=now()`,
+      [ctx.person.userId, ctx.person.tenantId, userId, ident.username ?? null, encrypt(tok.refresh_token)]);
+    forgetPersonToken(ctx.person.tenantId, ctx.person.userId);
+    return { kind: 'person', tenantId: ctx.person.tenantId };
+  }
+
   const { rows: known } = await pool.query('select 1 from tenants where account_id=$1 and sf_org_id=$2', [ctx.accountId, orgId]);
   if (!known.length) await requireRoom(ctx.accountId, 'orgs');
   const { rows } = await pool.query(
@@ -96,5 +128,5 @@ export async function handleCallback(code: string, state: string): Promise<strin
   );
   const tenantId = rows[0].id as string;
   primeAccessToken(tenantId, tok.access_token);
-  return tenantId;
+  return { kind: 'org', tenantId };
 }

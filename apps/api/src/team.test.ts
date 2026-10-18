@@ -13,6 +13,8 @@ test('roles: reading is open, changes need the right role', () => {
   assert.equal(requiredRole('GET', '/api/settings'), 'approver');
   assert.equal(requiredRole('PUT', '/api/settings'), 'admin');
   assert.equal(requiredRole('POST', '/api/team/invites'), 'admin');
+  assert.equal(requiredRole('POST', `${T}/my-salesforce/link`), 'approver', 'anyone links their own Salesforce login');
+  assert.equal(requiredRole('DELETE', `${T}/my-salesforce`), 'approver');
   assert.equal(requiredRole('DELETE', T), 'admin');
   assert.equal(requiredRole('POST', `${T}/provision`), 'admin');
   assert.equal(requiredRole('POST', `${T}/workflows/abc/autonomy`), 'admin');

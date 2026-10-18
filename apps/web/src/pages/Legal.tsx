@@ -103,7 +103,7 @@ const DOCS: Record<LegalDoc, { title: string; lede: string; body: ReactNode }> =
     lede: 'How CRMagents protects your org and your data. For a security review, ask us for the full notes.',
     body: <>
       <h2>Access to Salesforce</h2>
-      <p>You connect through Salesforce's own login with the <code>api</code> and <code>refresh_token</code> scopes. Tokens are encrypted at rest (AES-256-GCM). Every call from the CRMagents package in your org is signed with a per-org secret. Disconnecting revokes access.</p>
+      <p>Assistants inside Salesforce act as the person asking, with their own sharing and field permissions. In the app, a workspace can require the same: each person links their own Salesforce login, and Salesforce decides what they can see and change. You connect through Salesforce's own login with the <code>api</code> and <code>refresh_token</code> scopes. Tokens are encrypted at rest (AES-256-GCM). Every call from the CRMagents package in your org is signed with a per-org secret. Disconnecting revokes access.</p>
       <h2>Agents can't go off script</h2>
       <ul>
         <li>Approvals before changes, and whoever started a run can't approve it when someone else can.</li>

@@ -46,6 +46,9 @@ function route(method: string, url: URL, body: any): Response {
   if (p === '/t/sample-data') return json(method === 'GET'
     ? { loaded: true, counts: { Account: 8, Contact: 12, Opportunity: 12, Case: 16, Lead: 10, Task: 5 }, loadedAt: new Date().toISOString(), allowed: true, orgKind: 'Developer Edition' }
     : method === 'POST' ? { counts: { Account: 8, Contact: 12, Opportunity: 12, Case: 16, Lead: 10, Task: 5 }, failures: [] } : { removed: 63, failures: [] });
+  if (p === '/t/my-salesforce') return json({ required: true, linked: true, sfUsername: 'owner@demo-company.com', linkedAt: new Date().toISOString() });
+  if (p === '/t/my-salesforce/link') return json({ url: '/?demo&tab=settings' });
+  if (p === '/t/person-links') return json([{ email: 'owner@demo-company.com', role: 'owner', sfUsername: 'owner@demo-company.com', linkedAt: new Date().toISOString() }, { email: 'priya@demo-company.com', role: 'builder', sfUsername: 'priya@demo-company.com', linkedAt: new Date().toISOString() }, { email: 'sam@demo-company.com', role: 'approver', sfUsername: null, linkedAt: null }]);
   if (p === '/api/team') return json(DEMO_TEAM);
   if (p === '/api/team/invites') return json({ id: 'i9', link: `${location.origin}/?invite=demo-link`, emailed: false });
   if (/^\/api\/team\/users\/[^/]+\/reset-link$/.test(p)) return json({ link: `${location.origin}/?reset=demo-link`, emailed: true });
@@ -119,7 +122,7 @@ function route(method: string, url: URL, body: any): Response {
   if (/^\/t\/workflows\/[^/]+\/backtest$/.test(p)) return json(DEMO_BACKTEST);
   if (p === '/t/runs' && method === 'GET') return json(url.searchParams.get('status') === 'waiting' ? DEMO_RUNS.filter((r) => r.status === 'waiting') : DEMO_RUNS);
   if (p === '/api/usage') return json({ runs: 23, costUsd: 0.42, budgetUsd: 2, cacheHitRate: 0.61, tokens: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 } });
-  if (p === '/api/settings') return json({ maskPii: 'on', maskFields: 'Salary__c', maxAiCalls: '', maxToolCalls: '', maxTokens: '', retentionDays: '30', sfClientId: '3MVG9demo', sfLoginUrl: 'https://login.salesforce.com', sfClientSecret: { set: false }, anthropicKey: { set: true }, dailyBudgetUsd: '2', anthropicWorkspaceId: '', aiCacheHours: '24', callbackUrl: 'https://app.crmagents.example/oauth/callback' });
+  if (p === '/api/settings') return json({ maskPii: 'on', maskFields: 'Salary__c', maxAiCalls: '', maxToolCalls: '', maxTokens: '', retentionDays: '30', sfClientId: '3MVG9demo', sfLoginUrl: 'https://login.salesforce.com', sfClientSecret: { set: false }, anthropicKey: { set: true }, actAsPerson: 'on', dailyBudgetUsd: '2', anthropicWorkspaceId: '', aiCacheHours: '24', callbackUrl: 'https://app.crmagents.example/oauth/callback' });
   if (p === '/t/insights/ask') return json({ error: 'Asking questions needs a connected org (this is demo data).' }, 400);
   if (p === '/t/dashboards' && method === 'GET') return json(fx.dashboards);
   if (p === '/t/dashboards/run') return json(body.tiles.map((t: any) => ({ ...fx.dashboard.tiles.find((x: any) => x.title === t.title), ...t })));

@@ -27,6 +27,7 @@ export async function runAgent(
   opts: {
     onStarted?: (runId: string) => void;
     /** Salesforce tools run inside Salesforce as the person asking. */ inOrg?: boolean;
+    /** In the app: Salesforce tools use this CRMagents person's own linked Salesforce login. */ asPerson?: string;
     startedBy?: string;
     /** Stored with the run (not shown to the AI), e.g. the website conversation it belongs to. */
     meta?: Record<string, unknown>;
@@ -43,7 +44,7 @@ export async function runAgent(
   const knowledge = await hasFeature(accountId, 'knowledge');
   if (!meetings) agent = { ...agent, tools: agent.tools.filter((t) => !['find_meeting_times', 'book_meeting', 'meeting_times', 'book_meeting_slot'].includes(t)) };
   const client = await aiClient(accountId, { tenantId });
-  const sf = await SalesforceClient.forTenant(tenantId);
+  const sf = opts.asPerson ? await SalesforceClient.forPerson(tenantId, opts.asPerson) : await SalesforceClient.forTenant(tenantId);
   const { masker, limits } = await runTrust(accountId);
   const remote: { exec?: (name: string, input: unknown) => Promise<unknown> | undefined } = {};
   const llm = createLlm('', sf, spendGuard(accountId), client, await dbResultCache(accountId), { masker, limits, exec: (n, i) => remote.exec?.(n, i) });

@@ -1,6 +1,6 @@
 import { requireRoom } from './plans.js';
 import cookie from '@fastify/cookie';
-import Fastify from 'fastify';
+import Fastify, { type FastifyRequest } from 'fastify';
 import { z } from 'zod';
 import { loadUser, registerAuth } from './auth.js';
 import { provisionOrg, registerSfBridge } from './sfbridge.js';
@@ -17,7 +17,8 @@ import { setLive, setRealtime, startWatcher } from './engine/watcher.js';
 import { ask, runSoql, safeSoql, summarize } from './insights/ai.js';
 import { cachedInsights } from './insights/metrics.js';
 import { CHARTS, RANGES, draftDashboard, drill, runTiles, saveTiles, type Range, type TileSpec } from './insights/dashboards.js';
-import { SalesforceClient } from './salesforce/client.js';
+import { forgetPersonToken, SalesforceClient } from './salesforce/client.js';
+import { decrypt } from './crypto.js';
 import { draftWorkflow } from './builder/service.js';
 import { suggestAgents, dismissSuggestion } from './smart/suggest.js';
 import { backtest } from './smart/backtest.js';
@@ -56,7 +57,7 @@ import { registerTeam } from './team.js';
 import { registerTwilio } from './channels/twilio.js';
 import { listAlerts, markAlertsRead } from './alerts.js';
 import { migrate, pool } from './db.js';
-import { buildAuthorizeUrl, handleCallback, redirectUri, validateOwnApp } from './salesforce/oauth.js';
+import { buildAuthorizeUrl, buildPersonAuthorizeUrl, handleCallback, redirectUri, validateOwnApp } from './salesforce/oauth.js';
 import { getSetting, PLAIN_SETTINGS, setSetting, SETTING_KEYS, type SettingName } from './settings.js';
 
 // Behind a proxy or tunnel (Render, ngrok): the visitor's address comes from X-Forwarded-For (website chat rate limits).
@@ -74,7 +75,7 @@ registerPlatform(app);
 
 app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
   const code = err instanceof z.ZodError ? 400 : (err.statusCode ?? 500);
-  reply.code(code).send({ error: err instanceof z.ZodError ? err.issues.map((i) => i.message).join('; ') : err.message, ...(err instanceof PlanError ? { plan: err.detail } : {}) });
+  reply.code(code).send({ error: err instanceof z.ZodError ? err.issues.map((i) => i.message).join('; ') : err.message, ...(err instanceof PlanError ? { plan: err.detail } : {}), ...((err as { code?: string }).code === 'sf_link_required' ? { code: 'sf_link_required' } : {}) });
 });
 
 // Security headers on every response (the web app sets its own in production hosting).
@@ -150,9 +151,10 @@ app.get('/oauth/callback', async (req, reply) => {
       : (error_description ?? error ?? 'Salesforce login was cancelled'));
   }
   try {
-    const tenantId = await handleCallback(code, state);
-    void setupOrg(tenantId); // installs the package etc. in the background; the UI shows progress
-    return reply.redirect(`${config.webUrl}/?connected=${tenantId}`);
+    const r = await handleCallback(code, state);
+    if (r.kind === 'person') return reply.redirect(`${config.webUrl}/?linked=${r.tenantId}`);
+    void setupOrg(r.tenantId); // installs the package etc. in the background; the UI shows progress
+    return reply.redirect(`${config.webUrl}/?connected=${r.tenantId}`);
   } catch (e) {
     return back((e as Error).message);
   }
@@ -205,6 +207,7 @@ const settingsBody = z.object({
   autoPauseAfter: z.string().regex(/^(\d{1,2})?$/, 'A whole number of failures in a row (0 never pauses)').optional(),
   aiPriceOut: z.string().regex(/^(\d+(\.\d+)?)?$/, 'USD per million tokens').optional(),
   auditInSalesforce: z.enum(['on', 'off', '']).optional(),
+  actAsPerson: z.enum(['on', 'off', '']).optional(),
 });
 
 app.put('/api/settings', async (req) => {
@@ -215,18 +218,60 @@ app.put('/api/settings', async (req) => {
   return { ok: true };
 });
 
+// ---- Acting as each person in Salesforce ----
+// When the workspace turns this on, everything in the app that shows or changes records for a person (assistants,
+// dashboards, questions) uses that person's own linked Salesforce login, so Salesforce enforces their sharing,
+// field security and object permissions. Background agents keep using the org's connection, like any integration.
+const actsAsPerson = async (accountId: string) => (await getSetting(accountId, 'actAsPerson')) === 'on';
+async function sfFor(req: FastifyRequest, tenantId: string) {
+  return (await actsAsPerson(req.user!.accountId)) ? SalesforceClient.forPerson(tenantId, req.user!.id) : SalesforceClient.forTenant(tenantId);
+}
+/** Org-wide numbers (Insights) are for admins while the app acts as each person. */
+async function orgWideAllowed(req: FastifyRequest) {
+  if ((await actsAsPerson(req.user!.accountId)) && !roleAtLeast(req.user!.role, 'admin')) throw Object.assign(new Error('Org-wide insights are for admins while assistants act as each person in Salesforce. Use dashboards and assistants: they show what you can see.'), { statusCode: 403 });
+}
+
+app.get('/api/tenants/:tenantId/my-salesforce', async (req) => {
+  const { tenantId } = req.params as { tenantId: string };
+  const { rows } = await pool.query('select sf_username, created_at from person_sf_links where user_id=$1 and tenant_id=$2', [req.user!.id, tenantId]);
+  return { required: await actsAsPerson(req.user!.accountId), linked: !!rows[0], sfUsername: rows[0]?.sf_username ?? null, linkedAt: rows[0]?.created_at ?? null };
+});
+app.post('/api/tenants/:tenantId/my-salesforce/link', async (req) => {
+  const { tenantId } = req.params as { tenantId: string };
+  return { url: await buildPersonAuthorizeUrl(req.user!.accountId, tenantId, req.user!.id) };
+});
+app.delete('/api/tenants/:tenantId/my-salesforce', async (req) => {
+  const { tenantId } = req.params as { tenantId: string };
+  const { rows } = await pool.query('delete from person_sf_links where user_id=$1 and tenant_id=$2 returning refresh_token_enc', [req.user!.id, tenantId]);
+  const t = (await pool.query('select sf_instance_url from tenants where id=$1', [tenantId])).rows[0];
+  if (rows[0] && t) await fetch(`${t.sf_instance_url}/services/oauth2/revoke`, { method: 'POST', body: new URLSearchParams({ token: decrypt(rows[0].refresh_token_enc) }) }).catch(() => undefined);
+  forgetPersonToken(tenantId, req.user!.id);
+  return { ok: true };
+});
+/** Admins: who in the workspace has linked their Salesforce login to this org. */
+app.get('/api/tenants/:tenantId/person-links', async (req, reply) => {
+  if (!roleAtLeast(req.user!.role, 'admin')) return reply.code(403).send({ error: 'Admins only' });
+  const { tenantId } = req.params as { tenantId: string };
+  const { rows } = await pool.query(
+    `select u.email, u.role, l.sf_username as "sfUsername", l.created_at as "linkedAt" from users u
+     left join person_sf_links l on l.user_id = u.id and l.tenant_id = $2 where u.account_id = $1 order by u.email`, [req.user!.accountId, tenantId]);
+  return rows;
+});
+
 // ---- Insights: business dashboard (numbers by code, words by AI) ----
 const periodQ = z.object({ period: z.coerce.number().int().refine((n) => [7, 30, 90].includes(n), 'period must be 7, 30 or 90').default(30), refresh: z.string().optional() });
 
 app.get('/api/tenants/:tenantId/insights', async (req) => {
   const { tenantId } = req.params as { tenantId: string };
   const q = periodQ.parse(req.query);
+  await orgWideAllowed(req);
   return cachedInsights(tenantId, await SalesforceClient.forTenant(tenantId), q.period, !!q.refresh);
 });
 
 app.post('/api/tenants/:tenantId/insights/summary', async (req) => {
   const { tenantId } = req.params as { tenantId: string };
   const { period } = periodQ.parse(req.body ?? {});
+  await orgWideAllowed(req);
   const ins = await cachedInsights(tenantId, await SalesforceClient.forTenant(tenantId), period);
   return summarize(tenantId, ins);
 });
@@ -234,14 +279,14 @@ app.post('/api/tenants/:tenantId/insights/summary', async (req) => {
 app.post('/api/tenants/:tenantId/insights/ask', async (req) => {
   const { tenantId } = req.params as { tenantId: string };
   const { question } = z.object({ question: z.string().trim().min(5).max(500) }).parse(req.body);
-  return ask(tenantId, question);
+  return ask(tenantId, question, (await actsAsPerson(req.user!.accountId)) ? await SalesforceClient.forPerson(tenantId, req.user!.id) : undefined);
 });
 
 // Pinned questions re-run their saved query on every load: no AI, always current.
 app.get('/api/tenants/:tenantId/insights/tiles', async (req) => {
   const { tenantId } = req.params as { tenantId: string };
   const { rows } = await pool.query('select * from insight_tiles where tenant_id=$1 order by created_at', [tenantId]);
-  const sf = await SalesforceClient.forTenant(tenantId);
+  const sf = await sfFor(req, tenantId);
   return Promise.all(rows.map(async (t) => {
     try { return { ...t, ...(await runSoql(sf, t.soql)) }; } catch (e) { return { ...t, columns: [], rows: [], error: e instanceof Error ? e.message : String(e) }; }
   }));
@@ -313,7 +358,7 @@ app.get('/api/tenants/:tenantId/dashboards/:id', async (req) => {
   const { range } = rangeQ.parse(req.query);
   const d = await loadDashboard(tenantId, id);
   const refresh = (req.query as { refresh?: string }).refresh === '1';
-  return { ...d, range, tiles: await runTiles(await SalesforceClient.forTenant(tenantId), d.tiles, range as Range, refresh) };
+  return { ...d, range, tiles: await runTiles(await sfFor(req, tenantId), d.tiles, range as Range, refresh) };
 });
 
 app.put('/api/tenants/:tenantId/dashboards/:id', async (req) => {
@@ -335,13 +380,13 @@ app.delete('/api/tenants/:tenantId/dashboards/:id', async (req) => {
 app.post('/api/tenants/:tenantId/dashboards/run', async (req) => {
   const { tenantId } = req.params as { tenantId: string };
   const b = z.object({ tiles: z.array(tileBody.extend({ id: z.string().max(64).default('') })).max(24), range: z.enum(RANGES).default('THIS_YEAR') }).parse(req.body);
-  return runTiles(await SalesforceClient.forTenant(tenantId), b.tiles as (TileSpec & { id: string })[], b.range as Range);
+  return runTiles(await sfFor(req, tenantId), b.tiles as (TileSpec & { id: string })[], b.range as Range);
 });
 
 app.post('/api/tenants/:tenantId/dashboards/drill', async (req) => {
   const { tenantId } = req.params as { tenantId: string };
   const b = z.object({ tile: tileBody, label: z.string().max(500), range: z.enum(RANGES).default('THIS_YEAR') }).parse(req.body);
-  return drill(await SalesforceClient.forTenant(tenantId), b.tile as TileSpec, b.label, b.range as Range);
+  return drill(await sfFor(req, tenantId), b.tile as TileSpec, b.label, b.range as Range);
 });
 
 app.get('/api/tenants/:tenantId/dashboards/:id/tiles/:tileId/drill', async (req) => {
@@ -350,7 +395,7 @@ app.get('/api/tenants/:tenantId/dashboards/:id/tiles/:tileId/drill', async (req)
   const d = await loadDashboard(tenantId, id);
   const tile = d.tiles.find((t: TileSpec & { id: string }) => t.id === tileId);
   if (!tile) throw Object.assign(new Error('tile not found'), { statusCode: 404 });
-  return drill(await SalesforceClient.forTenant(tenantId), tile, q.label, q.range as Range);
+  return drill(await sfFor(req, tenantId), tile, q.label, q.range as Range);
 });
 
 // ---- Smart features ----
@@ -855,7 +900,7 @@ app.post('/api/tenants/:tenantId/agents/:agentId/run', async (req, reply) => {
     b.input,
     b.context,
     b.history,
-    { startedBy: req.user!.email, memory: { userKey: req.user!.email, canWriteTeam: roleAtLeast(req.user!.role, 'builder'), channel: 'app', conversationId: b.conversationId } },
+    { startedBy: req.user!.email, asPerson: (await actsAsPerson(req.user!.accountId)) ? req.user!.id : undefined, memory: { userKey: req.user!.email, canWriteTeam: roleAtLeast(req.user!.role, 'builder'), channel: 'app', conversationId: b.conversationId } },
   );
 });
 

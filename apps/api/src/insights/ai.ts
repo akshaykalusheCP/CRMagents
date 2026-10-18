@@ -13,10 +13,10 @@ import type { Insights } from './metrics.js';
 
 // The AI only ever sees aggregated numbers (summary) or the org schema (questions) - never bulk records.
 
-export async function setup(tenantId: string): Promise<{ llm: Llm; sf: SalesforceClient }> {
+export async function setup(tenantId: string, person?: SalesforceClient): Promise<{ llm: Llm; sf: SalesforceClient }> {
   const accountId = await accountOf(tenantId);
   const client = await aiClient(accountId, { tenantId, purpose: 'Insights and tools' });
-  const sf = await SalesforceClient.forTenant(tenantId);
+  const sf = person ?? await SalesforceClient.forTenant(tenantId);
   const llm = createLlm('', sf, spendGuard(accountId), client, await dbResultCache(accountId));
   return { llm, sf };
 }
@@ -160,8 +160,8 @@ export async function schemaContext(tenantId: string, sf: SalesforceClient, text
   return { candidates, schema };
 }
 
-export async function ask(tenantId: string, question: string): Promise<Answer> {
-  const { llm, sf } = await setup(tenantId);
+export async function ask(tenantId: string, question: string, person?: SalesforceClient): Promise<Answer> {
+  const { llm, sf } = await setup(tenantId, person);
   const all = await listObjects(tenantId, sf);
   const { mentioned, candidates } = detectObjects(question, all);
   const focus = (mentioned.length ? mentioned : ['Opportunity', 'Account', 'Case', 'Lead']).slice(0, 3);

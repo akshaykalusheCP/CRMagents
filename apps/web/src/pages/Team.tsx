@@ -1,7 +1,8 @@
 import { Copy, KeyRound, Loader2, Mail, Trash2, UserPlus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { ROLES } from '@crmagents/shared';
-import { api, type Me, type Team } from '../api';
+import { api, type Me, type Team, type Tenant } from '../api';
+import { SalesforceAccess } from '../components/PersonLink';
 import { Empty, Panel, SkeletonRows, Status, Table, toast, useConfirm } from '../components/ui';
 
 // Team: who can sign in to this workspace and what each person may do. Admins invite people by email with a
@@ -21,7 +22,7 @@ function copy(text: string, what: string) {
   void navigator.clipboard?.writeText(text).then(() => toast(`${what} copied`), () => toast(text, 'info'));
 }
 
-export function TeamPage({ me }: { me: Me }) {
+export function TeamPage({ me, tenant }: { me: Me; tenant?: Tenant }) {
   const [team, setTeam] = useState<Team>();
   const [err, setErr] = useState('');
   const [email, setEmail] = useState('');
@@ -123,6 +124,8 @@ export function TeamPage({ me }: { me: Me }) {
       )}
 
       {team && !manage && <Empty title={`You're ${ROLE_LABEL[me.role] === 'Admin' ? 'an' : 'a'} ${ROLE_LABEL[me.role] ?? me.role}`} body="Only owners and admins can invite people or change roles." />}
+
+      <SalesforceAccess me={me} tenant={tenant} />
 
       <ChangePassword />
     </div>

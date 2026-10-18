@@ -19,6 +19,7 @@ shows the same controls with each workspace's live settings, and prints as a rep
 | Passwords | scrypt hashes; 10 characters minimum; sign-in throttled per email and address (shared across servers) |
 | Sessions | random 256-bit tokens, stored hashed, httpOnly + SameSite=Lax cookies, Secure on HTTPS; signed out on password reset |
 | Access | roles owner / admin / builder / approver, checked on every API request; tenant ownership checked on every org route |
+| Salesforce sharing | inside Salesforce, assistants run their tools in Apex as the person asking (user mode). In the app, a workspace can make assistants, dashboards and questions act as each person through their own linked Salesforce login (same org only, token encrypted, revoked on unlink), so Salesforce enforces their sharing, FLS and object permissions; results are never cached across people, and org-wide Insights are admin-only. Background agents use the org connection, like any integration user |
 | Separation of duties | whoever started a run can't approve it when someone else can |
 | Salesforce ↔ CRMagents | every call from the package is HMAC-SHA256 signed with a per-org secret and a timestamp (replay window) |
 | Agent safety | approvals before changes, field limits, rules checked in code, per-run limits, daily budget, monthly cap per agent |

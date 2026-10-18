@@ -1260,3 +1260,14 @@ select.sm { height: 30px; padding: 0 28px 0 8px; font-size: 13px; width: auto; }
 @media (max-width: 900px) { :root:root .fr-starters { grid-template-columns: minmax(0, 1fr); } }
 :root:root .sc-form { display: flex; flex-direction: column; gap: 4px; max-width: 720px; }
 :root:root .sc-form input { flex: 1; min-width: 200px; height: 32px; border: 1px solid var(--border-strong); border-radius: 7px; background: var(--surface); color: var(--text); font: inherit; padding: 0 10px; box-sizing: border-box; }
+
+/* Salesforce access (Team page) */
+:root:root .sfa { display: flex; flex-direction: column; }
+:root:root .sfa-row { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; padding: 12px 0; border-top: 1px solid var(--border); }
+:root:root .sfa-row:first-child { border-top: 0; padding-top: 0; }
+:root:root .sfa-row b { font-weight: 500; }
+:root:root .sfa-row p { margin: 4px 0 0; color: var(--text-2); font-size: 13.5px; line-height: 1.5; max-width: 680px; }
+:root:root .sfa-row > button { flex: none; }
+:root:root .sfa-people { border-top: 1px solid var(--border); padding-top: 12px; }
+:root:root .sfa-people ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+:root:root .sfa-people li { display: flex; justify-content: space-between; gap: 12px; font-size: 13.5px; }
