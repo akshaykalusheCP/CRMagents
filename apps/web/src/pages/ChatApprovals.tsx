@@ -1,6 +1,6 @@
 import { Loader2, MessageSquare, Send, Unplug } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { api, type Me } from '../api';
+import { api, leaveTo, type Me } from '../api';
 import { Panel, Status, toast } from '../components/ui';
 
 // Approvals in Slack and Microsoft Teams: where approval requests go besides the app and Salesforce.
@@ -48,7 +48,7 @@ export function ChatApprovalsPage({ me }: { me: Me }) {
           ) : !s.slack.available ? (
             <p className="muted small">Slack isn't switched on for Nimbus yet. Approvals still reach people in the app and in Salesforce.</p>
           ) : admin ? (
-            <button className="primary" style={{ alignSelf: 'flex-start' }} disabled={!!busy} onClick={() => void run('add-slack', async () => { location.href = (await api.installSlack()).url; })}>Add to Slack</button>
+            <button className="primary" style={{ alignSelf: 'flex-start' }} disabled={!!busy} onClick={() => void run('add-slack', async () => { leaveTo((await api.installSlack()).url); })}>Add to Slack</button>
           ) : <p className="muted small">An admin can add Nimbus to a Slack channel.</p>}
         </div>
       </Panel>

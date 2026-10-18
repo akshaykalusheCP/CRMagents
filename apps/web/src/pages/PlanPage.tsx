@@ -1,7 +1,7 @@
 import { Check, Lock } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { FEATURE_LABEL, PLAN_DEFS, type Feature } from '@crmagents/shared';
-import { api, type BillingStatus, type Me, type PlanId } from '../api';
+import { api, leaveTo, type BillingStatus, type Me, type PlanId } from '../api';
 import { usePlan } from '../components/Plan';
 import { Meter, Panel, Status, toast } from '../components/ui';
 
@@ -34,10 +34,10 @@ export function PlanPage({ me, openAdmin }: { me: Me; openAdmin?: () => void }) 
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const checkout = async (p: 'plus' | 'pro') => {
     setPaying(true);
-    try { const r = await api.checkout(p, yearly ? 'year' : 'month'); window.location.href = r.url; } catch (e) { toast((e as Error).message, 'bad'); setPaying(false); }
+    try { const r = await api.checkout(p, yearly ? 'year' : 'month'); leaveTo(r.url); } catch (e) { toast((e as Error).message, 'bad'); setPaying(false); }
   };
   const portal = async () => {
-    try { const r = await api.billingPortal(); window.location.href = r.url; } catch (e) { toast((e as Error).message, 'bad'); }
+    try { const r = await api.billingPortal(); leaveTo(r.url); } catch (e) { toast((e as Error).message, 'bad'); }
   };
   const online = !!billing?.configured;
   const sub = billing?.subscription;

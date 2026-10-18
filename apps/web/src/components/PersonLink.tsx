@@ -1,6 +1,6 @@
 import { Link2, Loader2, ShieldCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { api, type Me, type Tenant } from '../api';
+import { api, leaveTo, type Me, type Tenant } from '../api';
 import { Panel, Status, toast } from './ui';
 
 // Acting as each person in Salesforce: an admin turns it on for the workspace; each person links their own
@@ -9,7 +9,7 @@ import { Panel, Status, toast } from './ui';
 // connection, like any integration user.
 
 const link = async (tenantId: string) => {
-  try { location.href = (await api.linkMySalesforce(tenantId)).url; } catch (e) { toast((e as Error).message, 'bad'); }
+  try { leaveTo((await api.linkMySalesforce(tenantId)).url); } catch (e) { toast((e as Error).message, 'bad'); }
 };
 
 /** Opens when the server says this person must link their Salesforce login first. */

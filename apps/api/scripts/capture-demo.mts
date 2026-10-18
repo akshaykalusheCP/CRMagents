@@ -32,9 +32,19 @@ const tiles = await runTiles(sf, [
 
 const dashboard = { id: 'd1', name: 'Sales & Service Overview', description: 'Pipeline, top accounts and case load at a glance', prompt: 'Sales and service overview', range: 'all', tiles };
 const tenant = { id: 'demo-tenant', sf_org_id: '00D000000000DEMO', sf_instance_url: 'https://demo.my.salesforce.com', sf_username: 'owner@demo-company.com', setup_status: 'ready', setup_message: null, use_package: false, created_at: new Date().toISOString() };
-writeFileSync(new URL('../../web/src/demo/fixtures.json', import.meta.url), JSON.stringify({
+// Demo data is public (it ships in the web app): the org's people become demo names, their emails demo addresses.
+const DEMO_NAMES = ['Priya Shah', 'Sam Lee', 'Maria Gonzalez', 'Tom Reilly', 'Ana Souza', 'Dev Patel', 'Emma Clarke', 'Luis Ramirez', 'Karen Wu', 'Arjun Rao'];
+const people = (await sf.query('SELECT Name, Email, Username FROM User WHERE IsActive = true ORDER BY CreatedDate LIMIT 200')).records as { Name: string; Email: string; Username: string }[];
+let out = JSON.stringify({
   tenant, insights, brief: { ...brief, reused: true }, dashboard,
   dashboards: [{ id: 'd1', name: dashboard.name, description: dashboard.description, updated_at: new Date().toISOString(), tiles: tiles.length }],
-}));
+});
+people.forEach((u, i) => {
+  const fake = DEMO_NAMES[i % DEMO_NAMES.length] + (i >= DEMO_NAMES.length ? ` ${Math.floor(i / DEMO_NAMES.length) + 1}` : '');
+  for (const [real, alias] of [[u.Name, fake], [u.Email, `${fake.toLowerCase().replace(/\W+/g, '.')}@demo-company.com`], [u.Username, `${fake.toLowerCase().replace(/\W+/g, '.')}@demo-company.com`]]) {
+    if (real) out = out.split(real).join(alias);
+  }
+});
+writeFileSync(new URL('../../web/src/demo/fixtures.json', import.meta.url), out);
 console.log(`brief ${brief.reused ? 'reused' : `$${brief.costUsd}`}; tiles: ${tiles.map((t) => `${t.title} ${t.error ? 'ERROR ' + t.error : t.rows.length}`).join(', ')}`);
 await pool.end();

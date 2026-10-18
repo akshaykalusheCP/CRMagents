@@ -8,7 +8,10 @@ const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 function route(method: string, url: URL, body: any): Response {
   const p = url.pathname.replace(/^\/api\/tenants\/[^/]+/, '/t');
-  if (p === '/api/auth/me') return json({ id: 'demo', email: 'owner@demo-company.com', accountName: 'Demo Company', role: 'owner', platformAdmin: true });
+  // The staff console is not part of the public demo (?demo&staff shows it, for screenshots).
+  if (p === '/api/auth/me') return json({ id: 'demo', email: 'owner@demo-company.com', accountName: 'Demo Company', role: 'owner', platformAdmin: new URLSearchParams(location.search).has('staff') });
+  // Anything that would leave the demo (payments, Slack, linking a Salesforce login) says so instead.
+  if (p === '/api/billing/checkout' || p === '/api/billing/portal' || p === '/api/chat-approvals/slack/install' || p === '/t/my-salesforce/link') return json({ error: DEMO_ONLY }, 400);
   if (p === '/api/tenants') return json([fx.tenant]);
   if (p === '/api/plan') {
     // ?demo&plan=basic shows a Basic trial (locked pages, trial banner); otherwise everything is included.
@@ -50,7 +53,6 @@ function route(method: string, url: URL, body: any): Response {
     ? { loaded: true, counts: { Account: 8, Contact: 12, Opportunity: 12, Case: 16, Lead: 10, Task: 5 }, loadedAt: new Date().toISOString(), allowed: true, orgKind: 'Developer Edition' }
     : method === 'POST' ? { counts: { Account: 8, Contact: 12, Opportunity: 12, Case: 16, Lead: 10, Task: 5 }, failures: [] } : { removed: 63, failures: [] });
   if (p === '/t/my-salesforce') return json({ required: true, linked: true, sfUsername: 'owner@demo-company.com', linkedAt: new Date().toISOString() });
-  if (p === '/t/my-salesforce/link') return json({ url: '/?demo&tab=settings' });
   if (p === '/t/person-links') return json([{ email: 'owner@demo-company.com', role: 'owner', sfUsername: 'owner@demo-company.com', linkedAt: new Date().toISOString() }, { email: 'priya@demo-company.com', role: 'builder', sfUsername: 'priya@demo-company.com', linkedAt: new Date().toISOString() }, { email: 'sam@demo-company.com', role: 'approver', sfUsername: null, linkedAt: null }]);
   if (p === '/api/team') return json(DEMO_TEAM);
   if (p === '/api/team/invites') return json({ id: 'i9', link: `${location.origin}/?invite=demo-link`, emailed: false });
@@ -134,7 +136,33 @@ function route(method: string, url: URL, body: any): Response {
   return method === 'GET' ? json([]) : json({ ok: true });
 }
 
+export const DEMO_ONLY = 'Demo mode: this needs your own workspace. Start free to try it on your Salesforce org.';
+
+// Demo mode never reaches the real server: every /api request is answered here, and links that would leave the
+// demo (to the server, Salesforce login, payments) are stopped with a note. Anyone can open ?demo, signed in or not.
+function note(text: string) {
+  let el = document.getElementById('demo-note');
+  if (!el) {
+    el = document.createElement('div'); el.id = 'demo-note'; el.setAttribute('role', 'status');
+    el.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%);z-index:99999;background:#0a2540;color:#fff;padding:12px 18px;border-radius:10px;font:500 14px Inter,system-ui,sans-serif;box-shadow:0 12px 30px rgba(0,0,0,.3);max-width:90vw';
+    document.body.appendChild(el);
+  }
+  el.textContent = text; el.style.opacity = '1';
+  clearTimeout((el as any).t); (el as any).t = setTimeout(() => { el!.style.opacity = '0'; }, 3200);
+}
+const LEAVES = /^\/(api|oauth|public)\//;
+export function leavesDemo(href: string) {
+  // Our own server's routes (API, Salesforce login, webhooks) are blocked; other sites (help pages) are fine.
+  try { const u = new URL(href, location.origin); return u.origin === location.origin && LEAVES.test(u.pathname); } catch { return false; }
+}
+
 export function install() {
+  (window as any).__NIMBUS_DEMO__ = true;
+  document.addEventListener('click', (e) => {
+    const a = (e.target as Element | null)?.closest?.('a[href]') as HTMLAnchorElement | null;
+    if (a && leavesDemo(a.getAttribute('href') ?? '')) { e.preventDefault(); e.stopPropagation(); note(DEMO_ONLY); }
+  }, true);
+  window.addEventListener('nimbus:demo-blocked', () => note(DEMO_ONLY));
   const real = window.fetch.bind(window);
   window.fetch = async (input, init) => {
     const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url, location.origin);

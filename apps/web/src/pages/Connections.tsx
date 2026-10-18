@@ -1,6 +1,6 @@
 import { Database, ExternalLink, Loader2, MoreHorizontal, Plug } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { api, type SampleStatus, type Settings, type Tenant } from '../api';
+import { api, leaveTo, type SampleStatus, type Settings, type Tenant } from '../api';
 import { RecordPagePicker, UtilityBarPicker } from '../components/PagePlacement';
 import { Drawer, Menu, Panel, Status, Table, toast, type Column, Meter } from '../components/ui';
 
@@ -41,7 +41,7 @@ export function ConnectionsPage({ tenants, onChange, goSettings, focusConnect }:
     setOwnErr('');
     try {
       const { url } = await api.startOAuth({ sandbox, domain: domain.trim() || undefined, clientId: own.clientId, clientSecret: own.clientSecret || undefined });
-      location.href = url;
+      leaveTo(url);
     } catch (e) { setOwnErr((e as Error).message); }
   };
   const configured = !!s?.sfClientId;

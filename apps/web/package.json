@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -p . && vite build",
-    "typecheck": "tsc -p . --noEmit"
+    "typecheck": "tsc -p . --noEmit",
+    "test:demo": "node scripts/demo-isolation.mjs"
   },
   "dependencies": {
     "@crmagents/shared": "*",

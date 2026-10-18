@@ -1,6 +1,6 @@
 import { ArrowRight, Check, Database, Download, FileText, Lock, Printer, Server, ShieldAlert, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { api, type ActivityRow, type AiCallDetail, type AiCallRow, type Me, type TrustFacts } from '../api';
+import { api, leaveTo, type ActivityRow, type AiCallDetail, type AiCallRow, type Me, type TrustFacts } from '../api';
 import { Drawer, PageHeader, Panel, SkeletonRows, Table, toast, useConfirm } from '../components/ui';
 
 // Trust Center: how this workspace's Salesforce data is handled, shown from live settings rather than promises:
@@ -47,7 +47,7 @@ export function TrustPage({ me }: { me: Me }) {
   ] : [];
 
   const openCall = async (id: number) => { try { setOpen(await api.aiCall(id)); } catch (e) { toast((e as Error).message, 'bad'); } };
-  const exportAll = () => { window.location.href = '/api/trust/export'; };
+  const exportAll = () => leaveTo('/api/trust/export');
   const del = async () => {
     const ok = await ask({ title: 'Delete this workspace?', danger: true, confirm: 'Delete everything',
       body: <>Nimbus' access to every connected Salesforce org is revoked, then all agents, assistants, runs, logs, guides and users of <b>{me.accountName}</b> are deleted. Nothing is deleted in Salesforce. This can't be undone; export first if you need a copy.</> });

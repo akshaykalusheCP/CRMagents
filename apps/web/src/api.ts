@@ -1,3 +1,11 @@
+/** True in demo mode (?demo): nothing reaches the real server. */
+export const isDemo = () => !!(window as unknown as { __NIMBUS_DEMO__?: boolean }).__NIMBUS_DEMO__;
+/** Go to a server or external address, unless this is the demo (then say so instead). */
+export function leaveTo(url: string) {
+  if (isDemo()) { window.dispatchEvent(new Event('nimbus:demo-blocked')); return; }
+  window.location.href = url;
+}
+
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(path, {
     method,
