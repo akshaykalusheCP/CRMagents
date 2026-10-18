@@ -1,0 +1,176 @@
+time,sound,note
+0:00.55,whoosh-in,Logo tile flies in
+0:00.95,boom,Logo hit as the cloud forms
+0:01.62,pop,The node drops into place
+0:01.72,key,"Letters of ""Nimbus"" land"
+0:01.79,key,"Letters of ""Nimbus"" land"
+0:01.86,key,"Letters of ""Nimbus"" land"
+0:01.93,key,"Letters of ""Nimbus"" land"
+0:02.00,key,"Letters of ""Nimbus"" land"
+0:02.07,key,"Letters of ""Nimbus"" land"
+0:02.50,shimmer,Tagline appears
+0:02.90,blip,"""Without the per-user AI bill."""
+0:04.15,whoosh-through,Zoom through the logo
+0:05.00,swish,Headline in
+0:06.60,swish,Headline in
+0:08.20,swish,$2.6M headline in
+0:08.40,tick,Counter climbs
+0:08.48,tick,Counter climbs
+0:08.56,tick,Counter climbs
+0:08.63,tick,Counter climbs
+0:08.70,tick,Counter climbs
+0:08.78,tick,Counter climbs
+0:08.85,tick,Counter climbs
+0:08.91,tick,Counter climbs
+0:08.98,tick,Counter climbs
+0:09.04,tick,Counter climbs
+0:09.10,tick,Counter climbs
+0:09.16,tick,Counter climbs
+0:09.22,tick,Counter climbs
+0:09.27,tick,Counter climbs
+0:09.32,tick,Counter climbs
+0:09.37,tick,Counter climbs
+0:09.42,tick,Counter climbs
+0:09.46,tick,Counter climbs
+0:09.50,tick,Counter climbs
+0:09.54,tick,Counter climbs
+0:09.58,tick,Counter climbs
+0:09.61,tick,Counter climbs
+0:09.63,tick,Counter climbs
+0:09.66,tick,Counter climbs
+0:09.68,tick,Counter climbs
+0:09.69,tick,Counter climbs
+0:09.72,pop,Counter lands on $2.6M
+0:10.55,swish,"""AI agents usually mean…"""
+0:10.90,card-pop,Cost card 1 rises
+0:11.20,card-pop,Cost card 2 rises
+0:11.50,card-pop,Cost card 3 rises
+0:11.80,card-pop,Cost card 4 rises
+0:12.90,zip,Card 1 struck through
+0:13.12,zip,Card 2 struck through
+0:13.20,riser,Build-up to the answer
+0:13.34,zip,Card 3 struck through
+0:13.56,zip,Card 4 struck through
+0:14.75,whoosh-through,"""Nimbus connects in two minutes."""
+0:16.35,window-in,Window flies in: Salesforce orgs
+0:17.40,air,Camera pushes in
+0:19.10,click,"Click ""Install in Salesforce"""
+0:19.30,chime,Toast: Installed · Ready
+0:20.10,whoosh-out,Window leaves
+0:20.55,swish,"""It lives inside Salesforce."""
+0:21.95,window-in,Window in: Case record page
+0:23.00,air,Push in to the Nimbus panel
+0:24.35,swish,Cut: assistant answer
+0:24.55,blip,The answer appears
+0:26.95,swish,Cut: Salesforce bell
+0:27.15,ding,Approval in the bell
+0:28.95,swish,Cut: approval on the record
+0:30.10,click,Click Approve (in Salesforce)
+0:30.35,chime,Approved
+0:30.75,swish,Cut: the change with Undo
+0:31.40,pop,Highlight on Medium → High · Undo
+0:32.90,whoosh-out,Window leaves
+0:33.35,window-in,Window in: Salesforce access
+0:34.30,air,Push in
+0:36.10,whoosh-out,Window leaves
+0:36.55,swish,"""Describe the job."""
+0:37.85,window-in,Window in: builder
+0:39.55,click,Click the request box
+0:39.70,key,Typing the request
+0:39.74,key,Typing the request
+0:39.77,key,Typing the request
+0:39.79,key,Typing the request
+0:39.83,key,Typing the request
+0:39.87,key,Typing the request
+0:39.89,key,Typing the request
+0:39.94,key,Typing the request
+0:39.97,key,Typing the request
+0:39.99,key,Typing the request
+0:40.02,key,Typing the request
+0:40.06,key,Typing the request
+0:40.09,key,Typing the request
+0:40.12,key,Typing the request
+0:40.16,key,Typing the request
+0:40.19,key,Typing the request
+0:40.23,key,Typing the request
+0:40.26,key,Typing the request
+0:40.29,key,Typing the request
+0:40.33,key,Typing the request
+0:40.35,key,Typing the request
+0:40.38,key,Typing the request
+0:40.42,key,Typing the request
+0:40.44,key,Typing the request
+0:40.48,key,Typing the request
+0:40.52,key,Typing the request
+0:40.55,key,Typing the request
+0:40.59,key,Typing the request
+0:40.62,key,Typing the request
+0:40.65,key,Typing the request
+0:40.68,key,Typing the request
+0:40.71,key,Typing the request
+0:40.74,key,Typing the request
+0:40.77,key,Typing the request
+0:40.82,key,Typing the request
+0:40.84,key,Typing the request
+0:40.87,key,Typing the request
+0:40.90,key,Typing the request
+0:40.95,key,Typing the request
+0:40.97,key,Typing the request
+0:41.00,key,Typing the request
+0:41.05,key,Typing the request
+0:41.07,key,Typing the request
+0:41.11,key,Typing the request
+0:41.14,key,Typing the request
+0:41.18,key,Typing the request
+0:41.20,key,Typing the request
+0:41.24,key,Typing the request
+0:41.27,key,Typing the request
+0:41.31,key,Typing the request
+0:41.33,key,Typing the request
+0:41.37,key,Typing the request
+0:41.65,whoosh-through,Zoom-through to the agent
+0:42.40,air,Push in to the steps
+0:44.35,window-in,Window in: Automation X-ray
+0:45.60,air,Push in to conflicts
+0:48.05,swish,Cut: proof on real records
+0:49.40,pop,88% agree
+0:51.10,whoosh-out,Window leaves
+0:51.55,swish,"""Nothing changes until you say so."""
+0:53.05,window-in,Window in: Approvals
+0:54.30,air,Spotlight on the changes
+0:55.70,click,Click Approve
+0:55.90,chime,Approved · 2 changes made
+0:56.65,slack-in,Slack card slides in
+0:58.10,click,Click Approve in Slack
+0:58.25,chime,"Approved by Maria, in Slack"
+0:59.15,swish,"""Your data stays yours."""
+1:00.55,window-in,Window in: Trust center
+1:01.90,air,Push in to masking
+1:02.50,pop,"Ring on ""Personal data is masked"""
+1:02.95,blip,Email chip appears
+1:03.45,glitch,Email scrambles into [EMAIL_1]
+1:04.80,pop,[EMAIL_1] settles
+1:05.95,swish,Cut: your own AI and a daily cap
+1:09.10,whoosh-out,Window leaves
+1:09.55,swish,"""And it does more than agents."""
+1:10.95,side-whoosh,Montage: Briefing
+1:12.85,side-whoosh,Montage: Dashboards
+1:14.75,side-whoosh,Montage: Memory
+1:16.55,side-whoosh,Montage: Discover
+1:18.35,side-whoosh,Montage: The return
+1:20.15,whoosh-through,"""Priced for the whole team."""
+1:21.40,riser,Lift into the end card
+1:22.85,boom,Logo hit
+1:23.42,pop,The node drops in
+1:23.52,key,Letters land
+1:23.59,key,Letters land
+1:23.66,key,Letters land
+1:23.73,key,Letters land
+1:23.80,key,Letters land
+1:23.87,key,Letters land
+1:24.30,shimmer,Tagline
+1:24.85,card-pop,Promise pills
+1:24.97,card-pop,Promise pills
+1:25.09,card-pop,Promise pills
+1:25.65,pop,Start free button
+1:25.80,shimmer,Button glow
