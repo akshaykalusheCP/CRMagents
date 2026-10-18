@@ -1,4 +1,4 @@
-import { ArrowUpRight, ChevronRight, ShieldCheck } from 'lucide-react';
+import { ArrowUpRight, ChevronRight, ShieldCheck, Compass } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { LogoMark } from '../components/Logo';
 import { PublicFooter } from './Legal';
@@ -17,7 +17,7 @@ const dropToken = () => { const u = new URL(location.href); u.searchParams.delet
 export function AuthPage({ onDone }: { onDone: () => void }) {
   const q = new URLSearchParams(location.search);
   const token = q.get('invite') ?? q.get('reset') ?? '';
-  const [mode, setMode] = useState<Mode>(q.get('invite') ? 'invite' : q.get('reset') ? 'reset' : 'login');
+  const [mode, setMode] = useState<Mode>(q.get('invite') ? 'invite' : q.get('reset') ? 'reset' : q.has('signup') ? 'signup' : 'login');
   const [f, setF] = useState({ accountName: '', email: '', password: '' });
   const [err, setErr] = useState('');
   const [note, setNote] = useState('');
@@ -84,6 +84,7 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
               <span><ShieldCheck size={16} /> Uses your own Flows and Apex</span>
               <span><ShieldCheck size={16} /> Pay only for what runs</span>
             </div>
+            <a className="land-tour" href="/?demo&tour=visitor"><Compass size={16} /> Take the 2-minute tour <span>No sign-up · demo data</span></a>
           </div>
 
           <form className="land-card" onSubmit={submit} aria-label={title}>

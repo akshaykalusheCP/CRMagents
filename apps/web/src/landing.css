@@ -189,3 +189,7 @@
   .landing .legal .legal-tabs a { white-space: nowrap; }
   .legal h1 { font-size: 30px; }
 }
+.landing .land-tour { display: inline-flex; align-items: center; gap: 8px; margin-top: 26px; padding: 10px 16px; border-radius: 999px; border: 1px solid var(--l-line); background: color-mix(in srgb, var(--l-card) 85%, transparent); color: var(--l-ink); font-weight: 600; font-size: 15px; text-decoration: none; }
+.landing .land-tour svg { color: var(--l-blurple); }
+.landing .land-tour span { font-weight: 500; color: var(--l-slate); font-size: 13px; }
+.landing .land-tour:hover { border-color: var(--l-blurple); }

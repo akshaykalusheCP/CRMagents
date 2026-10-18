@@ -1,6 +1,6 @@
-import { BarChart3, BookOpen, Bot, TrendingUp, ChevronRight, PanelLeft, PanelTop, ChevronDown, Check, ChevronsUpDown, History, House, Inbox, LayoutDashboard, LogOut, Moon, Plus, Search, Settings as SettingsIcon, Sun, Users, Radar, ShieldCheck, Bookmark, LayoutGrid } from 'lucide-react';
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
-import { api, type Alert, type Draft, type Me, type Tenant, type WorkflowRow } from './api';
+import { BarChart3, BookOpen, Bot, TrendingUp, ChevronRight, PanelLeft, PanelTop, ChevronDown, Check, ChevronsUpDown, History, House, Inbox, LayoutDashboard, LogOut, Moon, Plus, Search, Settings as SettingsIcon, Sun, Users, Radar, ShieldCheck, Bookmark, LayoutGrid, Compass } from 'lucide-react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { api, isDemo, type Alert, type Draft, type Me, type Tenant, type WorkflowRow } from './api';
 import { CommandPalette, Menu, Toaster, toast, type Command } from './components/ui';
 import { ApprovalsPage } from './pages/Approvals';
 import { HomePage } from './pages/Home';
@@ -17,6 +17,7 @@ import { Ribbon, type RibbonPalette } from './components/Ribbon';
 import { SETTINGS_SECTIONS, SettingsHub, type SettingsSection } from './pages/SettingsHub';
 import { AlertsBell } from './components/AlertsBell';
 import { LinkPrompt } from './components/PersonLink';
+import { startTour, Tour, tourSeen, visitorTour, welcomeTour } from './components/Tour';
 import { LockedPage, PlanProvider, PlanTag, TrialBanner, UpgradePrompt, usePlanState } from './components/Plan';
 import type { Feature } from '@crmagents/shared';
 import { LogoMark } from './components/Logo';
@@ -121,6 +122,15 @@ export function App() {
   const [cmdk, setCmdk] = useState(false);
   const [settingsAt, setSettingsAt] = useState<{ section: SettingsSection; connect?: boolean; n: number }>({ section: new URLSearchParams(location.search).has('billing') ? 'plan' : (SETTINGS_SECTIONS.find((x) => x === new URLSearchParams(location.search).get('section')) ?? 'orgs'), n: 0 }); // back from Stripe: the Plan page
   const openSettings = (section: SettingsSection = 'orgs', connect = false) => { setSettingsAt((s) => ({ section, connect, n: s.n + 1 })); setTab('settings'); };
+  // Guided tours: visitors get the demo tour (?demo&tour=visitor); a new workspace (no org yet) gets a short welcome once.
+  const tours = useMemo(() => {
+    const first = (me?.email ?? '').split('@')[0].split(/[._]/)[0];
+    return {
+      visitor: visitorTour(() => { location.href = '/?signup'; }),
+      welcome: welcomeTour(first ? first[0].toUpperCase() + first.slice(1) : '', () => openSettings('orgs', true)),
+    };
+  }, [me?.email]); // eslint-disable-line react-hooks/exhaustive-deps
+  const tourGo = (t: string, section?: string) => (section ? openSettings(section as SettingsSection) : setTab(t as Tab));
   const planValue = { ...planState, openPlans: () => openSettings('plan') };
   // An alert opens where it can be fixed: the org list for a disconnected org, else the agent's org and the Agents page.
   const openAlert = (a: Alert) => {
@@ -133,6 +143,7 @@ export function App() {
     api.tenants().then((t) => {
       setTenants(t);
       setTenantId((cur) => (t.some((x) => x.id === cur) ? cur : (t[0]?.id ?? '')));
+      setTenantsLoaded(true);
     }).catch(() => {});
 
   useEffect(() => {
@@ -162,6 +173,12 @@ export function App() {
   }, [me?.id]);
 
   useEffect(() => { if (tenantId) try { localStorage.setItem('tenantId', tenantId); } catch { /* ignore */ } }, [tenantId]);
+  const [tenantsLoaded, setTenantsLoaded] = useState(false);
+  useEffect(() => {
+    if (!me) return;
+    if (isDemo()) { if (new URLSearchParams(location.search).get('tour') === 'visitor') setTimeout(() => startTour('visitor'), 900); return; }
+    if (tenantsLoaded && tenants.length === 0 && !tourSeen('welcome')) setTimeout(() => startTour('welcome'), 900);
+  }, [me?.id, tenantsLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const tenant = tenants.find((t) => t.id === tenantId);
 
@@ -272,6 +289,7 @@ export function App() {
                     <button className="mi" onClick={() => { close(); setTab('settings'); }}><SettingsIcon size={15} /> Settings</button>
                     <button className="mi" onClick={() => { close(); openSettings('team'); }}><Users size={15} /> Team</button>
                     <button className="mi" onClick={() => { close(); setTab('memory'); }}><Bookmark size={15} /> Memory</button>
+                    <button className="mi" onClick={() => { close(); startTour(isDemo() ? 'visitor' : 'welcome'); }}><Compass size={15} /> Take the tour</button>
                     {me.platformAdmin && <button className="mi" onClick={() => { close(); setTab('admin'); }}><LayoutGrid size={15} /> Super admin</button>}
                     <button className="mi" onClick={() => { close(); setTab('trust'); }}><ShieldCheck size={15} /> Trust center</button>
                     <button className="mi" onClick={() => { close(); toggleTheme(); }}>{theme === 'dark' ? <Sun size={15} /> : <Moon size={15} />} {theme === 'dark' ? 'Light mode' : 'Dark mode'}</button>
@@ -304,6 +322,7 @@ export function App() {
         <CommandPalette open={cmdk} onClose={() => setCmdk(false)} commands={commands} />
         <UpgradePrompt me={me} />
         <LinkPrompt tenants={tenants} />
+        <Tour tours={tours} go={tourGo} />
         <Toaster />
       </div>
       </PlanProvider>
@@ -402,6 +421,7 @@ export function App() {
       <CommandPalette open={cmdk} onClose={() => setCmdk(false)} commands={commands} />
       <UpgradePrompt me={me} />
       <LinkPrompt tenants={tenants} />
+      <Tour tours={tours} go={tourGo} />
       <Toaster />
     </div>
     </PlanProvider>

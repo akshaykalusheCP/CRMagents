@@ -71,7 +71,7 @@ export function TrustPage({ me }: { me: Me }) {
         <div className="tr-node"><Lock size={18} /><b>{p.name}</b><span>Gets only the text of one step, masked. {p.policy}{p.link && <> <a href={p.link} target="_blank" rel="noreferrer">Their terms</a></>}</span></div>
       </section>
 
-      <Panel title="Safeguards, as set right now">
+      <Panel title="Safeguards, as set right now" className="tour-safeguards">
         {!f ? <SkeletonRows rows={5} cols={2} /> : (
           <ul className="tr-checks">
             {checks.map((c) => (
