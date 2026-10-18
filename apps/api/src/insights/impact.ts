@@ -3,7 +3,7 @@ import { pool } from '../db.js';
 import { getSetting, setSetting } from '../settings.js';
 
 // Impact: what the agents did for the business over a period, the time that saved and what it cost. Built only
-// from what CRMagents recorded (runs, their steps, suggestions); the minutes per item are assumptions the
+// from what Nimbus recorded (runs, their steps, suggestions); the minutes per item are assumptions the
 // workspace can change, and the page shows them next to the numbers.
 
 export interface Assumptions {

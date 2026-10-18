@@ -22,7 +22,7 @@ private class CRMToolRunnerTest {
         Map<String, Object> upd = first(run(new List<Map<String, Object>>{ call('update_record', new Map<String, Object>{ 'id' => id, 'fields' => new Map<String, Object>{ 'Description' => 'Updated' } }) }));
         System.assertEquals(true, upd.get('ok'), '' + upd.get('error'));
         System.assertEquals('Updated', [SELECT Description FROM Account WHERE Id = :id].Description);
-        // What it replaced is reported, so CRMagents can undo it.
+        // What it replaced is reported, so Nimbus can undo it.
         Map<String, Object> updRes = (Map<String, Object>) upd.get('result');
         System.assertEquals('Account', updRes.get('object'));
         System.assert(((Map<String, Object>) updRes.get('before')).containsKey('Description'), System.JSON.serialize(updRes));

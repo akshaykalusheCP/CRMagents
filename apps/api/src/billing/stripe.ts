@@ -193,7 +193,7 @@ export async function handleStripeEvent(e: StripeEvent) {
       const failed = e.type === 'invoice.payment_failed';
       await logEvent(e, accountId, failed ? 'payment_failed' : 'payment_succeeded', { amount: failed ? o.amount_due : o.amount_paid, currency: o.currency, url: o.hosted_invoice_url });
       if (failed && accountId) {
-        await raiseAlert({ accountId, kind: 'billing', title: 'Payment failed', body: 'Your latest payment for CRMagents did not go through. Update your card in Settings → Plan → Manage billing to keep your plan.' });
+        await raiseAlert({ accountId, kind: 'billing', title: 'Payment failed', body: 'Your latest payment for Nimbus did not go through. Update your card in Settings → Plan → Manage billing to keep your plan.' });
       }
       return { ok: true };
     }

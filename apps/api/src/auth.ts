@@ -154,7 +154,7 @@ export function registerAuth(app: FastifyInstance) {
         'update invites set accepted_at=now() where token_hash=$1 and accepted_at is null and expires_at > now() returning account_id, email, role', [sha(b.token)]);
       if (!rows[0]) { await client.query('rollback'); return reply.code(400).send({ error: 'This invitation has expired or was already used. Ask for a new one.' }); }
       const exists = await client.query('select 1 from users where lower(email)=$1', [rows[0].email]);
-      if (exists.rowCount) { await client.query('rollback'); return reply.code(409).send({ error: 'This email already has a CRMagents login. Sign in instead.' }); }
+      if (exists.rowCount) { await client.query('rollback'); return reply.code(409).send({ error: 'This email already has a Nimbus login. Sign in instead.' }); }
       // The plan's people limit (people already in; this invitation was counted when it was sent).
       const p = await accountPlan(rows[0].account_id);
       const { rows: n } = await client.query('select count(*)::int n from users where account_id=$1', [rows[0].account_id]);

@@ -41,7 +41,7 @@ const id15 = (id: string) => String(id ?? '').slice(0, 15);
 export class SalesforceClient {
   /**
    * Set for an agent run: every create, update and delete through this client is logged with the values it
-   * replaced (one extra read per change, batched), so the run can be undone later. CRMagents' own objects are not logged.
+   * replaced (one extra read per change, batched), so the run can be undone later. Nimbus' own objects are not logged.
    */
   journal?: Journal;
 
@@ -85,7 +85,7 @@ export class SalesforceClient {
   /** Tokens are cached per org, or per person in the org. */
   private get key() { return this.personId ? `${this.tenantId}:${this.personId}` : this.tenantId; }
 
-  /** The org as one CRMagents person, through their own Salesforce login. Throws (409) when they haven't linked it. */
+  /** The org as one Nimbus person, through their own Salesforce login. Throws (409) when they haven't linked it. */
   static async forPerson(tenantId: string, userId: string): Promise<SalesforceClient> {
     const base = await SalesforceClient.forTenant(tenantId);
     const { rowCount } = await pool.query('select 1 from person_sf_links where user_id=$1 and tenant_id=$2', [userId, tenantId]);
@@ -226,7 +226,7 @@ export class SalesforceClient {
       const text = await res.text();
       if (res.status === 403 && /REQUEST_LIMIT_EXCEEDED/.test(text)) {
         markExhausted(this.tenantId);
-        throw Object.assign(new Error('This Salesforce org has used its whole daily API allowance. CRMagents resumes automatically as the allowance frees up over the next hours.'), { statusCode: 429 });
+        throw Object.assign(new Error('This Salesforce org has used its whole daily API allowance. Nimbus resumes automatically as the allowance frees up over the next hours.'), { statusCode: 429 });
       }
       throw new Error(`Salesforce ${method} ${path.split('?')[0]} -> ${res.status}: ${text}`);
     }

@@ -1,12 +1,12 @@
 /**
- * Flow action: Run a CRMagents workflow. In a record-triggered flow use the asynchronous path,
+ * Flow action: Run a Nimbus workflow. In a record-triggered flow use the asynchronous path,
  * because this makes a callout.
  */
 public with sharing class CRMRunWorkflowAction {
     public class Request {
-        @InvocableVariable(label='Agent name' description='The agent\'s name in CRMagents (or use Agent Id)')
+        @InvocableVariable(label='Agent name' description='The agent\'s name in Nimbus (or use Agent Id)')
         public String workflowName;
-        @InvocableVariable(label='Agent Id' description='Id shown in the CRMagents app (or use Agent name)')
+        @InvocableVariable(label='Agent Id' description='Id shown in the Nimbus app (or use Agent name)')
         public String workflowId;
         @InvocableVariable(label='Record Id')
         public String recordId;
@@ -24,7 +24,7 @@ public with sharing class CRMRunWorkflowAction {
         @InvocableVariable(label='Error') public String error;
     }
 
-    @InvocableMethod(label='Run CRMagents agent' description='Starts a CRMagents agent on a record and optionally waits for its result' category='CRMagents')
+    @InvocableMethod(label='Run Nimbus agent' description='Starts a Nimbus agent on a record and optionally waits for its result' category='Nimbus')
     public static List<Result> run(List<Request> requests) {
         // Many records at once (data loads, mass updates): one callout starts them all. Salesforce allows only 100
         // callouts per transaction, so one per record would fail the whole load.

@@ -174,7 +174,7 @@ private class CRMagentsTest {
         System.Test.stopTest();
         System.assert(rep.contains('"restored":1'));
         System.assert(m.last.getEndpoint().endsWith('/sf/v1/undo'));
-        // Who is asking goes along, so CRMagents checks their access to the record.
+        // Who is asking goes along, so Nimbus checks their access to the record.
         System.assert(m.last.getBody().contains(System.UserInfo.getUserId()), m.last.getBody());
         System.assert(m.last.getBody().contains('"changeIds":[7]'), m.last.getBody());
     }
@@ -189,7 +189,7 @@ private class CRMagentsTest {
         System.Test.startTest();
         String started = CRMAgentsController.startAsk('a1', 'Summarise', a.Id, 'Account', null);
         System.assert(started.contains('r5'));
-        // The record goes along (read inside Salesforce), so CRMagents doesn't call back for it.
+        // The record goes along (read inside Salesforce), so Nimbus doesn't call back for it.
         System.assert(m.last.getBody().contains('Acme Test'), m.last.getBody());
         System.assert(m.last.getBody().contains('"async":true'));
         m.body = '{"status":"done","answer":"Acme is a big customer."}';
@@ -240,7 +240,7 @@ private class CRMagentsTest {
     static void showsAgentActivityForARecord() {
         Account a = new Account(Name = 'Audit Co');
         insert a;
-        // CRMagents writes activity (Integration permission set); people read it (User permission set).
+        // Nimbus writes activity (Integration permission set); people read it (User permission set).
         User u = new User(Id = System.UserInfo.getUserId());
         List<PermissionSetAssignment> add = new List<PermissionSetAssignment>();
         for (PermissionSet ps : [SELECT Id FROM PermissionSet WHERE Name IN ('CRMagents_User', 'CRMagents_Integration')]) {

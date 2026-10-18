@@ -2,7 +2,7 @@ import { pool } from '../db.js';
 
 // The org's daily API allowance is shared with every other integration the customer runs. Salesforce reports
 // the running total on every REST response (Sforce-Limit-Info: api-usage=used/max), so tracking it costs nothing.
-// As usage climbs, CRMagents gives way: optional work stops first, record checks slow down, and only work people
+// As usage climbs, Nimbus gives way: optional work stops first, record checks slow down, and only work people
 // are waiting on (writes, approvals, runs already started) continues near the limit.
 
 export type Work =

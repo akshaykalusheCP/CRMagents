@@ -55,7 +55,7 @@ export async function provisionOrg(tenantId: string): Promise<{ ok: true }> {
     else await sf.createRecord('CRMagents_Config__c', { SetupOwnerId: orgId, ...fields });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    if (/INVALID_TYPE|sObject type|NOT_FOUND/i.test(msg)) throw new Error('The CRMagents package is not installed in this org yet.');
+    if (/INVALID_TYPE|sObject type|NOT_FOUND/i.test(msg)) throw new Error('The Nimbus package is not installed in this org yet.');
     throw e;
   }
   return { ok: true };

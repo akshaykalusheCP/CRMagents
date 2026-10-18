@@ -38,7 +38,7 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
       else if (mode === 'signup') await api.signup({ ...f, plan: planPick });
       else if (mode === 'forgot') {
         await api.forgot(f.email);
-        setNote('If that email has a CRMagents login, a reset link is on its way. It works for 2 hours. No email? Ask an admin in your company for a reset link.');
+        setNote('If that email has a Nimbus login, a reset link is on its way. It works for 2 hours. No email? Ask an admin in your company for a reset link.');
         setBusy(false);
         return;
       } else if (mode === 'reset') { await api.resetPassword(token, f.password); dropToken(); }
@@ -60,7 +60,7 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
     <div className="landing">
       <header className="land-nav">
         <div className="land-inner">
-          <span className="land-brand"><span className="brand-mark"><LogoMark size={15} /></span>CRMagents</span>
+          <span className="land-brand"><span className="brand-mark"><LogoMark size={15} /></span>Nimbus</span>
           <nav className="land-links" aria-label="Product">
             <a href="#agents">Agents</a><a href="#insights">Insights</a><a href="#dashboards">Dashboards</a><a href="#pricing">Pricing</a><a href="/contact">Contact</a>
           </nav>

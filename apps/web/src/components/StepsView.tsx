@@ -81,7 +81,7 @@ function describe(n: WFRFNode, byId: Map<string, WFRFNode>, exitsElsewhere: bool
     case 'sf.deleteRecord': return { title: <>Delete the <b>{c.sobject || 'record'}</b></>, detail: 'It goes to the Recycle Bin' };
     case 'sf.upsertRecord': return { title: <>Create or update a <b>{c.sobject || 'record'}</b> by {c.externalIdField || 'external Id'}</>, detail: P(c.externalId) };
     case 'knowledge.search': return { title: 'Look it up in your guides', detail: P(c.query) };
-    case 'crm.suggest': return { title: <>Show <b>{c.title || 'a suggestion'}</b> on the record</>, detail: 'In the CRMagents Suggestions card; changes nothing in Salesforce' };
+    case 'crm.suggest': return { title: <>Show <b>{c.title || 'a suggestion'}</b> on the record</>, detail: 'In the Nimbus Suggestions card; changes nothing in Salesforce' };
     case 'sf.readFiles': return { title: 'Read the files on the record', detail: 'PDF, Word, text and HTML, newest first' };
     case 'sf.attachFile': return { title: <>Attach <b>{c.title || 'a file'}</b> to the record</>, detail: P(c.content) };
     case 'trigger.manual': return { title: 'When you run it', detail: 'Manually, from a test or through the API' };

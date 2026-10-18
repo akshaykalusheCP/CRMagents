@@ -4,7 +4,7 @@ import { getSetting } from '../settings.js';
 import { anthropicClient } from './llm.js';
 
 // Which AI a workspace uses. Claude is the default. Workspaces can instead bring their own OpenAI, Google Gemini
-// or any OpenAI-compatible service (Azure OpenAI, Mistral, DeepSeek, a model they host). The rest of CRMagents
+// or any OpenAI-compatible service (Azure OpenAI, Mistral, DeepSeek, a model they host). The rest of Nimbus
 // always speaks the Messages API shape; for other providers the adapter below translates each request and reply,
 // so tools, structured answers, masking, limits and budgets work the same everywhere.
 
@@ -47,9 +47,9 @@ async function rawClient(accountId: string, provider: Provider): Promise<AiClien
 
 export interface CompatOptions {
   baseUrl: string; key: string;
-  /** Used where CRMagents would use its default model. */
+  /** Used where Nimbus would use its default model. */
   model: string;
-  /** Used where CRMagents would pick its low-cost model (e.g. sorting into categories). */
+  /** Used where Nimbus would pick its low-cost model (e.g. sorting into categories). */
   fastModel: string;
   /** USD per million input / output tokens, for spend tracking and budgets. */
   priceIn: number; priceOut: number;

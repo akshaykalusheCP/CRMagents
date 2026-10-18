@@ -46,16 +46,16 @@ export function ChatApprovalsPage({ me }: { me: Me }) {
               </span>}
             </div>
           ) : !s.slack.available ? (
-            <p className="muted small">Slack isn't switched on for CRMagents yet. Approvals still reach people in the app and in Salesforce.</p>
+            <p className="muted small">Slack isn't switched on for Nimbus yet. Approvals still reach people in the app and in Salesforce.</p>
           ) : admin ? (
             <button className="primary" style={{ alignSelf: 'flex-start' }} disabled={!!busy} onClick={() => void run('add-slack', async () => { location.href = (await api.installSlack()).url; })}>Add to Slack</button>
-          ) : <p className="muted small">An admin can add CRMagents to a Slack channel.</p>}
+          ) : <p className="muted small">An admin can add Nimbus to a Slack channel.</p>}
         </div>
       </Panel>
 
       <Panel title="Microsoft Teams" action={s.teams.connected ? <Status tone="ok">Connected</Status> : <Status tone="neutral">Not connected</Status>}>
         <div className="chat-ap">
-          <p>Approval requests post to a Teams channel as a card with a <b>Review and approve</b> button that opens the request here. (Teams' simple webhooks can't take button clicks, so the decision itself happens in CRMagents or Salesforce.)</p>
+          <p>Approval requests post to a Teams channel as a card with a <b>Review and approve</b> button that opens the request here. (Teams' simple webhooks can't take button clicks, so the decision itself happens in Nimbus or Salesforce.)</p>
           {s.teams.connected ? (
             <div className="chat-ap-row">
               <span><MessageSquare size={15} /> Posting to your Teams channel{s.teams.by ? <span className="muted"> · added by {s.teams.by}</span> : null}</span>

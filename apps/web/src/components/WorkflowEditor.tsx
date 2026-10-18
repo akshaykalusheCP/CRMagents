@@ -48,7 +48,7 @@ interface Props {
   onDeleted: () => void;
   /** Present when the workflow was just drafted from a plain-English request. */
   aiDraft?: Draft;
-  /** Whether CRMagents is watching Salesforce for this agent's trigger. */
+  /** Whether Nimbus is watching Salesforce for this agent's trigger. */
   initialLive?: boolean;
   /** Started by Salesforce change events instead of 1-minute checks. */
   initialRealtime?: boolean;
@@ -322,7 +322,7 @@ function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDe
     catch (e) { setMsg((e as Error).message); }
   };
   const whenText = schedule ? `every ${schedule.every ?? 'day'}${schedule.every === 'hour' ? '' : ` at ${schedule.at || '08:00'} ${schedule.tz || 'UTC'}`}` : `for every ${triggerObject} that is ${triggerEvent} in Salesforce`;
-  // Turn on = CRMagents checks Salesforce every minute for matching records. Nothing is installed in the org.
+  // Turn on = Nimbus checks Salesforce every minute for matching records. Nothing is installed in the org.
   // On-demand agents have nothing to "turn on": offer to run them on a schedule instead.
   const manualTrigger = nodes.find((n) => n.data.type === 'trigger.manual');
   const [sched, setSched] = useState<{ every: 'hour' | 'day' | 'week'; at: string } | null>(null);

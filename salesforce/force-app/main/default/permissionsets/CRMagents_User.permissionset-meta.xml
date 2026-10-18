@@ -20,7 +20,7 @@
         <apexClass>CRMCaseEmail</apexClass>
         <enabled>true</enabled>
     </classAccesses>
-    <description>Lets users run CRMagents agents, ask assistants and approve changes from Salesforce.</description>
+    <description>Lets users run Nimbus agents, ask assistants and approve changes from Salesforce.</description>
     <fieldPermissions>
         <editable>false</editable>
         <field>CRMagents_Agent_Activity__c.Run_Id__c</field>
@@ -67,7 +67,7 @@
         <readable>true</readable>
     </fieldPermissions>
     <hasActivationRequired>false</hasActivationRequired>
-    <label>CRMagents User</label>
+    <label>Nimbus User</label>
     <objectPermissions>
         <allowCreate>false</allowCreate>
         <allowDelete>false</allowDelete>

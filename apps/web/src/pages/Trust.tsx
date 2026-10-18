@@ -43,14 +43,14 @@ export function TrustPage({ me }: { me: Me }) {
     { ok: true, title: 'Access by role', detail: Object.entries(f.team).map(([r, n]) => `${n} ${r}${n > 1 ? 's' : ''}`).join(', ') + '. Approvers can\'t change agents; only admins see settings and the team. Whoever starts a run can\'t approve it when there is someone else to ask.' },
     { ok: f.alerts, title: f.alerts ? 'Admins are alerted when something goes wrong' : 'Alert emails are off', detail: 'Agents failing again and again are paused automatically; disconnected orgs are reported.' },
     { ok: true, title: f.memory?.on === false ? 'Memory is off' : 'Memory is visible and deletable', detail: f.memory?.on === false ? 'Assistants and agents don\'t keep anything between conversations.' : `${f.memory?.team ?? 0} team and ${f.memory?.personal ?? 0} personal memories, ${f.memory?.recordNotes ?? 0} notes on records. Anything that looks like personal data is refused. Everyone sees and can delete their own on the Memory page.` },
-    { ok: true, title: 'Secrets are encrypted', detail: 'Salesforce tokens and API keys are encrypted at rest (AES-256-GCM); passwords are stored as scrypt hashes; every change is signed between Salesforce and CRMagents.' },
+    { ok: true, title: 'Secrets are encrypted', detail: 'Salesforce tokens and API keys are encrypted at rest (AES-256-GCM); passwords are stored as scrypt hashes; every change is signed between Salesforce and Nimbus.' },
   ] : [];
 
   const openCall = async (id: number) => { try { setOpen(await api.aiCall(id)); } catch (e) { toast((e as Error).message, 'bad'); } };
   const exportAll = () => { window.location.href = '/api/trust/export'; };
   const del = async () => {
     const ok = await ask({ title: 'Delete this workspace?', danger: true, confirm: 'Delete everything',
-      body: <>CRMagents' access to every connected Salesforce org is revoked, then all agents, assistants, runs, logs, guides and users of <b>{me.accountName}</b> are deleted. Nothing is deleted in Salesforce. This can't be undone; export first if you need a copy.</> });
+      body: <>Nimbus' access to every connected Salesforce org is revoked, then all agents, assistants, runs, logs, guides and users of <b>{me.accountName}</b> are deleted. Nothing is deleted in Salesforce. This can't be undone; export first if you need a copy.</> });
     if (!ok) return;
     const typed = window.prompt(`Type the company name to confirm: ${me.accountName}`);
     if (typed === null) return;
@@ -64,9 +64,9 @@ export function TrustPage({ me }: { me: Me }) {
         actions={<><button onClick={() => window.print()}><Printer size={15} /> Print report</button>{admin && <button onClick={exportAll}><Download size={15} /> Export all data</button>}</>} />
 
       <section className="tr-flow" aria-label="How your data flows">
-        <div className="tr-node"><Database size={18} /><b>Your Salesforce</b><span>Records stay here. CRMagents reads only the fields a step needs, with the access you gave it ({f?.salesforce.scopes.join(', ') ?? 'api, refresh_token'}).</span></div>
+        <div className="tr-node"><Database size={18} /><b>Your Salesforce</b><span>Records stay here. Nimbus reads only the fields a step needs, with the access you gave it ({f?.salesforce.scopes.join(', ') ?? 'api, refresh_token'}).</span></div>
         <ArrowRight className="tr-arrow" size={18} />
-        <div className="tr-node"><Server size={18} /><b>CRMagents</b><span>Keeps your agents, run logs ({f ? `${f.retentionDays || '∞'} days` : '…'}), the change log for undo, and encrypted keys. Masks personal data before anything goes to the AI.</span></div>
+        <div className="tr-node"><Server size={18} /><b>Nimbus</b><span>Keeps your agents, run logs ({f ? `${f.retentionDays || '∞'} days` : '…'}), the change log for undo, and encrypted keys. Masks personal data before anything goes to the AI.</span></div>
         <ArrowRight className="tr-arrow" size={18} />
         <div className="tr-node"><Lock size={18} /><b>{p.name}</b><span>Gets only the text of one step, masked. {p.policy}{p.link && <> <a href={p.link} target="_blank" rel="noreferrer">Their terms</a></>}</span></div>
       </section>
@@ -102,7 +102,7 @@ export function TrustPage({ me }: { me: Me }) {
           )}
         </Panel>
       ) : (
-        <Panel flush title="Activity" action={<span className="muted small">Every change made in CRMagents, sign-ins included.</span>}>
+        <Panel flush title="Activity" action={<span className="muted small">Every change made in Nimbus, sign-ins included.</span>}>
           {!activity ? <SkeletonRows rows={5} cols={4} /> : (
             <Table rows={activity} rowKey={(a) => String(a.id)}
               empty={<p className="muted small" style={{ padding: 16, margin: 0 }}>Nothing recorded yet.</p>}
@@ -119,7 +119,7 @@ export function TrustPage({ me }: { me: Me }) {
       <Panel title="Your data">
         <div className="tr-data">
           <div><b>Export everything</b><span>Agents, assistants, runs, the change log, AI calls and activity as one JSON file.</span>{admin ? <button className="sm" onClick={exportAll}><Download size={14} /> Export</button> : <span className="muted small">Admins can export.</span>}</div>
-          <div><b>Delete the workspace</b><span>Revokes CRMagents' access to your Salesforce orgs, then deletes everything here. Nothing in Salesforce is deleted.</span>{me.role === 'owner' ? <button className="sm danger" onClick={() => void del()}><Trash2 size={14} /> Delete workspace</button> : <span className="muted small">Owners can delete.</span>}</div>
+          <div><b>Delete the workspace</b><span>Revokes Nimbus' access to your Salesforce orgs, then deletes everything here. Nothing in Salesforce is deleted.</span>{me.role === 'owner' ? <button className="sm danger" onClick={() => void del()}><Trash2 size={14} /> Delete workspace</button> : <span className="muted small">Owners can delete.</span>}</div>
           <div><b>Disconnect an org</b><span>Removes one org and revokes its access, from Settings → Salesforce orgs.</span></div>
         </div>
       </Panel>

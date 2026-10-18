@@ -1,11 +1,11 @@
 <template>
-    <lightning-card title="CRMagents" icon-name="standard:bot">
+    <lightning-card title="Nimbus" icon-name="standard:bot">
         <lightning-button-icon slot="actions" icon-name="utility:refresh" variant="border-filled" alternative-text="Refresh" onclick={refresh}></lightning-button-icon>
         <div class="slds-var-p-horizontal_medium">
             <template lwc:if={notConnected}>
                 <div class="empty">
-                    <p class="slds-text-heading_small">CRMagents isn't connected yet</p>
-                    <p class="slds-text-color_weak">An admin can connect this org in CRMagents with "Install in Salesforce". It takes a minute.</p>
+                    <p class="slds-text-heading_small">Nimbus isn't connected yet</p>
+                    <p class="slds-text-color_weak">An admin can connect this org in Nimbus with "Install in Salesforce". It takes a minute.</p>
                 </div>
             </template>
             <template lwc:elseif={error}>
@@ -101,7 +101,7 @@
                             </div>
                         </template>
                         <template lwc:else>
-                            <p class="slds-text-color_weak empty">No assistants yet. Create one in CRMagents under Agents → Assistants.</p>
+                            <p class="slds-text-color_weak empty">No assistants yet. Create one in Nimbus under Agents → Assistants.</p>
                         </template>
                     </lightning-tab>
 

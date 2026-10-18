@@ -121,7 +121,7 @@ export function SettingsPage() {
       <Panel title="Record of changes in Salesforce">
         <div className="setting-row">
           <div><b>{form.auditInSalesforce === 'off' ? 'Off' : 'On (recommended)'}</b>
-            <p className="muted small">Every change an agent makes is also recorded in Salesforce (CRMagents Agent Activity): which agent, what changed, for whom and who approved. Shown on the record's Suggestions card. One API call per run that changed something.</p></div>
+            <p className="muted small">Every change an agent makes is also recorded in Salesforce (Nimbus Agent Activity): which agent, what changed, for whom and who approved. Shown on the record's Suggestions card. One API call per run that changed something.</p></div>
           <label className="check"><input type="checkbox" checked={form.auditInSalesforce !== 'off'} onChange={(e) => { setMsg(''); setForm({ ...form, auditInSalesforce: e.target.checked ? 'on' : 'off' }); }} /> Record changes</label>
         </div>
       </Panel>
@@ -162,7 +162,7 @@ export function SettingsPage() {
             </div>
           </div>
           <div className="frow">
-            <div className="flabel"><b>Pause an agent after</b><span>Failed runs in a row before CRMagents turns the agent off, so a broken agent stops using API calls and AI budget. 0 never pauses.</span></div>
+            <div className="flabel"><b>Pause an agent after</b><span>Failed runs in a row before Nimbus turns the agent off, so a broken agent stops using API calls and AI budget. 0 never pauses.</span></div>
             <div className="ffield"><div className="input-affix"><input id="auto-pause" value={form.autoPauseAfter} onChange={set('autoPauseAfter')} placeholder="5" inputMode="numeric" /><span>failures</span></div></div>
           </div>
         </div>

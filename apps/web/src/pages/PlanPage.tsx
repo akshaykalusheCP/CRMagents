@@ -6,7 +6,7 @@ import { usePlan } from '../components/Plan';
 import { Meter, Panel, Status, toast } from '../components/ui';
 
 // Settings → Plan: what this workspace is on, what it uses against its limits, what each plan adds, and asking for
-// an upgrade. CRMagents staff (platform admins) also see every workspace and set its plan here.
+// an upgrade. Nimbus staff (platform admins) also see every workspace and set its plan here.
 
 const ORDER: PlanId[] = ['basic', 'plus', 'pro', 'promax'];
 const ALL_FEATURES = Object.keys(FEATURE_LABEL) as Feature[];
@@ -116,7 +116,7 @@ export function PlanPage({ me, openAdmin }: { me: Me; openAdmin?: () => void }) 
         <p className="muted small" style={{ padding: '0 16px 14px', margin: 0 }}>{online ? 'Payments are handled securely by Stripe. Prices per workspace, before tax.' : 'Online payment is coming soon; for now we set up your plan with you after a request.'}</p>
       </Panel>
 
-      {me.platformAdmin && openAdmin && <p className="muted small">You're CRMagents staff: <button className="link-btn" onClick={openAdmin}>open Super admin</button> to manage every workspace.</p>}
+      {me.platformAdmin && openAdmin && <p className="muted small">You're Nimbus staff: <button className="link-btn" onClick={openAdmin}>open Super admin</button> to manage every workspace.</p>}
     </div>
   );
 }

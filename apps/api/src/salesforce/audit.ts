@@ -3,8 +3,8 @@ import { pool } from '../db.js';
 import { getSetting } from '../settings.js';
 import { SalesforceClient } from './client.js';
 
-// A record of every change agents make, inside Salesforce (CRMagents Agent Activity): which agent, which record,
-// what changed, who it acted for and who approved it. Field history shows CRMagents' own user as the editor;
+// A record of every change agents make, inside Salesforce (Nimbus Agent Activity): which agent, which record,
+// what changed, who it acted for and who approved it. Field history shows Nimbus' own user as the editor;
 // this says on whose behalf. One API call per run that changed something; can be turned off in Settings.
 
 const MAX_CHANGES = 30_000;

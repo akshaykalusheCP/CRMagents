@@ -4,7 +4,7 @@ import { LogoMark } from '../components/Logo';
 import { PublicFooter } from './Legal';
 import { Ribbon } from '../components/Ribbon';
 
-// Contact page (public, /contact): sales, support, partnerships, billing. Messages are kept for CRMagents staff in
+// Contact page (public, /contact): sales, support, partnerships, billing. Messages are kept for Nimbus staff in
 // Super admin → Requests. Email delivery and routing are configured later.
 
 const TOPICS = [
@@ -38,7 +38,7 @@ export function ContactPage() {
     <div className="landing">
       <header className="land-nav">
         <div className="land-inner">
-          <a className="land-brand" href="/" style={{ color: 'inherit', textDecoration: 'none' }}><span className="brand-mark"><LogoMark size={15} /></span>CRMagents</a>
+          <a className="land-brand" href="/" style={{ color: 'inherit', textDecoration: 'none' }}><span className="brand-mark"><LogoMark size={15} /></span>Nimbus</a>
           <nav className="land-links" aria-label="Product"><a href="/#agents">Product</a><a href="/#pricing">Pricing</a><a href="/contact" aria-current="page">Contact</a></nav>
           <div className="land-cta"><a className="land-btn ghost" href="/">Log in</a></div>
         </div>
@@ -60,7 +60,7 @@ export function ContactPage() {
             {done ? <>
               <h2>Thanks, message received</h2>
               <p className="auth-lede">We'll reply to {f.email} within one business day.</p>
-              <a className="land-btn primary wide" href="/">Back to CRMagents</a>
+              <a className="land-btn primary wide" href="/">Back to Nimbus</a>
             </> : <>
               <h2>{TOPICS.find((t) => t.id === topic)!.label}</h2>
               <label>Your name<input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} required maxLength={120} /></label>

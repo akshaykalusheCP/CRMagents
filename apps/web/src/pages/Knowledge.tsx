@@ -188,7 +188,7 @@ export function KnowledgePage({ tenant, onAutomate }: { tenant?: Tenant; onAutom
         <Panel flush title="Suggestions on records"
           action={rated.length ? <span className="kb-meta">{Math.round((helpful / rated.length) * 100)}% rated helpful ({rated.length} rated)</span> : undefined}>
           <Table columns={sugCols} rows={sugs} rowKey={(s) => s.id}
-            empty={<Empty title="No suggestions yet" body={<>Agents with a <b>Show suggestion on record</b> step leave advice here and on the record page in Salesforce (CRMagents Suggestions card).</>}
+            empty={<Empty title="No suggestions yet" body={<>Agents with a <b>Show suggestion on record</b> step leave advice here and on the record page in Salesforce (Nimbus Suggestions card).</>}
               action={<button className="ghost" onClick={() => onAutomate(CASE_AGENT)}>Build a case-suggestion agent</button>} />} />
           {sugs.length > 0 && <SuggestionPreview s={sugs[0]} onMark={mark} />}
         </Panel>

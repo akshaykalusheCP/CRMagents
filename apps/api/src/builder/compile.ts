@@ -340,7 +340,7 @@ export function compilePlan(plan: Plan): CompileResult {
         const lastAi = [...stepNodes.slice(0, i)].reverse().find((x) => x?.action === 'ai_write' || x?.action === 'research');
         const content = convert(s.message, i) || (lastAi ? `{{${lastAi.id}.text}}` : '');
         if (!content) errors.push(`step ${i + 1}: attach_file needs content (usually {stepN.text})`);
-        node = add('sf.attachFile', { recordId: inLoop ? '{{item.Id}}' : '{{trigger.recordId}}', title: convert(s.subject, i) || 'CRMagents note', format: 'md', content }, 'Attach file');
+        node = add('sf.attachFile', { recordId: inLoop ? '{{item.Id}}' : '{{trigger.recordId}}', title: convert(s.subject, i) || 'Nimbus note', format: 'md', content }, 'Attach file');
         keys = new Set(['id']);
         break;
       }
@@ -443,7 +443,7 @@ function changeText(s: PlanStep, plan: Plan, conv: (t: string) => string): strin
     case 'run_action': return `${actionLabel(s.org_action ?? '')}${s.fields.length ? `: ${s.fields.map((f) => `${f.field} = ${conv(f.value)}`).join(', ')}` : ''}`;
     case 'delete_record': return `Delete this ${plan.trigger_object}`;
     case 'reply_email': return `Email the customer: ${cut(conv(s.message || 'the drafted reply'), 60)}`;
-    case 'attach_file': return `Attach file "${conv(s.subject || 'CRMagents note')}" to this ${plan.trigger_object}`;
+    case 'attach_file': return `Attach file "${conv(s.subject || 'Nimbus note')}" to this ${plan.trigger_object}`;
     default: return s.action;
   }
 }
@@ -469,7 +469,7 @@ function describe(s: PlanStep, plan: Plan): string {
     case 'meeting_times': return 'Finds 3 free meeting times on the owner\'s calendar';
     case 'read_emails': return 'Reads the email conversation on the case (no AI)';
     case 'reply_email': return s.send_now ? 'Emails the reply to the customer' : 'Puts the reply on the case for a person to check and send';
-    case 'attach_file': return `Attaches "${cut(s.subject || 'CRMagents note', 40)}" as a file on the record`;
+    case 'attach_file': return `Attaches "${cut(s.subject || 'Nimbus note', 40)}" as a file on the record`;
     case 'suggest': return `Shows "${cut(s.subject || 'Suggestion', 40)}" on the record in Salesforce (changes nothing)`;
     default: return s.action;
   }

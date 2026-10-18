@@ -127,7 +127,7 @@ export function planSchema(objects: string[], fields: string[], actions: string[
   };
 }
 
-export const PLANNER_SYSTEM = `You turn a Salesforce admin's request into a CRMagents plan (JSON). Keep it minimal.
+export const PLANNER_SYSTEM = `You turn a Salesforce admin's request into a Nimbus plan (JSON). Keep it minimal.
 Steps run in order. Actions:
 - query: read records with SOQL (object, where, limit; fields = the columns the admin wants to see, value empty). No AI, free.
 - classify: AI picks one of categories for the record (cheap model). Output: category, reason.

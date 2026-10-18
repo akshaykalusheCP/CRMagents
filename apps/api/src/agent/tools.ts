@@ -274,7 +274,7 @@ export const TOOLS: Record<string, Tool> = {
     write: true,
     def: {
       name: 'run_agent',
-      description: 'Start one of this workspace\'s CRMagents agents by name, optionally on a record, and return its result (or that it is waiting for approval). Agents that change data still stop for their approvals.',
+      description: 'Start one of this workspace\'s Nimbus agents by name, optionally on a record, and return its result (or that it is waiting for approval). Agents that change data still stop for their approvals.',
       input_schema: {
         type: 'object',
         properties: {

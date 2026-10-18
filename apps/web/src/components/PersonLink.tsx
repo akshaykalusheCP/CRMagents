@@ -28,7 +28,7 @@ export function LinkPrompt({ tenants }: { tenants: Tenant[] }) {
         <span className="locked-ico"><ShieldCheck size={16} /></span>
         <h2 id="link-title">Link your Salesforce login</h2>
         <div className="confirm-body">
-          {d.message || 'Assistants act as you in Salesforce.'} You log in on Salesforce's own page{t ? <> for <b>{t.sf_instance_url.replace(/^https:\/\//, '')}</b></> : null}; CRMagents never sees your password. You only do this once.
+          {d.message || 'Assistants act as you in Salesforce.'} You log in on Salesforce's own page{t ? <> for <b>{t.sf_instance_url.replace(/^https:\/\//, '')}</b></> : null}; Nimbus never sees your password. You only do this once.
         </div>
         <div className="confirm-actions">
           <button onClick={() => setD(null)}>Not now</button>

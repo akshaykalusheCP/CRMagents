@@ -27,7 +27,7 @@ export async function runAgent(
   opts: {
     onStarted?: (runId: string) => void;
     /** Salesforce tools run inside Salesforce as the person asking. */ inOrg?: boolean;
-    /** In the app: Salesforce tools use this CRMagents person's own linked Salesforce login. */ asPerson?: string;
+    /** In the app: Salesforce tools use this Nimbus person's own linked Salesforce login. */ asPerson?: string;
     startedBy?: string;
     /** Stored with the run (not shown to the AI), e.g. the website conversation it belongs to. */
     meta?: Record<string, unknown>;

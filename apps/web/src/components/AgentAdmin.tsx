@@ -32,8 +32,8 @@ export function StartMode({ tenant, row, onChanged }: { tenant: Tenant; row: Wor
   };
   const opts: { id: Mode; title: string; body: string }[] = [
     { id: 'realtime', title: 'Real-time', body: 'Salesforce announces each change (Change Data Capture). Within seconds, no API calls. Uses one of the org\'s 5 change-event objects.' },
-    { id: 'checks', title: 'Regular checks', body: 'CRMagents asks Salesforce for new records every minute when busy, every 5 when quiet. One API call per check.' },
-    { id: 'push', title: 'Push from Salesforce', body: 'A Flow in Salesforce sends each record the moment it is saved. No API calls and no change-event slots. Needs the CRMagents package.' },
+    { id: 'checks', title: 'Regular checks', body: 'Nimbus asks Salesforce for new records every minute when busy, every 5 when quiet. One API call per check.' },
+    { id: 'push', title: 'Push from Salesforce', body: 'A Flow in Salesforce sends each record the moment it is saved. No API calls and no change-event slots. Needs the Nimbus package.' },
   ];
   return (
     <Panel title="How it starts">
@@ -158,7 +158,7 @@ export function MovePanel({ tenant, row }: { tenant: Tenant; row: WorkflowRow })
   };
   return (
     <Panel title="Move or copy">
-      <p className="muted small" style={{ margin: '0 0 12px' }}>Copy this agent to another connected org (for example from a sandbox to production). The copy starts turned off; CRMagents checks the fields it needs exist there.</p>
+      <p className="muted small" style={{ margin: '0 0 12px' }}>Copy this agent to another connected org (for example from a sandbox to production). The copy starts turned off; Nimbus checks the fields it needs exist there.</p>
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
         {orgs.length > 0 && <>
           <select value={target} onChange={(e) => setTarget(e.target.value)} aria-label="Copy to org">{orgs.map((o) => <option key={o.id} value={o.id}>{o.sf_username ?? o.sf_org_id}</option>)}</select>

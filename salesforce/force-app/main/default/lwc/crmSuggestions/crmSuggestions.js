@@ -51,8 +51,8 @@ export default class CrmSuggestions extends LightningElement {
 
     load() {
         if (!this.recordId) return;
-        // What agents changed here, with old and new values (CRMagents' change log); the activity records in
-        // Salesforce are the fallback when CRMagents can't be reached.
+        // What agents changed here, with old and new values (Nimbus' change log); the activity records in
+        // Salesforce are the fallback when Nimbus can't be reached.
         recordChanges({ recordId: this.recordId })
             .then((json) => {
                 this.changes = JSON.parse(json).map((g) => ({
@@ -117,7 +117,7 @@ export default class CrmSuggestions extends LightningElement {
     get changesLabel() { return (this.showChanges ? 'Hide' : 'Show') + ' agent changes (' + this.changes.length + ')'; }
     toggleChanges() { this.showChanges = !this.showChanges; }
 
-    // Puts back what an agent changed here. CRMagents checks this person may edit the record; anything a person
+    // Puts back what an agent changed here. Nimbus checks this person may edit the record; anything a person
     // changed since the agent is kept.
     async undoRun(event) {
         const run = this.changes.find((c) => c.id === event.currentTarget.dataset.run);

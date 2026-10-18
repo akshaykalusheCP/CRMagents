@@ -30,7 +30,7 @@ function route(method: string, url: URL, body: any): Response {
   if (p === '/api/platform/integrations') return json({ stripe: false, slack: false });
   if (p === '/api/chat-approvals') return json({ slack: { available: true, connected: true, team: 'Demo Company', channel: '#approvals', by: 'owner@demo-company.com' }, teams: { connected: false, by: null } });
   if (p === '/api/chat-approvals/test') return json({ ok: true });
-  if (p === '/api/platform/email') return json(method === 'GET' ? { configured: false, from: 'CRMagents <noreply@crmagents.app>', keyHint: null } : { ok: true });
+  if (p === '/api/platform/email') return json(method === 'GET' ? { configured: false, from: 'Nimbus <noreply@crmagents.app>', keyHint: null } : { ok: true });
   if (p === '/api/platform/email/test') return json({ ok: false, error: 'No Resend key set' });
   if (p === '/api/platform/staff') return json(['owner@demo-company.com', 'sales@crmagents.example']);
   if (p === '/api/platform/staff-log') return json(DEMO_ADMIN.log);
@@ -294,7 +294,7 @@ const DEMO_ALERTS = {
   unread: 1,
   alerts: [
     { id: 'a1', kind: 'failing', title: '"Fill missing account data" is failing', body: 'The agent "Fill missing account data" failed its last 3 runs. It will be paused after 5 failures in a row.\n\nLast error: Required field missing: Industry', tenantId: 't', workflowId: 'w', readAt: null, createdAt: ago(2) },
-    { id: 'a2', kind: 'paused', title: '"Old lead router" was paused', body: 'The agent failed 5 times in a row, so CRMagents paused it.', tenantId: 't', workflowId: 'w2', readAt: ago(30), createdAt: ago(48) },
+    { id: 'a2', kind: 'paused', title: '"Old lead router" was paused', body: 'The agent failed 5 times in a row, so Nimbus paused it.', tenantId: 't', workflowId: 'w2', readAt: ago(30), createdAt: ago(48) },
   ],
 };
 

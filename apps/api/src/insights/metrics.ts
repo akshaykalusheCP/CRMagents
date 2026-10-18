@@ -263,7 +263,7 @@ export async function cachedInsights(tenantId: string, sf: SalesforceClient, per
   return data;
 }
 
-// ---------- Daily snapshots: history built by CRMagents ----------
+// ---------- Daily snapshots: history built by Nimbus ----------
 const SNAPSHOT_KPIS: Record<string, string> = {
   open_pipeline: 'Open pipeline', fc_likely: 'Likely revenue this quarter', risk_amount: 'Pipeline at risk',
   open_cases: 'Open cases', open_leads: 'Leads not yet converted', overdue_tasks: 'Overdue tasks',
@@ -285,14 +285,14 @@ export async function addHistory(tenantId: string, ins: Insights) {
   const { rows } = await pool.query(
     "select day, data from kpi_snapshots where tenant_id=$1 and day > current_date - 90 order by day", [tenantId],
   );
-  const note = rows.length < 2 ? `CRMagents records these numbers daily; trends appear from tomorrow (${rows.length} day so far).` : undefined;
+  const note = rows.length < 2 ? `Nimbus records these numbers daily; trends appear from tomorrow (${rows.length} day so far).` : undefined;
   const label = (d: Date) => `${MONTHS[d.getMonth()]} ${d.getDate()}`;
   const charts: Chart[] = rows.length < 2 ? [] : ['open_pipeline', 'risk_amount', 'open_cases'].filter((k) => rows.some((r) => r.data[k] !== undefined)).map((k) => ({
     id: `hist_${k}`, title: `${SNAPSHOT_KPIS[k]} over time`, kind: 'line' as const,
     format: k === 'open_cases' ? ('number' as const) : ('currency' as const),
     data: rows.map((r) => ({ label: label(new Date(r.day)), value: num(r.data[k]) })),
   }));
-  ins.sections.push({ id: 'history', title: 'Trends (recorded by CRMagents)', kpis: [], charts, lists: note ? [{ id: 'hist_note', title: 'History', columns: [], rows: [], note }] : [] });
+  ins.sections.push({ id: 'history', title: 'Trends (recorded by Nimbus)', kpis: [], charts, lists: note ? [{ id: 'hist_note', title: 'History', columns: [], rows: [], note }] : [] });
 }
 
 /** Called daily by the background loop so history accumulates even if nobody opens Insights. */

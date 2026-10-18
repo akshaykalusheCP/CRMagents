@@ -188,7 +188,7 @@ export function WorkflowsPage({ tenant, goConnections, incoming, onIncomingOpene
                 if (!f) return;
                 try {
                   const data = JSON.parse(await f.text());
-                  if (!data?.graph?.nodes) throw new Error('This is not a CRMagents agent file');
+                  if (!data?.graph?.nodes) throw new Error('This is not a Nimbus agent file');
                   const r = await api.importAgent(tenant.id, { name: String(data.name || f.name.replace(/\.crmagents\.json$|\.json$/, '')), graph: data.graph });
                   toast(r.missing.length ? `Imported (off). Missing in this org: ${r.missing.slice(0, 4).join(', ')}${r.missing.length > 4 ? '…' : ''}` : 'Imported (turned off)', r.missing.length ? 'bad' : 'ok');
                   load();

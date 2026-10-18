@@ -2,8 +2,8 @@
 <LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
     <apiVersion>67.0</apiVersion>
     <isExposed>true</isExposed>
-    <masterLabel>CRMagents Agent Panel</masterLabel>
-    <description>Run CRMagents agents, ask assistants and approve changes, right on the record.</description>
+    <masterLabel>Nimbus Agent Panel</masterLabel>
+    <description>Run Nimbus agents, ask assistants and approve changes, right on the record.</description>
     <targets>
         <target>lightning__RecordPage</target>
         <target>lightning__AppPage</target>

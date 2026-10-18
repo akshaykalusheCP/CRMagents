@@ -2,8 +2,8 @@
 <LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata">
     <apiVersion>67.0</apiVersion>
     <isExposed>true</isExposed>
-    <masterLabel>CRMagents Suggestions</masterLabel>
-    <description>Advice CRMagents agents saved for this record, and what agents changed on it.</description>
+    <masterLabel>Nimbus Suggestions</masterLabel>
+    <description>Advice Nimbus agents saved for this record, and what agents changed on it.</description>
     <targets>
         <target>lightning__RecordPage</target>
     </targets>

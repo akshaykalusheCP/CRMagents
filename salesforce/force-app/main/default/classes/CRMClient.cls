@@ -1,5 +1,5 @@
 /**
- * Signed HTTP client for the CRMagents platform. Every request carries the org id, a timestamp
+ * Signed HTTP client for the Nimbus platform. Every request carries the org id, a timestamp
  * and an HMAC-SHA256 signature made with the per-org secret stored in CRMagents_Config__c.
  */
 public with sharing class CRMClient {
@@ -15,7 +15,7 @@ public with sharing class CRMClient {
     public static System.HttpResponse call(String method, String pathAndQuery, String body, Integer timeoutMs) {
         CRMagents_Config__c c = CRMagents_Config__c.getOrgDefaults();
         if (c == null || String.isBlank(c.Base_Url__c) || String.isBlank(c.Signing_Secret__c)) {
-            throw new CRMException('CRMagents is not connected for this org. Reconnect it in the CRMagents app.');
+            throw new CRMException('Nimbus is not connected for this org. Reconnect it in the Nimbus app.');
         }
         String payloadBody = body == null ? '' : body;
         String ts = String.valueOf(Datetime.now().getTime());
@@ -46,7 +46,7 @@ public with sharing class CRMClient {
         if (res.getStatusCode() >= 200 && res.getStatusCode() < 300) {
             return res.getBody();
         }
-        String msg = 'CRMagents returned HTTP ' + res.getStatusCode();
+        String msg = 'Nimbus returned HTTP ' + res.getStatusCode();
         try {
             Map<String, Object> m = (Map<String, Object>) System.JSON.deserializeUntyped(res.getBody());
             if (m.get('error') != null) {

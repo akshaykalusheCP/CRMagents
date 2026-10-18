@@ -5,8 +5,8 @@ import { RECONNECT_MESSAGE, SalesforceClient } from './client.js';
 import { ensureNotificationType } from './notify.js';
 
 // After a user connects an org we finish everything ourselves, so the customer only clicks "Connect":
-// 1. install/upgrade the CRMagents package, 2. allow callouts to us, 3. write the signed-connection
-// settings, 4. give the connecting user the CRMagents User permission set.
+// 1. install/upgrade the Nimbus package, 2. allow callouts to us, 3. write the signed-connection
+// settings, 4. give the connecting user the Nimbus User permission set.
 
 const INSTALL_TIMEOUT_MS = 15 * 60_000;
 const running = new Set<string>();
@@ -31,7 +31,7 @@ async function ensurePackage(tenantId: string, sf: SalesforceClient) {
   if (config.sourceOrgIds.includes(rows[0]?.sf_org_id)) {
     // The package's own development org can't install it; the components must be deployed there from source.
     const has = await sf.toolingQuery("SELECT Id FROM LightningComponentBundle WHERE DeveloperName = 'crmAgentsPanel' LIMIT 1");
-    if (!has.records.length) throw new Error('This is the org the CRMagents package is built in, so it cannot be installed here. Deploy the package source to it (sf project deploy start --source-dir force-app), then click Retry setup.');
+    if (!has.records.length) throw new Error('This is the org the Nimbus package is built in, so it cannot be installed here. Deploy the package source to it (sf project deploy start --source-dir force-app), then click Retry setup.');
     return;
   }
   const installed = await sf.toolingQuery<{ SubscriberPackageVersion?: { Id: string } }>(
@@ -39,7 +39,7 @@ async function ensurePackage(tenantId: string, sf: SalesforceClient) {
   );
   if (installed.records[0]?.SubscriberPackageVersion?.Id === config.packageVersionId) return;
 
-  await status(tenantId, 'installing', 'Installing the CRMagents package in your org (usually 1–3 minutes)…');
+  await status(tenantId, 'installing', 'Installing the Nimbus package in your org (usually 1–3 minutes)…');
   // A freshly released package version can take a few minutes to become installable everywhere;
   // until then Salesforce answers INVALID_CROSS_REFERENCE_KEY, so retry for a while.
   let req: { id: string } | undefined;
@@ -77,7 +77,7 @@ export async function ensureRemoteSite(sf: SalesforceClient) {
     url: origin,
     isActive: true,
     disableProtocolSecurity: false,
-    description: 'Lets the CRMagents package call the CRMagents platform.',
+    description: 'Lets the Nimbus package call the Nimbus platform.',
   };
   const existing = await sf.toolingQuery<{ Id: string }>("SELECT Id FROM RemoteProxy WHERE SiteName = 'CRMagents_Platform'");
   if (existing.records[0]) {
@@ -107,7 +107,7 @@ export async function setupOrg(tenantId: string): Promise<void> {
   try {
     await status(tenantId, 'installing', 'Checking your org…');
     const sf = await SalesforceClient.forTenant(tenantId);
-    // Login is all CRMagents needs: data, writes and triggers work over the API. Prove access with one query.
+    // Login is all Nimbus needs: data, writes and triggers work over the API. Prove access with one query.
     await sf.query('SELECT Id FROM User LIMIT 1');
     // Bell notifications for approvals work in every org, with or without the package.
     await ensureNotificationType(tenantId, sf).catch(() => undefined);
@@ -115,10 +115,10 @@ export async function setupOrg(tenantId: string): Promise<void> {
     if (rows[0]?.use_package) {
       // Optional add-on: the record-page panel and Flow action live in the package.
       await ensurePackage(tenantId, sf);
-      await status(tenantId, 'configuring', 'Connecting the Agent Panel to CRMagents…');
+      await status(tenantId, 'configuring', 'Connecting the Agent Panel to Nimbus…');
       await provisionOrg(tenantId); // also allows the address in Remote Site Settings
       await ensurePermission(tenantId, sf);
-      await status(tenantId, 'ready', 'Ready. CRMagents is installed in Salesforce: add the Agent Panel to pages and the Ask CRMagents button to layouts.');
+      await status(tenantId, 'ready', 'Ready. Nimbus is installed in Salesforce: add the Agent Panel to pages and the Ask Nimbus button to layouts.');
     } else {
       await status(tenantId, 'ready', 'Ready. Nothing was installed in your org.');
     }
@@ -130,12 +130,12 @@ export async function setupOrg(tenantId: string): Promise<void> {
 }
 
 
-/** Give every active Salesforce user the CRMagents User permission set (explicit admin action). */
+/** Give every active Salesforce user the Nimbus User permission set (explicit admin action). */
 export async function grantAccessToAll(tenantId: string): Promise<{ granted: number; total: number }> {
   const sf = await SalesforceClient.forTenant(tenantId);
   const ps = await sf.query("SELECT Id FROM PermissionSet WHERE Name = 'CRMagents_User' LIMIT 1");
   const psId = (ps.records[0] as { Id?: string } | undefined)?.Id;
-  if (!psId) throw new Error('Install CRMagents in Salesforce first.');
+  if (!psId) throw new Error('Install Nimbus in Salesforce first.');
   const users = (await sf.query("SELECT Id FROM User WHERE IsActive = true AND UserType = 'Standard' LIMIT 2000")).records as { Id: string }[];
   const has = new Set(((await sf.query(`SELECT AssigneeId FROM PermissionSetAssignment WHERE PermissionSetId = '${psId}' LIMIT 5000`)).records as { AssigneeId: string }[]).map((r) => r.AssigneeId));
   // Up to 200 assignments per call; users whose license can't have it are simply skipped.

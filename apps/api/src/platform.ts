@@ -9,7 +9,7 @@ import { mailConfig, viaResend } from './mailer.js';
 import { slackAvailable } from './channels/chatApprovals.js';
 import { PLATFORM, setSetting } from './settings.js';
 
-// Staff console (CRMagents staff, PLATFORM_ADMINS only; "Not found" for anyone else). Tracks every client: stage
+// Staff console (Nimbus staff, PLATFORM_ADMINS only; "Not found" for anyone else). Tracks every client: stage
 // (trial, paying, past due, churned...), health, the activation funnel, subscriptions and who bought them,
 // payments, people, orgs, requests, and staff's own notes, tags and owners. Every staff change is recorded.
 // No impersonation and no customer Salesforce data.
@@ -203,8 +203,8 @@ export function registerPlatform(app: FastifyInstance) {
     const u = req.user!;
     const b = z.object({ plan: z.enum(['basic', 'plus', 'pro', 'promax']), trialDays: z.number().int().min(0).max(90).optional(), reason: z.string().max(300).optional() }).parse(req.body);
     const id = (req.params as { id: string }).id;
-    await changePlan(id, b.plan, u.email, b.reason?.trim() || 'Set by CRMagents staff', { trialDays: b.plan === 'basic' ? b.trialDays ?? 14 : undefined });
-    await audit(id, u.email, `Plan set to ${PLAN_DEFS[b.plan].name} by CRMagents`, { target: b.reason });
+    await changePlan(id, b.plan, u.email, b.reason?.trim() || 'Set by Nimbus staff', { trialDays: b.plan === 'basic' ? b.trialDays ?? 14 : undefined });
+    await audit(id, u.email, `Plan set to ${PLAN_DEFS[b.plan].name} by Nimbus`, { target: b.reason });
     return { ok: true };
   });
 
@@ -218,7 +218,7 @@ export function registerPlatform(app: FastifyInstance) {
     if (!r.rowCount) return reply.code(400).send({ error: 'Only Basic workspaces have a trial.' });
     await pool.query("update workflows w set paused_reason=null from tenants t where t.id = w.tenant_id and t.account_id=$1 and w.paused_reason like 'Your free trial ended%'", [id]);
     await pool.query('insert into plan_history (account_id, from_plan, to_plan, changed_by, reason) values ($1,$2,$2,$3,$4)', [id, 'basic', u.email, `Trial extended by ${b.days} days`]);
-    await audit(id, u.email, `Trial extended by ${b.days} days by CRMagents`, {});
+    await audit(id, u.email, `Trial extended by ${b.days} days by Nimbus`, {});
     return { trialEndsAt: r.rows[0].trial_ends_at };
   });
 
@@ -300,7 +300,7 @@ export function registerPlatform(app: FastifyInstance) {
       await staffEvent(null, req.user!.email, b.resendKey ? 'Set the email key' : 'Removed the email key', null);
     }
     if (b.mailFrom !== undefined) {
-      if (b.mailFrom && !/^([^<>]+<)?[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+>?$/.test(b.mailFrom)) throw Object.assign(new Error('Use an address like "CRMagents <hello@yourdomain.com>".'), { statusCode: 400 });
+      if (b.mailFrom && !/^([^<>]+<)?[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+>?$/.test(b.mailFrom)) throw Object.assign(new Error('Use an address like "Nimbus <hello@yourdomain.com>".'), { statusCode: 400 });
       await setSetting(PLATFORM, 'mailFrom', b.mailFrom);
       await staffEvent(null, req.user!.email, 'Changed the From address', b.mailFrom || 'default');
     }
@@ -308,7 +308,7 @@ export function registerPlatform(app: FastifyInstance) {
   });
   app.post('/api/platform/email/test', async (req) => {
     const b = z.object({ to: z.string().trim().email() }).parse(req.body);
-    return viaResend({ to: b.to, subject: 'CRMagents test email', text: `This is a test from the CRMagents staff console, sent by ${req.user!.email}. Invitations, password resets and alerts will arrive like this.` });
+    return viaResend({ to: b.to, subject: 'Nimbus test email', text: `This is a test from the Nimbus staff console, sent by ${req.user!.email}. Invitations, password resets and alerts will arrive like this.` });
   });
 
   // What staff changed: plans, trials, notes, tags and owners, request handling.

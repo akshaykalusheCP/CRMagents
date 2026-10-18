@@ -67,7 +67,7 @@ export function ConnectionsPage({ tenants, onChange, goSettings, focusConnect }:
       <div className="row" style={{ gap: 6, justifyContent: 'flex-end' }}>
         {confirm?.id === t.id ? (
           <>
-            <span className="muted small">{confirm.kind === 'disconnect' ? 'Disconnect and delete its agents?' : 'Install CRMagents in this org? Takes 2–4 minutes; needs a Salesforce admin.'}</span>
+            <span className="muted small">{confirm.kind === 'disconnect' ? 'Disconnect and delete its agents?' : 'Install Nimbus in this org? Takes 2–4 minutes; needs a Salesforce admin.'}</span>
             <button className="sm" onClick={() => setConfirm(null)}>Cancel</button>
             <button className={'sm ' + (confirm.kind === 'disconnect' ? 'danger-solid' : 'primary')} onClick={async () => {
               setConfirm(null);
@@ -112,21 +112,21 @@ export function ConnectionsPage({ tenants, onChange, goSettings, focusConnect }:
         </div>
       </Panel>
 
-      <Drawer open={!!guide} onClose={() => setGuide(null)} title="Use CRMagents inside Salesforce" sub={guide && <span>{guide.sf_username} · installed</span>}>
+      <Drawer open={!!guide} onClose={() => setGuide(null)} title="Use Nimbus inside Salesforce" sub={guide && <span>{guide.sf_username} · installed</span>}>
         {guide && (() => {
           const base = guide.sf_instance_url.replace(/\/$/, '');
           const link = (path: string, label: string) => <a className="link-btn" href={`${base}${path}`} target="_blank" rel="noreferrer">{label} <ExternalLink size={13} /></a>;
           return (
             <ol className="guide">
-              <li><b>Give people access</b><span>Everyone who should use agents in Salesforce needs the "CRMagents User" permission set.</span>
+              <li><b>Give people access</b><span>Everyone who should use agents in Salesforce needs the "Nimbus User" permission set.</span>
                 <div className="row" style={{ gap: 10 }}>
                   <button className="sm primary" disabled={granting} onClick={async () => { setGranting(true); try { const r = await api.grantAccess(guide.id); toast(`Access given to ${r.granted} more user${r.granted === 1 ? '' : 's'} (${r.total} active)`); } catch (e) { toast((e as Error).message, 'bad'); } finally { setGranting(false); } }}>{granting ? <Loader2 size={14} className="spin" /> : null} Give everyone access</button>
                   {link('/lightning/setup/PermSets/home', 'Or choose people')}
                 </div></li>
               <li><b>Put the assistant in the utility bar</b><span>One click away on every page of the app: agents, an assistant to ask, and approvals.</span><UtilityBarPicker tenant={guide} /></li>
-              <li><b>Add CRMagents to record pages</b><span>The Suggestions card (agent advice and what agents changed) and the Agent Panel, at the top of the side column. Pick an existing page, or get a new one to activate.</span><RecordPagePicker tenant={guide} /></li>
-              <li><b>Add the "Ask CRMagents" button</b><span>Ready for Accounts, Cases, Contacts, Leads and Opportunities. In Object Manager → the object → Page Layouts → Mobile &amp; Lightning Actions, drag in <i>Ask CRMagents</i>.</span>{link('/lightning/setup/ObjectManager/Case/PageLayouts/view', 'Open Case page layouts')}</li>
-              <li><b>Use agents in your Flows</b><span>In Flow Builder add an Action and search "CRMagents": <i>Run CRMagents agent</i> (by name) and <i>Ask CRMagents assistant</i> (returns the answer, e.g. to save a case summary).</span>{link('/builder_platform_interaction/flowBuilder.app', 'Open Flow Builder')}</li>
+              <li><b>Add Nimbus to record pages</b><span>The Suggestions card (agent advice and what agents changed) and the Agent Panel, at the top of the side column. Pick an existing page, or get a new one to activate.</span><RecordPagePicker tenant={guide} /></li>
+              <li><b>Add the "Ask Nimbus" button</b><span>Ready for Accounts, Cases, Contacts, Leads and Opportunities. In Object Manager → the object → Page Layouts → Mobile &amp; Lightning Actions, drag in <i>Ask Nimbus</i>.</span>{link('/lightning/setup/ObjectManager/Case/PageLayouts/view', 'Open Case page layouts')}</li>
+              <li><b>Use agents in your Flows</b><span>In Flow Builder add an Action and search "Nimbus": <i>Run Nimbus agent</i> (by name) and <i>Ask Nimbus assistant</i> (returns the answer, e.g. to save a case summary).</span>{link('/builder_platform_interaction/flowBuilder.app', 'Open Flow Builder')}</li>
               <li><b>Approvals come to Salesforce</b><span>When an agent waits for approval, the approver gets a Salesforce notification (the bell) that opens the record. Nothing to set up.</span></li>
             </ol>
           );
@@ -155,7 +155,7 @@ export function ConnectionsPage({ tenants, onChange, goSettings, focusConnect }:
 
 /**
  * The org's daily API allowance as Salesforce last reported it. It is shared with the customer's other
- * integrations, so CRMagents slows down at 50%, pauses optional work at 80% and keeps only essentials at 95%.
+ * integrations, so Nimbus slows down at 50%, pauses optional work at 80% and keeps only essentials at 95%.
  */
 function ApiUse({ t }: { t: Tenant }) {
   if (!t.api_max || t.api_used == null) return <span className="cell-sub">Not measured yet</span>;
@@ -165,7 +165,7 @@ function ApiUse({ t }: { t: Tenant }) {
     : pct >= 50 ? 'Checking for records less often'
     : 'Plenty left';
   return (
-    <div className="cell-main api-use" title={`CRMagents gives way as usage rises: slower record checks at 50%, optional work paused at 80%, only approvals and changes at 95%. Reported ${t.api_checked_at ? new Date(t.api_checked_at).toLocaleTimeString() : ''}.`}>
+    <div className="cell-main api-use" title={`Nimbus gives way as usage rises: slower record checks at 50%, optional work paused at 80%, only approvals and changes at 95%. Reported ${t.api_checked_at ? new Date(t.api_checked_at).toLocaleTimeString() : ''}.`}>
       <span><b>{pct}%</b> <span className="cell-sub">{t.api_used.toLocaleString()} of {t.api_max.toLocaleString()}</span></span>
       <Meter value={t.api_used} max={t.api_max} label="API use" />
       <span className={'cell-sub' + (pct >= 80 ? ' api-warn' : '')}>{note}</span>

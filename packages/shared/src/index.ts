@@ -366,7 +366,7 @@ export const NODE_DEFS: NodeDef[] = [
     type: 'crm.suggest',
     label: 'Show suggestion on record',
     category: 'Salesforce',
-    description: 'Save advice on the record. People see it in the CRMagents Suggestions card on the record page. Changes nothing in Salesforce, so no approval is needed.',
+    description: 'Save advice on the record. People see it in the Nimbus Suggestions card on the record page. Changes nothing in Salesforce, so no approval is needed.',
     fields: [
       { key: 'title', label: 'Title', kind: 'text', placeholder: 'Suggested resolution' },
       { key: 'text', label: 'Suggestion', kind: 'textarea', placeholder: '{{ai_agent_1.text}}' },
@@ -773,7 +773,7 @@ export const roleAtLeast = (role: string | undefined, need: Role) => (RANK[role 
 // ---- Plans: what each plan includes. One definition for the server (enforcement), the app and the pricing page. ----
 export type PlanId = 'basic' | 'plus' | 'pro' | 'promax';
 export type Feature =
-  | 'panel'          // CRMagents package in Salesforce: record panel, utility bar, Flow actions, deploy as Flow
+  | 'panel'          // Nimbus package in Salesforce: record panel, utility bar, Flow actions, deploy as Flow
   | 'knowledge'      // guides and Salesforce Knowledge sync
   | 'emailReplies'   // read and reply to case emails
   | 'insights'       // Insights and Dashboards
@@ -800,7 +800,7 @@ export const PLAN_DEFS: Record<PlanId, PlanDef> = {
 };
 export const TRIAL_DAYS = 14;
 export const FEATURE_LABEL: Record<Feature, string> = {
-  panel: 'The CRMagents panel and Flow actions in Salesforce', knowledge: 'The knowledge base', emailReplies: 'Email replies on cases',
+  panel: 'The Nimbus panel and Flow actions in Salesforce', knowledge: 'The knowledge base', emailReplies: 'Email replies on cases',
   insights: 'Insights and dashboards', tests: 'Assistant test sets', memory: 'Memory', costCaps: 'Monthly cost caps',
   websiteChat: 'Website chat', textMessages: 'SMS and WhatsApp', meetings: 'Meeting booking', prove: 'Build & prove',
   xray: 'The Automation X-ray', impact: 'Impact reporting', trustLog: 'The AI call log, activity log and export',

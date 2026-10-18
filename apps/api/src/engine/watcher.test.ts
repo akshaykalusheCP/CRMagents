@@ -102,7 +102,7 @@ test('new records run once; records already seen at the cursor are skipped', () 
   assert.deepEqual(second.seenAtCursor, ['b', 'c', 'd']);
 });
 
-test('changes made by CRMagents itself never retrigger (no loops)', () => {
+test('changes made by Nimbus itself never retrigger (no loops)', () => {
   const r = pickNew([
     { Id: 'x', SystemModstamp: at(1), LastModifiedById: '005gL000009690DQAQ' },
     { Id: 'y', SystemModstamp: at(2), LastModifiedById: '005OTHERUSER00001' },

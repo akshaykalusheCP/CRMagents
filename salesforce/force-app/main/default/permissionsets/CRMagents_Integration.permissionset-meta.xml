@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
-    <description>For the Salesforce user CRMagents connects as: lets it record agent activity. Assigned automatically during setup.</description>
+    <description>For the Salesforce user Nimbus connects as: lets it record agent activity. Assigned automatically during setup.</description>
     <fieldPermissions>
         <editable>true</editable>
         <field>CRMagents_Agent_Activity__c.Run_Id__c</field>
@@ -47,7 +47,7 @@
         <readable>true</readable>
     </fieldPermissions>
     <hasActivationRequired>false</hasActivationRequired>
-    <label>CRMagents Integration</label>
+    <label>Nimbus Integration</label>
     <objectPermissions>
         <allowCreate>true</allowCreate>
         <allowDelete>false</allowDelete>

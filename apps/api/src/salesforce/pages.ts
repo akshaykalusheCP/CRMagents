@@ -1,6 +1,6 @@
 import type { SalesforceClient } from './client.js';
 
-// Puts CRMagents on Salesforce pages without App Builder: the Agent Panel into an app's utility bar, and the
+// Puts Nimbus on Salesforce pages without App Builder: the Agent Panel into an app's utility bar, and the
 // Suggestions card + Agent Panel onto a record page (an existing Lightning page, or a new one the admin activates).
 // Uses the Tooling API's FlexiPage metadata; pages from managed packages can't be changed and say so.
 
@@ -25,7 +25,7 @@ export function withUtilityPanel(m: FlexiMeta): FlexiMeta {
   const regions = m.flexiPageRegions.length ? m.flexiPageRegions : [{ name: 'utilityItems', type: 'Region', itemInstances: [] }];
   const target = regions.find((r) => r.name === 'utilityItems') ?? regions[0];
   target.itemInstances = [...(target.itemInstances ?? []), component(PANEL, 'crmAgentsPanel_utility', {
-    eager: 'false', height: '560', width: '380', icon: 'einstein', label: 'CRMagents', scrollable: 'true',
+    eager: 'false', height: '560', width: '380', icon: 'einstein', label: 'Nimbus', scrollable: 'true',
   })];
   return { ...m, flexiPageRegions: regions };
 }
@@ -44,10 +44,10 @@ export function withRecordCards(m: FlexiMeta): FlexiMeta {
   return m;
 }
 
-/** A new record page: highlights, details and related lists, with the CRMagents cards on the side. Pure; tested. */
+/** A new record page: highlights, details and related lists, with the Nimbus cards on the side. Pure; tested. */
 export function newRecordPage(object: string): FlexiMeta {
   return {
-    masterLabel: `CRMagents ${object} Record Page`,
+    masterLabel: `Nimbus ${object} Record Page`,
     type: 'RecordPage',
     sobjectType: object,
     template: { name: 'flexipage:recordHomeTemplateDesktop' },
@@ -105,5 +105,5 @@ export async function addToRecordPage(sf: SalesforceClient, object: string, inst
   if (existing.records[0]) return addToRecordPage(sf, object, instanceUrl, existing.records[0].Id);
   const r = await sf.tooling<{ id: string }>('POST', '/sobjects/FlexiPage', { FullName: fullName, Metadata: newRecordPage(object) }).catch((e) => { throw friendly(e); });
   // New pages need an admin to activate them (Salesforce only lets that happen in App Builder).
-  return { changed: true, id: r.id, label: `CRMagents ${object} Record Page`, activateUrl: `${instanceUrl}/visualEditor/appBuilder.app?id=${r.id}` };
+  return { changed: true, id: r.id, label: `Nimbus ${object} Record Page`, activateUrl: `${instanceUrl}/visualEditor/appBuilder.app?id=${r.id}` };
 }

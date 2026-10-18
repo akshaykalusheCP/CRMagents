@@ -147,7 +147,7 @@ public with sharing class CRMToolRunner {
         }
         String objectName = t.getDescribe().getName();
         if (String.isNotBlank(recordId)) {
-            // What this replaces, so CRMagents can put it back (undo).
+            // What this replaces, so Nimbus can put it back (undo).
             Map<String, Object> before = currentValues(t, (Id) recordId, values == null ? new Set<String>() : values.keySet());
             update as user rec;
             return new Map<String, Object>{ 'success' => true, 'object' => objectName, 'before' => before };
@@ -222,7 +222,7 @@ public with sharing class CRMToolRunner {
         return new Map<String, Object>{ 'success' => true, 'object' => t.getDescribe().getName(), 'before' => before };
     }
 
-    /** Files on a record that this user can see. CRMagents reads only these (by their version Id). */
+    /** Files on a record that this user can see. Nimbus reads only these (by their version Id). */
     static Object listFiles(String recordId) {
         Id rid = (Id) recordId;
         List<Object> files = new List<Object>();

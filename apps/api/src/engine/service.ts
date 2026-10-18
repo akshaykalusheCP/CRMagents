@@ -157,7 +157,7 @@ async function drive(runId: string, tenantId: string, graph: Workflow, st: RunSt
     }
     // Live update for the Salesforce panel, and a bell notification when someone needs to approve.
     void notifySalesforce(tenantId, runId);
-    // The changes it made, recorded in Salesforce (CRMagents Agent Activity).
+    // The changes it made, recorded in Salesforce (Nimbus Agent Activity).
     if (status === 'done' || status === 'error') void auditRun(tenantId, runId);
     if (status === 'error' && workflowId) void afterRunFailed(tenantId, workflowId, outcome.error ?? 'Unknown error').catch(() => undefined);
     return saved;
@@ -338,7 +338,7 @@ export async function decideRun(tenantId: string, runId: string, approve: boolea
   const { rowCount } = await pool.query("update runs set status='running', decision_note=$2, decided_at=now(), decided_by=$3, heartbeat_at=now() where id=$1 and status='waiting'", [runId, note?.trim().slice(0, 500) || null, who ?? null]);
   if (!rowCount) throw Object.assign(new Error('Someone else already decided this one.'), { statusCode: 409 });
   // The Slack message (if any) shows who decided, wherever they did.
-  void import('../channels/chatApprovals.js').then((m) => m.closeApproval(runId, approve, who ?? 'someone', o.where ?? 'in CRMagents')).catch(() => undefined);
+  void import('../channels/chatApprovals.js').then((m) => m.closeApproval(runId, approve, who ?? 'someone', o.where ?? 'in Nimbus')).catch(() => undefined);
   if (o.background) {
     void drive(runId, tenantId, graph, st, rows[0].workflow_id ?? undefined).catch(() => undefined);
     return { runId, status: 'running' as const };

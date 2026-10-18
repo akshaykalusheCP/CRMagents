@@ -29,8 +29,8 @@ export async function createResetToken(userId: string) {
 
 export function resetEmail(link: string) {
   return {
-    subject: 'Reset your CRMagents password',
-    text: `Someone asked to reset the password for this CRMagents login.\n\nSet a new password: ${link}\n\nThe link works once, for ${RESET_HOURS} hours. If you didn't ask for it, ignore this email: your password stays the same.`,
+    subject: 'Reset your Nimbus password',
+    text: `Someone asked to reset the password for this Nimbus login.\n\nSet a new password: ${link}\n\nThe link works once, for ${RESET_HOURS} hours. If you didn't ask for it, ignore this email: your password stays the same.`,
   };
 }
 
@@ -57,7 +57,7 @@ export function registerTeam(app: FastifyInstance) {
     const email = b.email.toLowerCase();
     const taken = await pool.query('select account_id from users where lower(email)=$1', [email]);
     if (taken.rows[0]) {
-      throw Object.assign(new Error(taken.rows[0].account_id === u.accountId ? 'They are already in this workspace.' : 'This email already has a CRMagents login in another company.'), { statusCode: 409 });
+      throw Object.assign(new Error(taken.rows[0].account_id === u.accountId ? 'They are already in this workspace.' : 'This email already has a Nimbus login in another company.'), { statusCode: 409 });
     }
     // A new invitation replaces an open one for the same email, so it doesn't count twice.
     const { rows: open } = await pool.query('select 1 from invites where account_id=$1 and lower(email)=$2 and accepted_at is null and expires_at > now()', [u.accountId, email]);
@@ -71,8 +71,8 @@ export function registerTeam(app: FastifyInstance) {
     const link = inviteLink(token);
     const emailed = await sendMail(u.accountId, {
       to: email,
-      subject: `${u.email} invited you to ${u.accountName} on CRMagents`,
-      text: `${u.email} invited you to join ${u.accountName} on CRMagents as ${b.role === 'admin' ? 'an admin' : `a ${b.role}`}.\n\nAccept and set your password: ${link}\n\nThe link works for ${INVITE_DAYS} days.`,
+      subject: `${u.email} invited you to ${u.accountName} on Nimbus`,
+      text: `${u.email} invited you to join ${u.accountName} on Nimbus as ${b.role === 'admin' ? 'an admin' : `a ${b.role}`}.\n\nAccept and set your password: ${link}\n\nThe link works for ${INVITE_DAYS} days.`,
     });
     return { id: rows[0].id, link, emailed };
   });

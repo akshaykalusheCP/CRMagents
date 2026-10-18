@@ -4,7 +4,7 @@ import { pool } from '../db.js';
 import { SalesforceClient } from './client.js';
 
 // Telling Salesforce what happened, so people see it where they work:
-// - a Platform Event when a run changes state (the CRMagents panel listens and updates live), package orgs only;
+// - a Platform Event when a run changes state (the Nimbus panel listens and updates live), package orgs only;
 // - a bell notification to the approver when a run needs a decision (works without the package).
 
 export const NOTIFICATION_TYPE = 'CRMagents_Approval';
@@ -18,7 +18,7 @@ export async function ensureNotificationType(tenantId: string, sf: SalesforceCli
   let row = await find();
   if (!row) {
     await sf.tooling('POST', '/sobjects/CustomNotificationType', {
-      DeveloperName: NOTIFICATION_TYPE, MasterLabel: 'CRMagents approval', CustomNotifTypeName: 'CRMagents approval',
+      DeveloperName: NOTIFICATION_TYPE, MasterLabel: 'Nimbus approval', CustomNotifTypeName: 'Nimbus approval',
       Description: 'An agent is waiting for someone to approve a change.', Desktop: true, Mobile: true, Language: 'en_US',
     });
     row = await find();

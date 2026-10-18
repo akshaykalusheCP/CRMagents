@@ -3,7 +3,7 @@ import { pool } from './db.js';
 
 // Credentials are entered from the UI and stored encrypted. Per-account values override the
 // platform default (zero-uuid account), which in turn falls back to env vars.
-/** Platform-wide values (set by CRMagents staff); also the fallback for every workspace. */
+/** Platform-wide values (set by Nimbus staff); also the fallback for every workspace. */
 export const PLATFORM = '00000000-0000-0000-0000-000000000000';
 
 export const SETTING_KEYS = {

@@ -157,7 +157,7 @@ public with sharing class CRMAgentsController {
         }
     }
 
-    /** Sends the results of execTools back to CRMagents (a separate request, after the changes are saved). */
+    /** Sends the results of execTools back to Nimbus (a separate request, after the changes are saved). */
     @AuraEnabled
     public static void postToolResults(String runId, String resultsJson) {
         try {
@@ -200,7 +200,7 @@ public with sharing class CRMAgentsController {
 
     /**
      * The record as the signed-in user may see it (field-level security applies), read inside Salesforce:
-     * queries inside the org don't use the API allowance, so CRMagents doesn't need to call back for it.
+     * queries inside the org don't use the API allowance, so Nimbus doesn't need to call back for it.
      */
     public static Map<String, Object> recordFor(String recordId) {
         try {
@@ -241,7 +241,7 @@ public with sharing class CRMAgentsController {
             }
             return out;
         } catch (Exception e) {
-            return null; // CRMagents reads the record itself instead
+            return null; // Nimbus reads the record itself instead
         }
     }
 
@@ -271,7 +271,7 @@ public with sharing class CRMAgentsController {
 
     /**
      * Sends an agent's suggested email reply as the signed-in user (they may have edited it), then marks the
-     * suggestion as used. Email first (no callout before it), the CRMagents update after.
+     * suggestion as used. Email first (no callout before it), the Nimbus update after.
      */
     @AuraEnabled
     public static void sendSuggestedReply(String suggestionId, String caseId, String toAddress, String subject, String body, String inReplyToId) {
@@ -308,7 +308,7 @@ public with sharing class CRMAgentsController {
         }
     }
 
-    /** What agents changed on this record, with old and new values (from CRMagents' change log). */
+    /** What agents changed on this record, with old and new values (from Nimbus' change log). */
     @AuraEnabled
     public static String recordChanges(String recordId) {
         try {
@@ -318,7 +318,7 @@ public with sharing class CRMAgentsController {
         }
     }
 
-    /** Undo agent changes, as the signed-in user: CRMagents checks they may edit those records. */
+    /** Undo agent changes, as the signed-in user: Nimbus checks they may edit those records. */
     @AuraEnabled
     public static String undoChanges(String changeIdsJson) {
         try {

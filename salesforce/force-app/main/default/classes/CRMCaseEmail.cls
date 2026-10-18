@@ -16,7 +16,7 @@ public with sharing class CRMCaseEmail {
         @InvocableVariable(label='Error') public String error;
     }
 
-    @InvocableMethod(label='Reply to case email' description='Sends a threaded email reply on a case and logs it' category='CRMagents')
+    @InvocableMethod(label='Reply to case email' description='Sends a threaded email reply on a case and logs it' category='Nimbus')
     public static List<Result> sendReplies(List<Request> requests) {
         List<Result> out = new List<Result>();
         for (Request r : requests) {

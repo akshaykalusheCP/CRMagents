@@ -3,10 +3,10 @@ import { pool } from '../db.js';
 import { SalesforceClient } from './client.js';
 import { triggersOf } from '../engine/watcher.js';
 
-// "Push from Salesforce": a record-triggered Flow per watched object that calls the package's "Run CRMagents
+// "Push from Salesforce": a record-triggered Flow per watched object that calls the package's "Run Nimbus
 // workflow" action on an asynchronous path (callouts are not allowed in the synchronous part of a record-triggered
 // flow). Records arrive the moment they are saved, with no API calls and no change-event slots. Edits made by
-// CRMagents itself never start it, so an agent that updates its own record can't loop.
+// Nimbus itself never start it, so an agent that updates its own record can't loop.
 
 const flowNameFor = (name: string, workflowId: string) => {
   const slug = name.replace(/[^A-Za-z0-9]+/g, '_').replace(/^_+|_+$/g, '').slice(0, 40) || 'Workflow';
@@ -52,11 +52,11 @@ export async function deployWorkflow(tenantId: string, workflowId: string) {
   const wf = await load(tenantId, workflowId);
   const trigs = triggersOf(wf.graph);
   if (!trigs.length) throw new Error('Add a Salesforce record trigger with an object (for example Case) before adding it to Salesforce.');
-  if (trigs[0].event === 'deleted') throw new Error('Salesforce Flows can\'t send deleted records to CRMagents. Keep this agent on real-time changes or regular checks.');
+  if (trigs[0].event === 'deleted') throw new Error('Salesforce Flows can\'t send deleted records to Nimbus. Keep this agent on real-time changes or regular checks.');
   const sf = await SalesforceClient.forTenant(tenantId);
 
   const installed = await sf.query("SELECT Id FROM ApexClass WHERE Name = 'CRMRunWorkflowAction' LIMIT 1");
-  if (!installed.records.length) throw new Error('The CRMagents package is not installed in this org. Re-run setup on the Connections page.');
+  if (!installed.records.length) throw new Error('The Nimbus package is not installed in this org. Re-run setup on the Connections page.');
   const { rows } = await pool.query('select sf_user_id from tenants where id=$1', [tenantId]);
   const ownUserId: string | null = rows[0]?.sf_user_id ?? null;
 
@@ -66,12 +66,12 @@ export async function deployWorkflow(tenantId: string, workflowId: string) {
   for (const t of trigs) {
     const flowName = flowNameFor(trigs.length > 1 ? `${wf.name}_${t.object}` : wf.name, workflowId);
     await removeFlow(sf, flowName);
-    const label = `CRMagents: ${wf.name}${trigs.length > 1 ? ` (${t.object})` : ''}`.slice(0, 80);
+    const label = `Nimbus: ${wf.name}${trigs.length > 1 ? ` (${t.object})` : ''}`.slice(0, 80);
     await sf.tooling('POST', '/sobjects/Flow', {
       FullName: flowName,
       Metadata: {
         label,
-        description: `Sends each ${t.object} ${t.event === 'created' ? 'created' : t.event === 'updated' ? 'updated' : 'created or updated'} to the CRMagents agent "${wf.name}". Managed by CRMagents.`,
+        description: `Sends each ${t.object} ${t.event === 'created' ? 'created' : t.event === 'updated' ? 'updated' : 'created or updated'} to the Nimbus agent "${wf.name}". Managed by Nimbus.`,
         processType: 'AutoLaunchedFlow',
         status: 'Active',
         apiVersion: 67,
@@ -82,7 +82,7 @@ export async function deployWorkflow(tenantId: string, workflowId: string) {
         ],
         start: flowStart(t.object, t.event, t.changed, ownUserId),
         actionCalls: [{
-          name: 'Run_CRMagents', label: 'Run CRMagents workflow', locationX: 176, locationY: 323,
+          name: 'Run_CRMagents', label: 'Run Nimbus workflow', locationX: 176, locationY: 323,
           actionName: 'CRMRunWorkflowAction', actionType: 'apex',
           inputParameters: [
             { name: 'workflowId', value: { stringValue: workflowId } },

@@ -5,7 +5,7 @@ import { api, type AdminAccount, type AdminAccountDetail, type AdminOverview, ty
 import { LogoMark } from '../components/Logo';
 import { Meter, SkeletonRows, Status, Toaster, Trend, toast, type Tone } from '../components/ui';
 
-// Staff console (CRMagents staff only): a back office for tracking every client. Its own layout, dense tables,
+// Staff console (Nimbus staff only): a back office for tracking every client. Its own layout, dense tables,
 // and "who needs attention today" first. The server answers "Not found" to anyone else.
 
 type View = 'overview' | 'workspaces' | 'users' | 'revenue' | 'requests' | 'log' | 'settings';
@@ -327,7 +327,7 @@ function Client({ id, staff, back, changed }: { id: string; staff: string[]; bac
       </section>}
 
       {tab === 'notes' && <section className="sc-card">
-        <div className="sc-noteadd"><textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="A note only CRMagents staff see: calls, promises, context" rows={3} /><button className="sc-btn primary" onClick={() => void addNote()} disabled={!note.trim()}>Add note</button></div>
+        <div className="sc-noteadd"><textarea value={note} onChange={(e) => setNote(e.target.value)} placeholder="A note only Nimbus staff see: calls, promises, context" rows={3} /><button className="sc-btn primary" onClick={() => void addNote()} disabled={!note.trim()}>Add note</button></div>
         <ul className="sc-notes">{d.notes.map((n) => <li key={n.id}><div><small>{n.author} · {ago(n.createdAt)}</small><p>{n.text}</p></div><button className="sc-icon" aria-label="Delete note" onClick={() => void api.adminDeleteNote(n.id).then(load)}><Trash2 size={14} /></button></li>)}
           {!d.notes.length && <li className="sc-empty">No notes yet.</li>}</ul>
       </section>}
@@ -477,7 +477,7 @@ function PlatformSettings({ me, billing }: { me: Me; billing: boolean }) {
               {mail.configured && <button className="sc-btn" disabled={busy} onClick={() => { if (window.confirm('Remove the email key? Mail falls back to each workspace\'s Salesforce org.')) void save({ resendKey: '' }); }}>Remove</button>}</span>
           </label>
           <label className="sc-field">From address
-            <span className="sc-inline" style={{ marginTop: 0 }}><input value={from} onChange={(e) => setFrom(e.target.value)} placeholder="CRMagents <hello@yourdomain.com>" />
+            <span className="sc-inline" style={{ marginTop: 0 }}><input value={from} onChange={(e) => setFrom(e.target.value)} placeholder="Nimbus <hello@yourdomain.com>" />
               <button className="sc-btn" disabled={busy || from === mail.from} onClick={() => void save({ mailFrom: from })}>Save</button></span>
           </label>
           <label className="sc-field">Send a test email
@@ -492,7 +492,7 @@ function PlatformSettings({ me, billing }: { me: Me; billing: boolean }) {
       </section>
       <section className="sc-card">
         <header><h2>Slack approvals</h2>{slack ? <Status tone="ok">Available to workspaces</Status> : <Status tone="neutral">Off</Status>}</header>
-        <p className="sc-muted" style={{ margin: 0 }}>{slack ? 'Workspaces can add CRMagents to a Slack channel and approve right in the message (Settings → Slack & Teams).' : "Off until CRMagents' Slack app is created and the server has SLACK_CLIENT_ID, SLACK_CLIENT_SECRET and SLACK_SIGNING_SECRET. In the Slack app: scopes chat:write, users:read, users:read.email, incoming-webhook; redirect URL <public URL>/public/slack/oauth; interactivity URL <public URL>/public/slack/interactions. Teams needs nothing from us."}</p>
+        <p className="sc-muted" style={{ margin: 0 }}>{slack ? 'Workspaces can add Nimbus to a Slack channel and approve right in the message (Settings → Slack & Teams).' : "Off until Nimbus' Slack app is created and the server has SLACK_CLIENT_ID, SLACK_CLIENT_SECRET and SLACK_SIGNING_SECRET. In the Slack app: scopes chat:write, users:read, users:read.email, incoming-webhook; redirect URL <public URL>/public/slack/oauth; interactivity URL <public URL>/public/slack/interactions. Teams needs nothing from us."}</p>
       </section>
     </>
   );
@@ -569,7 +569,7 @@ export function AdminConsole({ me, onExit }: { me: Me; onExit: () => void }) {
   return (
     <div className="sc">
       <aside className="sc-side">
-        <div className="sc-brand"><span className="brand-mark"><LogoMark size={13} /></span>CRMagents<span className="sc-staff">Staff</span></div>
+        <div className="sc-brand"><span className="brand-mark"><LogoMark size={13} /></span>Nimbus<span className="sc-staff">Staff</span></div>
         <nav>{NAV.map((n) => <button key={n.id} className={view === n.id && !(client && n.id !== 'workspaces') ? 'on' : ''} onClick={() => go(n.id)}>{n.icon}<span>{n.label}</span>{n.n ? <em>{n.n}</em> : null}</button>)}</nav>
         <div className="sc-side-foot">
           <span>{me.email}</span>

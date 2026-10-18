@@ -1,6 +1,6 @@
 // Markdown -> a small, safe subset of HTML (bold, italic, code, headings, lists, tables, links, paragraphs).
 // Everything is HTML-escaped first and only fixed tags are produced, so model output can't inject markup.
-// Kept dependency-free; the same code is used by the CRMagents web app.
+// Kept dependency-free; the same code is used by the Nimbus web app.
 
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 

@@ -149,7 +149,7 @@ app.get('/oauth/callback', async (req, reply) => {
     // Salesforce sends these when the org blocks or does not know the app.
     const notInstalled = /invalid_client|blocked|not.*installed|unapproved|OAUTH_APPROVAL/i.test(`${error} ${error_description}`);
     return back(notInstalled
-      ? 'This Salesforce org has not installed or approved the CRMagents app yet. Ask a Salesforce admin to install it once, then connect again.'
+      ? 'This Salesforce org has not installed or approved the Nimbus app yet. Ask a Salesforce admin to install it once, then connect again.'
       : (error_description ?? error ?? 'Salesforce login was cancelled'));
   }
   try {
@@ -488,8 +488,8 @@ app.put('/api/tenants/:tenantId/workflows/:id/allowed-fields', async (req) => {
   return { allowed: clean };
 });
 
-// Give every active Salesforce user access to the CRMagents panel, button and Flow actions.
-// Put CRMagents on Salesforce pages (utility bar, record pages) without App Builder.
+// Give every active Salesforce user access to the Nimbus panel, button and Flow actions.
+// Put Nimbus on Salesforce pages (utility bar, record pages) without App Builder.
 app.get('/api/tenants/:tenantId/salesforce/pages', async (req) => {
   const { object } = req.query as { object?: string };
   return listPages(await SalesforceClient.forTenant((req.params as { tenantId: string }).tenantId), object);

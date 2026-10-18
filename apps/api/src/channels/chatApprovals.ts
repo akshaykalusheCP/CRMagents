@@ -10,7 +10,7 @@ import { decideRun } from '../engine/service.js';
 import { audit } from '../trust/audit.js';
 
 // Approvals in Slack and Microsoft Teams.
-// Slack: CRMagents' Slack app is added to a channel ("Add to Slack"); each waiting run posts a message with Approve
+// Slack: Nimbus' Slack app is added to a channel ("Add to Slack"); each waiting run posts a message with Approve
 // and Reject buttons. A click counts only when the Slack user's email belongs to someone in the workspace, and the
 // usual rules apply (separation of duties, assigned approver). The message then shows who decided.
 // Teams: its incoming webhooks can't take button clicks, so the card has a button that opens the approval here.
@@ -50,7 +50,7 @@ export function slackApprovalBlocks(a: ApprovalInfo) {
     { type: 'actions', block_id: 'decision', elements: [
       { type: 'button', action_id: 'approve', style: 'primary', text: { type: 'plain_text', text: 'Approve' }, value: a.runId },
       { type: 'button', action_id: 'reject', style: 'danger', text: { type: 'plain_text', text: 'Reject' }, value: a.runId },
-      { type: 'button', action_id: 'open', text: { type: 'plain_text', text: 'Open in CRMagents' }, url: approvalsLink(a.runId) },
+      { type: 'button', action_id: 'open', text: { type: 'plain_text', text: 'Open in Nimbus' }, url: approvalsLink(a.runId) },
     ] },
   ];
 }
@@ -150,7 +150,7 @@ export function registerChatApprovals(app: FastifyInstance) {
   });
 
   app.post('/api/chat-approvals/slack/install', async (req, reply) => {
-    if (!slackAvailable()) return reply.code(400).send({ error: "Slack isn't set up for CRMagents yet. Ask CRMagents support to turn it on." });
+    if (!slackAvailable()) return reply.code(400).send({ error: "Slack isn't set up for Nimbus yet. Ask Nimbus support to turn it on." });
     const state = randomBytes(16).toString('base64url');
     installs.set(state, { accountId: req.user!.accountId, email: req.user!.email, at: Date.now() });
     for (const [k, v] of installs) if (Date.now() - v.at > 15 * 60_000) installs.delete(k);
@@ -197,10 +197,10 @@ export function registerChatApprovals(app: FastifyInstance) {
     const { kind } = z.object({ kind: z.enum(['slack', 'teams']) }).parse(req.body);
     const ch = (await channelsOf(req.user!.accountId))[kind];
     if (!ch) throw Object.assign(new Error(`${kind === 'slack' ? 'Slack' : 'Teams'} isn't connected.`), { statusCode: 400 });
-    const sample: ApprovalInfo = { runId: '00000000-0000-0000-0000-000000000000', agent: 'Test from CRMagents', question: 'Approval requests will look like this.', changes: ['Case 00001234: Priority Medium → High'], assignedLabel: null, recordUrl: null };
+    const sample: ApprovalInfo = { runId: '00000000-0000-0000-0000-000000000000', agent: 'Test from Nimbus', question: 'Approval requests will look like this.', changes: ['Case 00001234: Priority Medium → High'], assignedLabel: null, recordUrl: null };
     if (kind === 'slack') {
       const blocks = slackApprovalBlocks(sample).filter((b) => b.type !== 'actions');
-      const r = await slackApi(decrypt(ch.secret_enc), 'chat.postMessage', { channel: ch.channel_id, text: 'Test from CRMagents', blocks });
+      const r = await slackApi(decrypt(ch.secret_enc), 'chat.postMessage', { channel: ch.channel_id, text: 'Test from Nimbus', blocks });
       return r.ok ? { ok: true } : { ok: false, error: `Slack said: ${r.error}` };
     }
     const res = await safeFetch(decrypt(ch.secret_enc), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(teamsApprovalCard(sample)) });
@@ -233,13 +233,13 @@ export async function decideFromSlack(p: SlackPayload, approve: boolean, runId: 
   // The run must belong to a workspace that connected this Slack team.
   const { rows: runs } = await pool.query('select r.tenant_id, t.account_id from runs r join tenants t on t.id = r.tenant_id where r.id=$1', [runId]);
   const ch = chs.find((c) => c.account_id === runs[0]?.account_id);
-  if (!runs[0] || !ch) return tell(p, "This approval isn't for a CRMagents workspace connected to this Slack.");
+  if (!runs[0] || !ch) return tell(p, "This approval isn't for a Nimbus workspace connected to this Slack.");
   const info = await slackApi<{ user?: { profile?: { email?: string } } }>(decrypt(ch.secret_enc), 'users.info', { user: p.user.id });
   const email = info.user?.profile?.email?.toLowerCase();
-  if (!email) return tell(p, "CRMagents couldn't read your Slack email, so it can't tell who you are. Approve in CRMagents instead.");
+  if (!email) return tell(p, "Nimbus couldn't read your Slack email, so it can't tell who you are. Approve in Nimbus instead.");
   const { rows: users } = await pool.query('select email, role from users where account_id=$1 and lower(email)=$2', [ch.account_id, email]);
   const u = users[0];
-  if (!u || !roleAtLeast(u.role, 'approver')) return tell(p, `${email} isn't in this CRMagents workspace, so your click didn't count. Ask an admin to invite you.`);
+  if (!u || !roleAtLeast(u.role, 'approver')) return tell(p, `${email} isn't in this Nimbus workspace, so your click didn't count. Ask an admin to invite you.`);
   try {
     // Checked and recorded first (the agent then carries on by itself), so the message only changes for a real decision.
     await decideRun(runs[0].tenant_id, runId, approve, 'Decided in Slack', u.email, u.role, { background: true, where: 'in Slack' });

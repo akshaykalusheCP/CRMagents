@@ -1,10 +1,10 @@
 /**
- * Flow action: ask a CRMagents assistant a question, optionally about a record, and get the answer back
+ * Flow action: ask a Nimbus assistant a question, optionally about a record, and get the answer back
  * (for example to summarise a case into a field). Makes a callout: use it in an asynchronous path.
  */
 public with sharing class CRMAskAssistantAction {
     public class Request {
-        @InvocableVariable(label='Assistant name' required=true description='The assistant\'s name in CRMagents')
+        @InvocableVariable(label='Assistant name' required=true description='The assistant\'s name in Nimbus')
         public String assistantName;
         @InvocableVariable(label='Question' required=true)
         public String question;
@@ -18,7 +18,7 @@ public with sharing class CRMAskAssistantAction {
         @InvocableVariable(label='Error') public String error;
     }
 
-    @InvocableMethod(label='Ask CRMagents assistant' description='Asks a CRMagents assistant and returns its answer' category='CRMagents')
+    @InvocableMethod(label='Ask Nimbus assistant' description='Asks a Nimbus assistant and returns its answer' category='Nimbus')
     public static List<Result> ask(List<Request> requests) {
         List<Result> out = new List<Result>();
         for (Request r : requests) {
@@ -26,7 +26,7 @@ public with sharing class CRMAskAssistantAction {
             // Salesforce allows 100 callouts and 120 seconds of callout time per transaction. Answers that would
             // go over are returned as errors instead of failing the whole transaction.
             if (System.Limits.getCallouts() >= System.Limits.getLimitCallouts() - 1 || CRMClient.remainingCalloutMs < 15000) {
-                res.error = 'Not asked: Salesforce\'s callout time limit for one transaction was reached. For many records, use the "Run CRMagents agent" action instead (it works in the background).';
+                res.error = 'Not asked: Salesforce\'s callout time limit for one transaction was reached. For many records, use the "Run Nimbus agent" action instead (it works in the background).';
                 out.add(res);
                 continue;
             }

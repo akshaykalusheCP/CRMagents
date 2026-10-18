@@ -64,7 +64,7 @@ test('Slack clicks: only people in the workspace, the right Slack team, and the 
     slackEmail = 'stranger@elsewhere.example';
     await click(r1, true);
     assert.equal((await status(r1)).status, 'waiting', "someone who isn't in the workspace can't approve");
-    assert.match(told.at(-1)!, /isn't in this CRMagents workspace/);
+    assert.match(told.at(-1)!, /isn't in this Nimbus workspace/);
 
     slackEmail = 'starter@acme.example';
     await click(r1, true);

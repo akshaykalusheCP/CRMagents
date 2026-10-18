@@ -209,8 +209,8 @@ export function App() {
       <div className="app app-top">
         <header className="tnav">
           <div className="tnav-inner">
-            <button className="tnav-brand" onClick={() => setTab('home')} aria-label="CRMagents home">
-              <span className="brand-mark"><LogoMark size={14} /></span>CRMagents
+            <button className="tnav-brand" onClick={() => setTab('home')} aria-label="Nimbus home">
+              <span className="brand-mark"><LogoMark size={14} /></span>Nimbus
             </button>
             <nav className="tnav-links" aria-label="Main">
               {TOP_NAV.map((it) => 'key' in it ? (

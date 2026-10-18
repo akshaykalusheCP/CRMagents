@@ -300,7 +300,7 @@ export const EXECUTORS: Record<string, Executor> = {
 
   async 'sf.attachFile'(node, scope, env) {
     const recordId = cfg(node, 'recordId', scope) || String(scope.trigger?.recordId ?? '');
-    const title = cfg(node, 'title', scope) || 'CRMagents note';
+    const title = cfg(node, 'title', scope) || 'Nimbus note';
     let content = render(node.config.content, scope);
     if (env.unmask) content = env.unmask(content);
     if (!recordId || !content.trim()) throw new Error('A record and some content are needed');

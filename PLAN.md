@@ -1,4 +1,4 @@
-# CRMagents: visual AI agent builder for Salesforce
+# Nimbus: visual AI agent builder for Salesforce
 
 Users connect their Salesforce org (OAuth), build agents in a visual builder,
 install a thin managed package, and run the agents from Salesforce (record

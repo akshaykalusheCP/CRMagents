@@ -53,7 +53,7 @@ test('plans: a Basic trial is held to its limits, ends on time, and an upgrade l
   assert.match(w[0].paused_reason, /trial ended/);
   assert.equal(alerted, 1);
   await assert.rejects(requireRoom(a, 'liveAgents'), /trial has ended/);
-  // Set to Pro by CRMagents: everything opens up again.
+  // Set to Pro by Nimbus: everything opens up again.
   await pool.query("update accounts set plan='pro', trial_ends_at=null where id=$1", [a]);
   assert.equal(await hasFeature(a, 'xray'), true);
   await requireRoom(a, 'orgs');

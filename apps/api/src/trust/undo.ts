@@ -1,7 +1,7 @@
 import { pool } from '../db.js';
 import type { Change, Journal, SalesforceClient } from '../salesforce/client.js';
 
-// Undo: put back what an agent changed. Every create, update and delete it made through CRMagents was logged with
+// Undo: put back what an agent changed. Every create, update and delete it made through Nimbus was logged with
 // the values it replaced (salesforce/client.ts). Undoing goes newest first:
 // - an update gets its old values back, but only for fields that still hold the agent's value: if a person
 //   changed a field since, their change wins and the field is listed as skipped;

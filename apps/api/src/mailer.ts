@@ -2,14 +2,14 @@ import { pool } from './db.js';
 import { SalesforceClient } from './salesforce/client.js';
 import { getSetting, PLATFORM } from './settings.js';
 
-// Emails from CRMagents itself (invitations, password resets, alerts). Two ways out, tried in order:
+// Emails from Nimbus itself (invitations, password resets, alerts). Two ways out, tried in order:
 // 1. Resend, when the platform has it configured (staff console → Settings, or RESEND_API_KEY + MAIL_FROM);
 // 2. the company's own connected Salesforce org (its "Send Email" action), so a workspace gets mail with no setup.
 // When neither works the caller still has the link to show (an admin can copy an invite or reset link).
 
 export interface Mail { to: string; subject: string; text: string }
 
-const DEFAULT_FROM = 'CRMagents <noreply@crmagents.app>';
+const DEFAULT_FROM = 'Nimbus <noreply@crmagents.app>';
 
 export async function mailConfig() {
   const key = await getSetting(PLATFORM, 'resendKey');

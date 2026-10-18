@@ -20,7 +20,7 @@ import { startQueued, startRunAsync, wakeRuns } from './service.js';
 
 // Server-side triggers without any Salesforce package: live workflows ask their org for records created (or
 // changed) since the last check and start a run per record (every minute while busy, less often when quiet). The cursor is stored, so restarts lose
-// nothing; records changed by CRMagents itself are skipped, so an agent updating its own record can't loop.
+// nothing; records changed by Nimbus itself are skipped, so an agent updating its own record can't loop.
 
 const INTERVAL_MS = Number(process.env.WATCH_INTERVAL_SEC ?? 60) * 1000;
 const BATCH = 25; // records per workflow per tick; the rest are picked up next tick

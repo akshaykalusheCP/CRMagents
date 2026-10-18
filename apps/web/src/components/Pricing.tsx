@@ -27,7 +27,7 @@ const PLANS: Plan[] = [
     features: [
       '2 orgs, up to 10 people, 15 live agents',
       'Unlimited assistants, with memory and saved chats',
-      'CRMagents panel inside Salesforce, Flow actions',
+      'Nimbus panel inside Salesforce, Flow actions',
       'Knowledge base, synced from Salesforce Knowledge',
       'Email replies on cases',
       'Insights and dashboards from a sentence',

@@ -43,7 +43,7 @@ export function SelfServiceSettings({ value, onSave }: { value: SelfService; onS
         <button className="sm" onClick={() => set({ records: [...v.records, { object: '', label: '', match: 'account', fields: [] }] })}><Plus size={13} /> Add</button>
 
         <div className="ss-h">What they can do</div>
-        <p className="muted small" style={{ margin: '0 0 6px' }}>Your own Flows or Apex actions (key like <code>flow:Start_Return</code>). CRMagents adds <code>contactId</code>, <code>accountId</code> and <code>customerEmail</code> of the verified visitor; your Flow should check them.</p>
+        <p className="muted small" style={{ margin: '0 0 6px' }}>Your own Flows or Apex actions (key like <code>flow:Start_Return</code>). Nimbus adds <code>contactId</code>, <code>accountId</code> and <code>customerEmail</code> of the verified visitor; your Flow should check them.</p>
         {v.actions.map((a, i) => (
           <div key={i} className="ss-row">
             <input value={a.label} onChange={(e) => setAct(i, { label: e.target.value })} placeholder="Start a return" aria-label="Label" style={{ width: 160 }} />

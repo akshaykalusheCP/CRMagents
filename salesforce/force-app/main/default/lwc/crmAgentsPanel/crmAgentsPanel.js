@@ -46,7 +46,7 @@ export default class CrmAgentsPanel extends LightningElement {
         // Utility bar panels stay open in the background: refresh when the panel becomes visible again.
         this.onVisible = () => { if (document.visibilityState === 'visible') this.load(); };
         document.addEventListener('visibilitychange', this.onVisible);
-        // Live updates: CRMagents publishes an event whenever a run changes state.
+        // Live updates: Nimbus publishes an event whenever a run changes state.
         subscribe(CHANNEL, -1, (msg) => this.onEvent(msg && msg.data && msg.data.payload))
             .then((s) => { this.subscription = s; })
             .catch(() => { /* polling covers it */ });
@@ -93,7 +93,7 @@ export default class CrmAgentsPanel extends LightningElement {
     get emptyText() {
         return this.data && this.data.totalAgents
             ? `None of your agents run on ${this.objectApiName || 'this page'}. Agents for other records show up when you open them.`
-            : 'No agents yet. Build one in CRMagents and it shows up here.';
+            : 'No agents yet. Build one in Nimbus and it shows up here.';
     }
     get assistants() { return ((this.data && this.data.assistants) || []).map((a) => ({ label: a.name, value: a.id })); }
     get hasAssistants() { return this.assistants.length > 0; }
