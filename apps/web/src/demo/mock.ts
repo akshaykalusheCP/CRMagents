@@ -37,6 +37,9 @@ function route(method: string, url: URL, body: any): Response {
   if (p === '/api/platform/users') return json(DEMO_ADMIN.users);
   if (p === '/api/platform/payments') return json(DEMO_ADMIN.payments);
   if (p === '/api/platform/requests') return json(DEMO_ADMIN.requests);
+  if (p === '/t/sample-data') return json(method === 'GET'
+    ? { loaded: true, counts: { Account: 8, Contact: 12, Opportunity: 12, Case: 16, Lead: 10, Task: 5 }, loadedAt: new Date().toISOString(), allowed: true, orgKind: 'Developer Edition' }
+    : method === 'POST' ? { counts: { Account: 8, Contact: 12, Opportunity: 12, Case: 16, Lead: 10, Task: 5 }, failures: [] } : { removed: 63, failures: [] });
   if (p === '/api/team') return json(DEMO_TEAM);
   if (p === '/api/team/invites') return json({ id: 'i9', link: `${location.origin}/?invite=demo-link`, emailed: false });
   if (/^\/api\/team\/users\/[^/]+\/reset-link$/.test(p)) return json({ link: `${location.origin}/?reset=demo-link`, emailed: true });

@@ -189,6 +189,7 @@ export interface AdminRevenue {
   subscriptions: { id: string; name: string; plan: PlanId; status: string; interval: string | null; amountCents: number | null; mrr: number; renewsAt: string | null; purchasedBy: string | null; cancelAtPeriodEnd: boolean | null }[];
 }
 export interface StaffLogItem { at: string; by: string | null; accountId: string | null; accountName: string | null; what: string; detail: string | null }
+export interface SampleStatus { loaded: boolean; counts: Record<string, number>; loadedAt: string | null; allowed: boolean | null; orgKind: string | null }
 export interface AdminUser { id: string; email: string; role: string; createdAt: string; lastLoginAt: string | null; accountId: string; accountName: string; plan: PlanId }
 export interface AdminPayment { id: number; type: string; plan: string | null; amountCents: number | null; currency: string | null; invoiceUrl: string | null; detail: string | null; createdAt: string; accountId: string | null; accountName: string | null }
 export interface AdminRequest { id: number; name: string; email: string; company: string; size: string | null; message: string | null; topic: string; source: string; status: string; notes: string | null; handledBy: string | null; assignedTo: string | null; createdAt: string; updatedAt: string | null; accountId: string | null; accountName: string | null }
@@ -386,6 +387,9 @@ export const api = {
   drillTile: (t: string, tile: TileSpec, label: string, range: DashRange) => req<{ columns: string[]; rows: Record<string, unknown>[] }>('POST', `/api/tenants/${t}/dashboards/drill`, { tile, label, range }),
   setLive: (t: string, id: string, on: boolean) => req<{ live: boolean; object?: string; event?: string }>('POST', `/api/tenants/${t}/workflows/${id}/live`, { on }),
   setPackage: (t: string, on: boolean) => req('POST', `/api/tenants/${t}/package`, { on }),
+  sampleStatus: (t: string) => req<SampleStatus>('GET', `/api/tenants/${t}/sample-data`),
+  loadSample: (t: string) => req<{ counts: Record<string, number>; failures: string[] }>('POST', `/api/tenants/${t}/sample-data`),
+  removeSample: (t: string) => req<{ removed: number; failures: string[] }>('DELETE', `/api/tenants/${t}/sample-data`),
   grantAccess: (t: string) => req<{ granted: number; total: number }>('POST', `/api/tenants/${t}/grant-access`),
   workflows: (t: string) => req<WorkflowRow[]>('GET', `/api/tenants/${t}/workflows`),
   createWorkflow: (t: string, b: { name: string; graph: Workflow }) => req<{ id: string }>('POST', `/api/tenants/${t}/workflows`, b),

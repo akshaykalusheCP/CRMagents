@@ -1,6 +1,6 @@
-import { ExternalLink, Loader2, MoreHorizontal, Plug } from 'lucide-react';
+import { Database, ExternalLink, Loader2, MoreHorizontal, Plug } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { api, type Settings, type Tenant } from '../api';
+import { api, type SampleStatus, type Settings, type Tenant } from '../api';
 import { RecordPagePicker, UtilityBarPicker } from '../components/PagePlacement';
 import { Drawer, Menu, Panel, Status, Table, toast, type Column, Meter } from '../components/ui';
 
@@ -97,6 +97,8 @@ export function ConnectionsPage({ tenants, onChange, goSettings, focusConnect }:
 
       {tenants.length > 0 && <Panel flush title="Connected orgs" action={<button className="sm" onClick={toConnect}><Plug size={14} /> Connect another org</button>}><Table columns={cols} rows={tenants} rowKey={(t) => t.id} /></Panel>}
 
+      {tenants.some((t) => t.setup_status === 'ready') && <SampleData tenants={tenants.filter((t) => t.setup_status === 'ready')} />}
+
       <Panel className="connect-panel" id="connect-org" title={tenants.length ? 'Connect another org' : 'Connect your Salesforce org'}>
         <div className="form">
           <div className="frow">
@@ -168,5 +170,56 @@ function ApiUse({ t }: { t: Tenant }) {
       <Meter value={t.api_used} max={t.api_max} label="API use" />
       <span className={'cell-sub' + (pct >= 80 ? ' api-warn' : '')}>{note}</span>
     </div>
+  );
+}
+
+// Sample data for test orgs: realistic records so agents have something to work on in a trial or a demo.
+const OBJ = [['Account', 'accounts'], ['Contact', 'contacts'], ['Opportunity', 'deals'], ['Case', 'cases'], ['Lead', 'leads'], ['Task', 'follow-ups']] as const;
+function SampleData({ tenants }: { tenants: Tenant[] }) {
+  const [st, setSt] = useState<Record<string, SampleStatus | 'error'>>({});
+  const [busy, setBusy] = useState<string | null>(null);
+  const [ask, setAsk] = useState<{ id: string; kind: 'load' | 'remove' } | null>(null);
+  const load = (id: string) => api.sampleStatus(id).then((s) => setSt((m) => ({ ...m, [id]: s }))).catch(() => setSt((m) => ({ ...m, [id]: 'error' })));
+  useEffect(() => { tenants.forEach((t) => void load(t.id)); }, [tenants.map((t) => t.id).join()]); // eslint-disable-line react-hooks/exhaustive-deps
+  const run = async (t: Tenant, kind: 'load' | 'remove') => {
+    setAsk(null); setBusy(t.id);
+    try {
+      if (kind === 'load') {
+        const r = await api.loadSample(t.id);
+        const n = Object.values(r.counts).reduce((a, b) => a + b, 0);
+        toast(r.failures.length ? `Added ${n} records; ${r.failures.length} couldn't be added: ${r.failures[0]}` : `Added ${n} sample records to ${t.sf_username}`, r.failures.length ? 'bad' : 'ok');
+      } else {
+        const r = await api.removeSample(t.id);
+        toast(r.failures.length ? `Removed ${r.removed}; ${r.failures.length} couldn't be removed: ${r.failures[0]}` : `Removed ${r.removed} sample records`, r.failures.length ? 'bad' : 'ok');
+      }
+    } catch (e) { toast((e as Error).message, 'bad'); }
+    setBusy(null); void load(t.id);
+  };
+  return (
+    <Panel title="Sample data" action={<span className="muted small row" style={{ gap: 6 }}><Database size={14} /> Test orgs only</span>}>
+      <p className="muted small" style={{ margin: '0 0 12px' }}>Fill a test org with realistic accounts, contacts, deals, cases, leads and follow-ups, so agents have real work to show: urgent cases to triage, leads to score, overdue deals to chase. Only for sandboxes, Developer Edition and trial orgs. Everything it adds can be removed in one click, and only what it added.</p>
+      <ul className="sample-list">
+        {tenants.map((t) => {
+          const s = st[t.id];
+          const counts = s && s !== 'error' && s.loaded ? OBJ.filter(([o]) => s.counts[o]).map(([o, w]) => `${s.counts[o]} ${w}`).join(' · ') : '';
+          return (
+            <li key={t.id}>
+              <div className="cell-main"><b>{t.sf_username}</b><span className="cell-sub">{!s ? 'Checking…' : s === 'error' ? "Couldn't check this org" : s.loaded ? `Loaded: ${counts}` : s.allowed ? `${s.orgKind}: no sample data yet` : `${s.orgKind}: sample data is only for test orgs`}</span></div>
+              <div className="row" style={{ gap: 6 }}>
+                {busy === t.id ? <span className="muted small row" style={{ gap: 6 }}><Loader2 size={14} className="spin" /> Working…</span>
+                  : ask?.id === t.id ? <>
+                    <span className="muted small">{ask.kind === 'load' ? `Add about 60 sample records to ${t.sf_username}?` : 'Delete the sample records from this org?'}</span>
+                    <button className="sm" onClick={() => setAsk(null)}>Cancel</button>
+                    <button className={'sm ' + (ask.kind === 'remove' ? 'danger-solid' : 'primary')} onClick={() => void run(t, ask.kind)}>{ask.kind === 'load' ? 'Add' : 'Remove'}</button>
+                  </>
+                  : s && s !== 'error' && (s.loaded
+                    ? <button className="sm" onClick={() => setAsk({ id: t.id, kind: 'remove' })}>Remove sample data</button>
+                    : s.allowed && <button className="sm primary" onClick={() => setAsk({ id: t.id, kind: 'load' })}>Load sample data</button>)}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </Panel>
   );
 }

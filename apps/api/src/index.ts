@@ -6,6 +6,7 @@ import { loadUser, registerAuth } from './auth.js';
 import { provisionOrg, registerSfBridge } from './sfbridge.js';
 import { dailyBudgetUsd } from './spend.js';
 import { grantAccessToAll, setupOrg } from './salesforce/setup.js';
+import { loadSample, removeSample, sampleStatus } from './salesforce/sample.js';
 import { TOOLS } from './agent/tools.js';
 import { validateWorkflow, type Workflow } from '@crmagents/shared';
 import { runAgent } from './agent/runner.js';
@@ -457,6 +458,14 @@ app.post('/api/tenants/:tenantId/salesforce/pages/record', async (req) => {
 });
 
 app.post('/api/tenants/:tenantId/grant-access', async (req) => grantAccessToAll((req.params as { tenantId: string }).tenantId));
+
+// Sample data for test orgs (sandbox, Developer Edition, trial): load it, see what's there, remove exactly that.
+app.get('/api/tenants/:tenantId/sample-data', async (req) => {
+  const { tenantId } = req.params as { tenantId: string };
+  return sampleStatus(tenantId, await SalesforceClient.forTenant(tenantId));
+});
+app.post('/api/tenants/:tenantId/sample-data', async (req) => loadSample((req.params as { tenantId: string }).tenantId));
+app.delete('/api/tenants/:tenantId/sample-data', async (req) => removeSample((req.params as { tenantId: string }).tenantId));
 
 // Real-time trigger (Change Data Capture) instead of 1-minute checks.
 app.post('/api/tenants/:tenantId/workflows/:id/realtime', async (req) => {
