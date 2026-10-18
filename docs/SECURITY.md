@@ -27,7 +27,7 @@ shows the same controls with each workspace's live settings, and prints as a rep
 | Website chat | origin allow-list, per-visitor and per-assistant rate limits, email one-time codes before showing personal data |
 | Requests | JSON-only API (form posts accepted only on the Twilio webhook); security headers (nosniff, frame deny, referrer policy, HSTS on HTTPS); no-store on API responses |
 | Outbound calls | HTTP steps go through a guarded fetch that blocks private and internal addresses |
-| Audit | activity log of every change, sign-in and failed sign-in, with address; export and workspace deletion (revokes Salesforce access) |
+| Audit | activity log of every change, sign-in and failed sign-in, with address; export of everything (incl. memory and chats) and workspace deletion (cancels a paid subscription, revokes Salesforce access) |
 
 ## Accepted risks
 - `mammoth` (reads .docx guides) depends on `argparse` → `sprintf-js`, which has a moderate denial-of-service

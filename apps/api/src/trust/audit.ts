@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { Workflow } from '@crmagents/shared';
 import { pool } from '../db.js';
+import { cancelSubscriptionNow } from '../billing/stripe.js';
 import { getSetting } from '../settings.js';
 import { decrypt } from '../crypto.js';
 
@@ -124,11 +125,29 @@ export async function exportWorkspace(accountId: string) {
     guides: await q('select id, title, file_name, kind, created_at from knowledge_docs where account_id=$1'),
     aiCalls: await q('select id, created_at, provider, model, purpose, request, response, masked_values, cost_usd from ai_calls where account_id=$1 order by created_at desc limit 5000'),
     activity: await q('select created_at, user_email, action, target, ip from audit_log where account_id=$1 order by created_at desc limit 20000'),
+    rules: await q('select r.* from policies r join tenants t on t.id = r.tenant_id where t.account_id=$1'),
+    memories: await q('select id, scope, owner, text, source, created_by, uses, last_used_at, created_at from memories where account_id=$1'),
+    recordNotes: await q('select n.tenant_id, n.record_id, n.note, n.author, n.created_at from record_notes n join tenants t on t.id = n.tenant_id where t.account_id=$1'),
+    chats: await q(`select c.id, c.tenant_id, c.agent_id, c.channel, c.record_id, c.title, c.created_at,
+                      coalesce((select json_agg(json_build_object('role', m.role, 'text', m.text, 'at', m.created_at) order by m.created_at) from conversation_messages m where m.conversation_id = c.id), '[]') as messages
+                    from conversations c where c.account_id=$1 order by c.created_at desc limit 5000`),
+    invites: await q('select email, role, invited_by, expires_at, accepted_at, created_at from invites where account_id=$1'),
+    plan: {
+      history: await q('select from_plan, to_plan, changed_by, reason, created_at from plan_history where account_id=$1 order by created_at'),
+      subscription: (await q('select plan, interval, status, amount_cents, currency, current_period_end, cancel_at_period_end, purchased_by, started_at from subscriptions where account_id=$1'))[0] ?? null,
+      payments: await q("select type, plan, amount_cents, currency, invoice_url, created_at from billing_events where account_id=$1 and type not like 'ignored:%' order by created_at"),
+    },
   };
 }
 
-/** Delete the workspace: Salesforce access is revoked first, then everything here is removed. */
+/** Delete the workspace: a paid subscription is cancelled (so charging stops), Salesforce access is revoked, then
+ *  everything here is removed. If the subscription can't be cancelled, nothing is deleted. */
 export async function deleteWorkspace(accountId: string) {
+  const { rows: subs } = await pool.query("select stripe_subscription_id from subscriptions where account_id=$1 and stripe_subscription_id is not null and status not in ('canceled', 'incomplete_expired')", [accountId]);
+  for (const s of subs) {
+    if (!process.env.STRIPE_SECRET_KEY) throw Object.assign(new Error('This workspace has a paid subscription and online payment is not reachable right now, so it was not deleted. Contact us to close it.'), { statusCode: 409 });
+    await cancelSubscriptionNow(s.stripe_subscription_id);
+  }
   const { rows } = await pool.query('select sf_instance_url, refresh_token_enc from tenants where account_id=$1', [accountId]);
   for (const t of rows) {
     try {

@@ -1,6 +1,7 @@
 import { ArrowUpRight, ChevronRight, ShieldCheck } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { LogoMark } from '../components/Logo';
+import { PublicFooter } from './Legal';
 import { Pricing } from '../components/Pricing';
 import { api } from '../api';
 import { Ribbon } from '../components/Ribbon';
@@ -178,7 +179,7 @@ export function AuthPage({ onDone }: { onDone: () => void }) {
         </div>
       </section>
       <Pricing onStart={(p) => { setPlanPick(p); go('signup'); window.scrollTo({ top: 0, behavior: 'smooth' }); }} />
-      <footer className="land-foot"><div className="land-inner">CRMagents · AI agents and analytics for Salesforce · <a href="/contact">Contact</a></div></footer>
+      <PublicFooter />
     </div>
   );
 }

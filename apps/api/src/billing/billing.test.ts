@@ -57,5 +57,33 @@ test('billing: checkout, then webhooks set the plan, record who bought it, and a
   assert.deepEqual(ev.map((e) => e.type), ['subscription_started', 'payment_failed', 'subscription_canceled']);
   await pool.query("delete from billing_events where stripe_event_id in ('evt_a','evt_b','evt_c')");
   await pool.query('delete from accounts where id=$1', [a]);
-  await pool.end();
+});
+
+test('deleting a workspace cancels its paid subscription first, and keeps everything if Stripe refuses', async () => {
+  const { deleteWorkspace } = await import('../trust/audit.js');
+  const key = process.env.STRIPE_SECRET_KEY;
+  process.env.STRIPE_SECRET_KEY = 'sk_test_x';
+  const make = async (sub: string) => {
+    const { rows } = await pool.query("insert into accounts (name, plan) values ('delete-test','pro') returning id");
+    await pool.query("insert into subscriptions (account_id, stripe_customer_id, stripe_subscription_id, plan, status) values ($1,'cus_d',$2,'pro','active')", [rows[0].id, sub]);
+    return rows[0].id as string;
+  };
+  const exists = async (id: string) => (await pool.query('select 1 from accounts where id=$1', [id])).rowCount === 1;
+  try {
+    const calls: string[] = [];
+    setStripeFetch((async (url: string, init?: RequestInit) => { calls.push(`${init?.method} ${url}`); return new Response(JSON.stringify({ id: 'sub_d1', status: 'canceled' }), { status: 200 }); }) as typeof fetch);
+    const a = await make('sub_d1');
+    await deleteWorkspace(a);
+    assert.ok(calls.includes('DELETE https://api.stripe.com/v1/subscriptions/sub_d1'), calls.join(', '));
+    assert.equal(await exists(a), false);
+
+    setStripeFetch((async () => new Response(JSON.stringify({ error: { message: 'Stripe is down' } }), { status: 500 })) as typeof fetch);
+    const b = await make('sub_d2');
+    await assert.rejects(deleteWorkspace(b), /Stripe is down/);
+    assert.equal(await exists(b), true, 'nothing deleted while the customer could still be charged');
+    await pool.query('delete from accounts where id=$1', [b]);
+  } finally {
+    if (key === undefined) delete process.env.STRIPE_SECRET_KEY; else process.env.STRIPE_SECRET_KEY = key;
+    await pool.end();
+  }
 });

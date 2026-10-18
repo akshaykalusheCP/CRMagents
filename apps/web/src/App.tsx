@@ -12,6 +12,7 @@ import { TrustPage } from './pages/Trust';
 import { MemoryPage } from './pages/Memory';
 import { ContactPage } from './pages/Contact';
 import { AdminConsole } from './pages/Admin';
+import { LEGAL_PATHS, LegalPage } from './pages/Legal';
 import { Ribbon, type RibbonPalette } from './components/Ribbon';
 import { SettingsHub, type SettingsSection } from './pages/SettingsHub';
 import { AlertsBell } from './components/AlertsBell';
@@ -176,6 +177,7 @@ export function App() {
 
   // The Contact page is public, signed in or not.
   if (location.pathname === '/contact') return <ContactPage />;
+  if (LEGAL_PATHS[location.pathname]) return <LegalPage doc={LEGAL_PATHS[location.pathname]} />;
   if (me === undefined) return <div className="pad muted">Loading…</div>;
   // An invitation or reset link opens the sign-in card even when someone is already signed in on this browser.
   const linkToken = /[?&](invite|reset)=/.test(location.search);

@@ -46,7 +46,7 @@ export function formEncode(o: Record<string, unknown>, prefix = ''): string[] {
 let fetchImpl: typeof fetch = fetch;
 export const setStripeFetch = (f: typeof fetch) => { fetchImpl = f; };
 
-async function stripe<T = any>(method: 'GET' | 'POST', path: string, params: Record<string, unknown> = {}): Promise<T> {
+async function stripe<T = any>(method: 'GET' | 'POST' | 'DELETE', path: string, params: Record<string, unknown> = {}): Promise<T> {
   const body = formEncode(params).join('&');
   const res = await fetchImpl(`https://api.stripe.com/v1${path}${method === 'GET' && body ? `?${body}` : ''}`, {
     method,
@@ -94,6 +94,12 @@ export async function createPortal(accountId: string) {
   if (!rows[0]?.stripe_customer_id) throw Object.assign(new Error('This workspace has no subscription yet.'), { statusCode: 400 });
   const s = await stripe<{ url: string }>('POST', '/billing_portal/sessions', { customer: rows[0].stripe_customer_id, return_url: `${web()}/?tab=settings` });
   return { url: s.url };
+}
+
+/** End a subscription now (workspace deleted): no further charges. Already-cancelled ones count as done. */
+export async function cancelSubscriptionNow(subscriptionId: string) {
+  try { await stripe('DELETE', `/subscriptions/${encodeURIComponent(subscriptionId)}`); }
+  catch (e) { if (!/No such subscription|canceled/i.test((e as Error).message)) throw e; }
 }
 
 export async function billingStatus(accountId: string) {

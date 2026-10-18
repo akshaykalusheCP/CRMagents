@@ -1,6 +1,7 @@
 import { Briefcase, ChevronRight, CreditCard, Handshake, LifeBuoy, Loader2, MessageSquare } from 'lucide-react';
 import { useState } from 'react';
 import { LogoMark } from '../components/Logo';
+import { PublicFooter } from './Legal';
 import { Ribbon } from '../components/Ribbon';
 
 // Contact page (public, /contact): sales, support, partnerships, billing. Messages are kept for CRMagents staff in
@@ -72,7 +73,7 @@ export function ContactPage() {
           </form>
         </div>
       </section>
-      <footer className="land-foot"><div className="land-inner">CRMagents · AI agents and analytics for Salesforce · <a href="/contact">Contact</a></div></footer>
+      <PublicFooter />
     </div>
   );
 }
