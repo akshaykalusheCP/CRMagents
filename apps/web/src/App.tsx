@@ -280,7 +280,7 @@ export function App() {
         <main ref={mainRef} onScroll={onMainScroll} className={'stripe-main' + (tab === 'agents' ? ' full' : '')}>
           {/* Silk ribbon behind the top of every page, like stripe.com's hero. */}
           <Ribbon className="app-ribbon" strands={260} angle={0.6} width={0.3} palette={RIBBON[tab] ?? 'sunset'} />
-          {pane('home', <HomePage me={me} tenant={tenant} go={setTab} newAgent={newAgent} />)}
+          {pane('home', <HomePage me={me} tenant={tenant} go={setTab} newAgent={newAgent} openSettings={openSettings} />)}
           {pane('impact', has('impact') ? <ImpactPage tenant={tenant} /> : <LockedPage feature="impact" title="Impact" />)}
           {pane('discover', <DiscoverPage tenant={tenant} openAgents={() => setTab('agents')} />)}
           {pane('trust', <TrustPage me={me} />)}
@@ -376,7 +376,7 @@ export function App() {
         </header>
         <TrialBanner />
         <main ref={mainRef} onScroll={onMainScroll} className={tab === 'agents' ? 'full' : ''}>
-          {pane('home', <HomePage me={me} tenant={tenant} go={setTab} newAgent={newAgent} />)}
+          {pane('home', <HomePage me={me} tenant={tenant} go={setTab} newAgent={newAgent} openSettings={openSettings} />)}
           {pane('impact', has('impact') ? <ImpactPage tenant={tenant} /> : <LockedPage feature="impact" title="Impact" />)}
           {pane('discover', <DiscoverPage tenant={tenant} openAgents={() => setTab('agents')} />)}
           {pane('trust', <TrustPage me={me} />)}

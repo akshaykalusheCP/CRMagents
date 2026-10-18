@@ -37,6 +37,10 @@ function route(method: string, url: URL, body: any): Response {
   if (p === '/api/platform/users') return json(DEMO_ADMIN.users);
   if (p === '/api/platform/payments') return json(DEMO_ADMIN.payments);
   if (p === '/api/platform/requests') return json(DEMO_ADMIN.requests);
+  // ?demo&fresh: a brand-new workspace (no agents, no runs, no sample data yet) to show the guided first run.
+  const fresh = new URLSearchParams(location.search).has('fresh');
+  if (fresh && ((p === '/t/workflows' || p === '/t/runs' || p === '/t/suggestions') && method === 'GET')) return json([]);
+  if (fresh && p === '/t/sample-data' && method === 'GET') return json({ loaded: false, counts: {}, loadedAt: null, allowed: true, orgKind: 'Developer Edition' });
   if (p === '/t/sample-data') return json(method === 'GET'
     ? { loaded: true, counts: { Account: 8, Contact: 12, Opportunity: 12, Case: 16, Lead: 10, Task: 5 }, loadedAt: new Date().toISOString(), allowed: true, orgKind: 'Developer Edition' }
     : method === 'POST' ? { counts: { Account: 8, Contact: 12, Opportunity: 12, Case: 16, Lead: 10, Task: 5 }, failures: [] } : { removed: 63, failures: [] });

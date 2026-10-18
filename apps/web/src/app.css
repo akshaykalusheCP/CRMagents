@@ -146,13 +146,6 @@
 :root .att-row:last-child { border-bottom: none; }
 :root .att-row .grow { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 :root .att-row .grow span { color: var(--muted); font-size: 13px; }
-:root .setup-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
-:root .setup-step { display: flex; flex-direction: column; gap: 6px; padding: 16px 18px; border-right: 1px solid var(--border); min-width: 0; }
-:root .setup-step:last-child { border-right: none; }
-:root .setup-step .n { font-size: 12px; font-weight: 600; color: var(--muted); }
-:root .setup-step.done .n { color: var(--ok); }
-:root .setup-step b { font-weight: 500; font-size: 14px; }
-:root .setup-step.done b { color: var(--muted); }
 
 @media (max-width: 1000px) { :root .home2-top, :root .home2-cols { grid-template-columns: 1fr; } }
 @media (max-width: 760px) {
@@ -166,7 +159,6 @@
   :root .pg { padding: 20px 16px 48px; }
   :root .ph-title { font-size: 22px; }
   :root .hide-sm { display: none; }
-  :root .setup-step { border-right: none; border-bottom: 1px solid var(--border); }
 }
 
 /* Page-level underline tabs (inside the page header) */
@@ -1240,3 +1232,29 @@ select.sm { height: 30px; padding: 0 28px 0 8px; font-size: 13px; width: auto; }
 :root:root .sample-list li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); flex-wrap: wrap; }
 :root:root .sample-list .cell-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 :root:root .sample-list .cell-sub { font-size: 12.5px; color: var(--muted); }
+
+/* Guided first run (Home) */
+:root:root .fr { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); padding: 18px 20px; margin-bottom: 20px; }
+:root:root .fr > header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+:root:root .fr h2 { margin: 0 0 2px; font-size: 16px; font-weight: 600; }
+:root:root .fr-bar { height: 4px; border-radius: 99px; background: var(--surface-2); margin: 12px 0 6px; overflow: hidden; }
+:root:root .fr-bar i { display: block; height: 100%; background: var(--accent); border-radius: 99px; transition: width .4s ease; }
+:root:root .fr ol { list-style: none; margin: 0; padding: 0; }
+:root:root .fr li { display: flex; gap: 12px; padding: 10px 0; border-top: 1px solid var(--border); }
+:root:root .fr li:first-child { border-top: 0; }
+:root:root .fr-n { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 600; color: var(--muted); border: 1px solid var(--border-strong); }
+:root:root .fr li.done .fr-n { background: var(--ok); border-color: var(--ok); color: #fff; }
+:root:root .fr li.now .fr-n { background: var(--accent); border-color: var(--accent); color: #fff; }
+:root:root .fr-body { display: flex; flex-direction: column; gap: 6px; min-width: 0; flex: 1; padding-top: 2px; }
+:root:root .fr-body b { font-weight: 500; font-size: 14px; }
+:root:root .fr li.done .fr-body b { color: var(--muted); text-decoration: line-through; text-decoration-color: var(--border-strong); }
+:root:root .fr-body p { margin: 0; color: var(--text-2); font-size: 13.5px; line-height: 1.5; max-width: 720px; }
+:root:root .fr-body > button, :root:root .fr-actions { align-self: flex-start; margin-top: 4px; }
+:root:root .fr-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+:root:root .fr-starters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 4px; }
+:root:root .fr-starter { all: unset; box-sizing: border-box; cursor: pointer; display: flex; flex-direction: column; gap: 4px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+:root:root .fr-starter:hover { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+:root:root .fr-starter b { font-size: 14px; }
+:root:root .fr-starter span:not(.uc-area) { font-size: 12.5px; color: var(--text-2); line-height: 1.45; }
+:root:root .fr-starter em { font-style: normal; font-size: 11.5px; color: var(--muted); margin-top: auto; }
+@media (max-width: 900px) { :root:root .fr-starters { grid-template-columns: minmax(0, 1fr); } }

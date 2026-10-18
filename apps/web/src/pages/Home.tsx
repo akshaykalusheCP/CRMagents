@@ -1,6 +1,7 @@
 import { ChevronRight, Lightbulb, Plus, Radar, X } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { api, type AgentHealth, type Me, type Run, type Settings, type Suggestion, type Tenant, type UsageSummary, type WorkflowRow } from '../api';
+import { FirstRun } from '../components/FirstRun';
 import { Empty, Meter, PageHeader, Panel, Status, Table, Trend, toast, type Column } from '../components/ui';
 
 // Home is a "today" view: what ran, what it cost, and what needs a person. Building happens on the Agents page.
@@ -23,7 +24,7 @@ export function runLabel(status: string) {
   return ({ done: 'Succeeded', error: 'Failed', waiting: 'Waiting for approval', running: 'Running', stopped: 'Stopped: needs you', cancelled: 'Cancelled', sleeping: 'Waiting (timer)' } as Record<string, string>)[status] ?? status;
 }
 
-export function HomePage({ me, tenant, go, newAgent }: { me: Me; tenant?: Tenant; go: Go; newAgent: (request?: string) => void }) {
+export function HomePage({ me, tenant, go, newAgent, openSettings }: { me: Me; tenant?: Tenant; go: Go; newAgent: (request?: string) => void; openSettings: (section: 'orgs' | 'ai', connect?: boolean) => void }) {
   const [settings, setSettings] = useState<Settings>();
   const [flows, setFlows] = useState<WorkflowRow[]>([]);
   const [usage, setUsage] = useState<UsageSummary>();
@@ -74,15 +75,6 @@ export function HomePage({ me, tenant, go, newAgent }: { me: Me; tenant?: Tenant
   }, [runs]);
   const total = trend.reduce((a, p) => a + p.value, 0);
 
-  const setup = [
-    { label: 'Connect Salesforce', done: tenant?.setup_status === 'ready', go: () => go('settings') },
-    { label: 'Add your AI key', done: !!settings?.anthropicKey?.set, go: () => go('settings') },
-    { label: 'Build an agent', done: flows.length > 0, go: () => newAgent() },
-    { label: 'Try it on records', done: agentRuns.some((r) => r.status !== 'error'), go: () => go('agents') },
-    { label: 'Turn it on', done: live > 0, go: () => go('agents') },
-  ];
-  const setupLeft = setup.filter((s) => !s.done).length;
-
   const hour = new Date().getHours();
   const hello = hour < 12 ? 'Good morning' : hour < 18 ? 'Good afternoon' : 'Good evening';
   const first = me.email.split('@')[0].split(/[._]/)[0];
@@ -103,19 +95,8 @@ export function HomePage({ me, tenant, go, newAgent }: { me: Me; tenant?: Tenant
         actions={<>{tenant && <button className="cta" onClick={() => go('discover')}><Radar size={15} /> Find what to automate</button>}<button className="primary cta" onClick={() => newAgent()}><Plus size={15} /> New agent</button></>}
       />
 
-      {setupLeft > 0 && (
-        <Panel flush title="Finish setting up" action={<span className="muted small">{setup.length - setupLeft} of {setup.length} done</span>}>
-          <div className="setup-steps">
-            {setup.map((s, i) => (
-              <div key={s.label} className={'setup-step' + (s.done ? ' done' : '')}>
-                <span className="n">{s.done ? 'Done' : `Step ${i + 1}`}</span>
-                <b>{s.label}</b>
-                {!s.done && <button className="link-btn" onClick={s.go}>Start <ChevronRight size={14} /></button>}
-              </div>
-            ))}
-          </div>
-        </Panel>
-      )}
+      <FirstRun tenant={tenant} settings={settings} agents={flows.length} tried={agentRuns.some((r) => r.status !== 'error')} live={live}
+        isAdmin={me.role === 'owner' || me.role === 'admin'} openSettings={openSettings} openAgents={() => go('agents')} newAgent={newAgent} />
 
       {suggestions.length > 0 && (
         <section className="dsec" aria-label="Suggested agents">
