@@ -1,12 +1,12 @@
 {
   "packageDirectories": [
     {
-      "versionName": "ver 0.10",
-      "versionNumber": "0.10.0.NEXT",
+      "versionName": "ver 0.11",
+      "versionNumber": "0.11.0.NEXT",
       "path": "force-app",
       "default": true,
       "package": "CRMagents",
-      "versionDescription": "Memory: the panel continues your last chat on a record, shows what agents noted about it and what was saved to memory"
+      "versionDescription": "Renamed to Nimbus: the panel, Ask Nimbus button, Flow actions, permission sets and objects are labelled Nimbus"
     }
   ],
   "name": "crmagents",
@@ -28,6 +28,7 @@
     "CRMagents@0.8.0-1": "04tQy000000aBxpIAE",
     "CRMagents@0.8.0-2": "04tQy000000aBzRIAU",
     "CRMagents@0.9.0-1": "04tQy000000aEhBIAU",
-    "CRMagents@0.10.0-1": "04tQy000000aEinIAE"
+    "CRMagents@0.10.0-1": "04tQy000000aEinIAE",
+    "CRMagents@0.11.0-1": "04tQy000000aIMbIAM"
   }
 }
