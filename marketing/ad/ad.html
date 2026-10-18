@@ -79,6 +79,16 @@
   .sl-btn.no { color: #e01e5a; border-color: #e01e5a; }
   .sl-done { font-size: 15px; color: #1d1c1d; margin-top: 12px; display: flex; align-items: center; gap: 8px; }
 
+  #h6, #h8 { display: none; }
+  .tag2 { font-size: 34px; font-weight: 600; letter-spacing: -0.015em; background: linear-gradient(90deg, #b9a8ff, #f6a6e3 50%, #ffb38e); -webkit-background-clip: text; background-clip: text; color: transparent; margin-top: -8px; }
+  #hc { top: 30%; }
+  #cards { position: absolute; left: 50%; top: 50%; transform: translateX(-50%); display: flex; gap: 22px; perspective: 1200px; }
+  .ccard { position: relative; width: 400px; padding: 34px 32px 36px; border-radius: 20px; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.14); backdrop-filter: blur(10px); display: flex; flex-direction: column; gap: 8px; }
+  .ccard b { color: #fff; font-size: 38px; font-weight: 700; letter-spacing: -0.02em; }
+  .ccard span { color: #9fb0cc; font-size: 24px; }
+  .ccard i { position: absolute; left: 18px; top: 50%; height: 4px; border-radius: 2px; background: linear-gradient(90deg, #ff7a45, #f25cc4); width: 0; box-shadow: 0 0 18px rgba(255,122,69,.6); }
+  #cta2 { position: absolute; left: 50%; transform: translateX(-50%); color: #9fb0cc; font-size: 22px; font-weight: 500; white-space: nowrap; }
+
   /* End card */
   #pills { position: absolute; left: 50%; transform: translateX(-50%); display: flex; gap: 14px; }
   .pill { padding: 12px 22px; border-radius: 999px; border: 1px solid rgba(255,255,255,.18); background: rgba(255,255,255,.06); color: #dbe4f5; font-size: 24px; font-weight: 500; white-space: nowrap; }
@@ -105,7 +115,8 @@
       </svg></div>
       <div class="word" id="word"></div>
     </div>
-    <div class="tag" id="tag">AI agents for Salesforce</div>
+    <div class="tag" id="tag">AI agents for Salesforce.</div>
+    <div class="tag2" id="tag2">Without the per-user AI bill.</div>
   </div>
 
   <!-- Headlines -->
@@ -113,6 +124,12 @@
   <div class="head" id="h2">Leads go cold.</div>
   <div class="head" id="h3"><span class="big"><em id="h3num">$0.0M</em></span><span class="sub">of pipeline, stuck past its close date.</span></div>
   <div class="head" id="h4">Describe the job.<span class="sub">Nimbus builds the agent.</span></div>
+  <div class="head" id="hc">AI agents usually mean…</div>
+  <div id="cards"><div class="ccard"><b>Per-user licences</b><span>for every seat that touches AI</span><i></i></div><div class="ccard"><b>A new data platform</b><span>to set up before agents work</span><i></i></div><div class="ccard"><b>Consultants</b><span>to build and tune them</span><i></i></div><div class="ccard"><b>Months of setup</b><span>before anyone sees value</span><i></i></div></div>
+  <div class="head" id="hconn">Nimbus connects <em>in two minutes.</em><span class="sub">Log in with Salesforce. Nothing to code.</span></div>
+  <div class="head" id="hin">It lives <em>inside Salesforce.</em></div>
+  <div class="head" id="hmore">And it does <em>more than agents.</em></div>
+  <div class="head" id="hprice">Priced for the <em>whole team.</em><span class="sub">Not per seat. No per-user AI licences.</span></div>
   <div class="head" id="h5">Nothing changes<br><em>until you say so.</em></div>
   <div class="head" id="h6">Changed your mind?</div>
   <div class="head" id="h7">Your data <em>stays yours.</em></div>
@@ -124,16 +141,33 @@
       <div class="bar"><i style="background:#ff5f57"></i><i style="background:#febc2e"></i><i style="background:#28c840"></i>
         <div class="url"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="#5b6b82" stroke-width="2.4"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Nimbus · AI agents for Salesforce</div></div>
       <div class="viewport"><div id="content">
-        <img id="i-builder" src="shots/builder.png"><img id="i-built" src="shots/builder-built.png"><img id="i-agent" src="shots/agent.png">
-        <img id="i-approvals" src="shots/approvals.png"><img id="i-run" src="shots/run.png"><img id="i-trust" src="shots/trust.png">
-        <img id="i-insights" src="shots/insights.png"><img id="i-discover" src="shots/discover.png"><img id="i-impact" src="shots/impact.png">
+        <img id="i-builder" src="shots/builder.png">
+        <img id="i-built" src="shots/builder-built.png">
+        <img id="i-agent" src="shots/agent.png">
+        <img id="i-approvals" src="shots/approvals.png">
+        <img id="i-trust" src="shots/trust.png">
+        <img id="i-insights" src="shots/insights.png">
+        <img id="i-discover" src="shots/discover.png">
+        <img id="i-impact" src="shots/impact.png">
+        <img id="i-orgs" src="shots/orgs.png">
+        <img id="i-access" src="shots/team-access.png">
+        <img id="i-ai" src="shots/ai-settings.png">
+        <img id="i-xray" src="shots/xray.png">
+        <img id="i-proof" src="shots/proof.png">
+        <img id="i-memory" src="shots/memory.png">
+        <img id="i-dashboard" src="shots/dashboard.png">
+        <img id="i-sfcase" src="shots/sf-case.png">
+        <img id="i-sfask" src="shots/sf-ask-answer.png">
+        <img id="i-sfbell" src="shots/sf-bell.png">
+        <img id="i-sfappr" src="shots/sf-approvals.png">
+        <img id="i-sfafter" src="shots/sf-after.png">
         <div class="spot" id="spot"></div>
         <div class="ring" id="ring"></div>
         <div class="typed" id="typed"><span id="typedText"></span><span class="caret" id="caret"></span></div>
         <div class="okbtn" id="okbtn"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M5 12l5 5L20 7"/></svg>Approved</div>
         <div class="toast" id="toast1"><b>✓</b> Approved · 2 changes made in Salesforce</div>
         <div class="restored" id="restored"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#12a150" stroke-width="2.4"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>3 changes undone<small>Old values are back · later edits by people are kept</small></div>
-        <div class="toast" id="toast2"><b>↺</b> Restored in Salesforce</div>
+        <div class="toast" id="toast2"><b>✓</b> Installed in Salesforce · Ready</div>
         <div class="mask" id="mask"></div>
         <div class="ripple" id="ripple"></div>
         <svg id="cursor" viewBox="0 0 30 30"><path d="M5 3l18 11.5-8.2 1.7L10.6 25z" fill="#0a2540" stroke="#fff" stroke-width="1.8" stroke-linejoin="round"/></svg>
@@ -159,8 +193,9 @@
   <div class="ripple" id="ripple2" style="z-index:39"></div>
 
   <div id="cap"></div>
-  <div id="pills"><div class="pill">Approval before every change</div><div class="pill">One-click undo</div><div class="pill">No Agentforce licence needed</div></div>
+  <div id="pills"><div class="pill">Approval before every change</div><div class="pill">One-click undo</div><div class="pill">No per-user AI licences</div></div>
   <div id="cta">Start free</div>
+  <div id="cta2">14-day free trial · connect in minutes</div>
 
   <svg id="grain"><filter id="n"><feTurbulence type="fractalNoise" baseFrequency=".9" numOctaves="2" stitchTiles="stitch"/></filter><rect width="100%" height="100%" filter="url(#n)"/></svg>
   <div id="flare"></div>
@@ -212,7 +247,7 @@ function ribbon(t, strength) {
   }
   $('ribbon').style.opacity = strength;
 }
-const imgs = ['builder', 'built', 'agent', 'approvals', 'run', 'trust', 'insights', 'discover', 'impact'];
+const imgs = [...document.querySelectorAll('#content img')].map((i) => i.id.slice(2));
 
 // camera inside the window: zoom z, focus point (fx, fy) in page px; clamped so the page edges never show
 function cam(z, fx, fy) {
@@ -253,145 +288,178 @@ function scramble(from, to, k) {
   return s;
 }
 
-// ---------- the timeline ----------
-window.DURATION = 56;
-window.render = function (t) {
-  // background
-  ribbon(t, .25 + .35 * env(t, 0.6, 11.5, 1.2, 1) + .25 * env(t, 47.5, 56, 1, 1.5));
-  const g = $('glow'); g.style.transform = `translate(${600 + Math.sin(t * .25) * 260}px, ${-260 + Math.cos(t * .2) * 120}px)`;
-  $('grain').style.transform = `translate(${(Math.floor(t * 24) * 37) % 60 - 30}px, ${(Math.floor(t * 24) * 53) % 60 - 30}px)`;
-  // flares at scene cuts
-  const fl = [4.3, 11.0, 19.6, 26.6, 33.6, 40.0, 47.6].map((s) => P(t, s, s + 1.1, E.inOut)).find((k) => k > 0 && k < 1) ?? 0;
-  set($('flare'), { left: `${-1000 + fl * 3200}px`, opacity: fl > 0 && fl < 1 ? Math.sin(fl * Math.PI) : 0 });
-  $('fade').style.opacity = 1 - P(t, 0, 0.9, E.out) + P(t, 54.6, 56, E.inOut);
+// ---------- the timeline (v2, ~90 s) ----------
+window.DURATION = 90;
+const Z0 = { z: 1, fx: 720, fy: 450 };
+const at = (r, z, dx = 0, dy = 0) => ({ z, fx: r.x + r.w / 2 + dx, fy: r.y + r.h / 2 + dy });
 
-  // ----- 1. logo (0-5) and end card (48-56) -----
-  const logoOn = t < 5.2 ? 1 : t > 48 ? 1 : 0;
-  const L = $('logo'); show(L, logoOn);
+// A window on stage with one or more screens in it. Screens switch with a quick zoom-through blur.
+// segs: [{ at, img, keys: [[relT, cam], ...], caps: [[relA, relB, text, pos]], extra(lt, C, t) }]
+function group(t, a, b, segs, o = {}) {
+  if (t < a || t >= b) return null;
+  const inK = P(t, a, a + .9, E.outQuint), outK = P(t, b - .5, b, E.in);
+  const side = o.side || 0;
+  const W = side
+    ? { o: Math.min(inK * 1.6, 1) * (1 - outK), x: (1 - inK) * 420 * side - outK * 420 * side, ry: (1 - inK) * -18 * side + outK * 18 * side, zz: -outK * 220, blur: (1 - inK) * 10 + outK * 10, s: .98 }
+    : { o: Math.min(inK * 1.4, 1) * (1 - outK), y: (1 - inK) * 140, zz: (1 - inK) * -450, rx: (1 - inK) * (o.rx ?? 18), ry: (1 - inK) * (o.ry ?? -6), blur: outK * 12, s: 1 + outK * .07 };
+  let i = 0; for (let k = 0; k < segs.length; k++) if (t >= segs[k].at) i = k;
+  const seg = segs[i], lt = t - seg.at;
+  const C = seg.keys ? K(lt, seg.keys) : { ...Z0 };
+  if (i > 0) { const pulse = Math.sin(Math.PI * P(t, seg.at - .28, seg.at + .32, (x) => x)); W.blur = (W.blur || 0) + 11 * pulse; W.s = (W.s ?? 1) * (1 + .035 * pulse); }
+  if (i < segs.length - 1) { const nx = segs[i + 1].at; const pulse = Math.sin(Math.PI * P(t, nx - .28, nx + .32, (x) => x)); W.blur = (W.blur || 0) + 11 * pulse; }
+  const caps = segs.flatMap((sg) => (sg.caps || []).map(([ca, cb, txt, pos]) => [sg.at + ca, sg.at + cb, txt, pos]));
+  return { W, C, img: seg.img, caps, seg, lt };
+}
+
+window.render = function (t) {
+  // background, grain, light sweeps
+  ribbon(t, .25 + .35 * env(t, 0.6, 16.4, 1.2, 1) + .25 * env(t, 80, 90, 1, 1.5));
+  $('glow').style.transform = `translate(${600 + Math.sin(t * .25) * 260}px, ${-260 + Math.cos(t * .2) * 120}px)`;
+  $('grain').style.transform = `translate(${(Math.floor(t * 24) * 37) % 60 - 30}px, ${(Math.floor(t * 24) * 53) % 60 - 30}px)`;
+  const fl = [4.3, 10.5, 14.7, 20.5, 36.5, 51.5, 59.1, 69.5, 80.1].map((s) => P(t, s, s + 1.1, E.inOut)).find((k) => k > 0 && k < 1) ?? 0;
+  set($('flare'), { left: `${-1000 + fl * 3200}px`, opacity: fl > 0 && fl < 1 ? Math.sin(fl * Math.PI) : 0 });
+  $('fade').style.opacity = 1 - P(t, 0, 0.9, E.out) + P(t, 88.6, 90, E.inOut);
+
+  // ----- logo: intro (0-5) and end card (82-90) -----
+  const logoOn = t < 5.2 || t > 82;
+  const L = $('logo'); show(L, logoOn ? 1 : 0);
   if (logoOn) {
-    const s0 = t < 5.2 ? 0.6 : 48.4; // start of assembly
+    const s0 = t < 5.2 ? 0.6 : 82.4;
     const tile = P(t, s0, s0 + 1.0, E.outQuint), cloud = P(t, s0 + .35, s0 + 1.3, E.back), dot = P(t, s0 + 1.0, s0 + 1.7, E.bounce);
     set($('tile'), { transform: `scale(${.7 + .3 * tile}) rotate(${(1 - tile) * -8}deg)`, filter: `blur(${(1 - tile) * 18}px)`, opacity: tile });
     $('cloud').style.transform = `scale(${.4 + .6 * cloud})`; $('cloud').style.opacity = clamp(cloud * 1.5);
     $('dot').setAttribute('cy', (16 + 8.44 * dot).toFixed(2)); $('dot').style.opacity = dot > 0 ? 1 : 0;
     [...word.children].forEach((c, i) => { const k = P(t, s0 + 1.1 + i * .07, s0 + 1.75 + i * .07, E.outQuint); set(c, { transform: `translateY(${(1 - k) * 110}%)`, opacity: k }); });
     const tg = P(t, s0 + 1.9, s0 + 2.6, E.out); set($('tag'), { opacity: tg, transform: `translateY(${(1 - tg) * 16}px)`, filter: `blur(${(1 - tg) * 6}px)` });
-    // intro exits by zooming through; end card lifts the lockup to make room
+    const tg2 = t < 5.2 ? P(t, 2.9, 3.6, E.out) : 0; set($('tag2'), { opacity: tg2, transform: `translateY(${(1 - tg2) * 16}px)`, filter: `blur(${(1 - tg2) * 6}px)`, display: t < 5.2 ? 'block' : 'none' });
     const out = t < 5.2 ? P(t, 4.2, 5.1, E.in) : 0;
-    const lift = t > 48 ? P(t, 50.2, 51.1, E.inOut) : 0;
+    const lift = t > 82 ? P(t, 84.2, 85.1, E.inOut) : 0;
     set(L, { transform: `translate(-50%, calc(-50% - ${lift * 120}px)) scale(${1 + out * .9})`, filter: `blur(${out * 26}px)`, opacity: 1 - out });
   }
-  const pills = P(t, 50.8, 51.6, E.out); set($('pills'), { top: '640px', opacity: pills, transform: `translateX(-50%) translateY(${(1 - pills) * 20}px)` });
-  const cta = P(t, 51.6, 52.3, E.back); set($('cta'), { top: '760px', opacity: clamp(cta), transform: `translateX(-50%) scale(${.85 + .15 * cta})`, boxShadow: `0 20px ${60 + 30 * Math.sin(t * 4)}px rgba(83,58,253,${.45 + .2 * Math.sin(t * 4)})` });
+  const pills = P(t, 84.8, 85.6, E.out); set($('pills'), { top: '640px', opacity: pills, transform: `translateX(-50%) translateY(${(1 - pills) * 20}px)` });
+  const cta = P(t, 85.6, 86.3, E.back); set($('cta'), { top: '750px', opacity: clamp(cta), transform: `translateX(-50%) scale(${.85 + .15 * cta})`, boxShadow: `0 20px ${60 + 30 * Math.sin(t * 4)}px rgba(83,58,253,${.45 + .2 * Math.sin(t * 4)})` });
+  const cta2 = P(t, 86.2, 86.9, E.out); set($('cta2'), { top: '858px', opacity: cta2 });
 
-  // ----- 2. problem (5-11) -----
-  headline('h1', t, 5.0, 6.9); headline('h2', t, 6.9, 8.8); headline('h3', t, 8.8, 11.1);
-  $('h3num').textContent = `$${(2.6 * P(t, 9.0, 10.3, E.out)).toFixed(1)}M`;
+  // ----- full-screen beats -----
+  headline('h1', t, 5.0, 6.6); headline('h2', t, 6.6, 8.2); headline('h3', t, 8.2, 10.6);
+  $('h3num').textContent = `$${(2.6 * P(t, 8.4, 9.7, E.out)).toFixed(1)}M`;
+  headline('hc', t, 10.6, 14.8);
+  headline('hconn', t, 14.8, 16.5); headline('hin', t, 20.6, 22.0); headline('h4', t, 36.6, 37.9);
+  headline('h5', t, 51.6, 53.1); headline('h7', t, 59.2, 60.6); headline('hmore', t, 69.6, 71.0); headline('hprice', t, 80.2, 82.0);
+  // the usual costs, then struck through
+  const cards = $('cards'); show(cards, env(t, 10.8, 14.8, .4, .5));
+  cards.style.filter = `blur(${P(t, 14.3, 14.8, E.in) * 14}px)`;
+  [...cards.children].forEach((c, i) => {
+    const k = P(t, 10.9 + i * .3, 11.6 + i * .3, E.outQuint);
+    set(c, { opacity: k, transform: `translateY(${(1 - k) * 50}px) rotateX(${(1 - k) * 30}deg)` });
+    const st = P(t, 12.9 + i * .22, 13.35 + i * .22, E.out);
+    c.querySelector('i').style.width = `${st * 364}px`;
+    c.style.filter = `saturate(${1 - st * .7})`; c.querySelector('b').style.opacity = 1 - st * .45;
+  });
 
-  // ----- headlines between product beats -----
-  headline('h4', t, 11.1, 12.7); headline('h5', t, 19.5, 21.0); headline('h6', t, 26.5, 27.9); headline('h7', t, 33.5, 35.0); headline('h8', t, 40.0, 41.4);
-
-  // ----- product window -----
-  let W = { o: 0 }, C = { z: 1, fx: 720, fy: 450 }, img = null, img2 = null, mix = 0;
-  const hide = ['spot', 'ring', 'typed', 'okbtn', 'toast1', 'restored', 'toast2', 'mask', 'ripple', 'cursor'];
-  hide.forEach((id) => show($(id), 0));
+  // ----- product windows -----
+  ['spot', 'ring', 'typed', 'okbtn', 'toast1', 'restored', 'toast2', 'mask', 'ripple', 'cursor'].forEach((id) => show($(id), 0));
   show($('slack'), 0); show($('cursor2'), 0); show($('ripple2'), 0);
+  const inp = T.builder.input, card = T.approvals.card, ap = T.approvals.approve, m = T.trust.masked, sf = T.sf;
+  const G =
+    // Connect: the org is connected and the package installs itself
+    group(t, 16.4, 20.6, [{ at: 16.4, img: 'orgs', keys: [[0, Z0], [1.0, Z0], [1.9, at(T.orgs.panel, 1.55, 60)]],
+      caps: [[.9, 4.0, 'Log in with Salesforce. Nimbus sets itself up.']],
+      extra: (lt, C) => {
+        const ins = T.orgs.install;
+        const cp = K(lt, [[1.9, { x: 700, y: 560 }], [2.6, { x: ins.x + 70, y: ins.y + 13 }]]);
+        cursorAt(cp.x, cp.y, C.z, env(lt, 1.8, 3.8, .3, .3));
+        ripple($('ripple'), ins.x + 70, ins.y + 13, P(lt, 2.7, 3.2, E.out), C.z);
+        set($('toast2'), { left: ins.x - 120 + 'px', top: ins.y + 44 + 'px', transform: `translateY(${(1 - P(lt, 2.9, 3.3, E.back)) * 14}px)` }); show($('toast2'), env(lt, 2.9, 4.0, .3, .3));
+      } }])
+    // Inside Salesforce: the real Lightning record page
+    ?? group(t, 22.0, 33.4, [
+      { at: 22.0, img: 'sfcase', keys: [[0, Z0], [.9, Z0], [2.2, at(sf.panel, 1.6, -20, 40)]], caps: [[.8, 2.3, 'Agents and an assistant on every record.']] },
+      { at: 24.4, img: 'sfask', keys: [[0, at(sf.answer, 1.45)], [2.4, at(sf.answer, 1.7, 0, 20)]], caps: [[.2, 2.5, 'Ask about any record, in plain English.']] },
+      { at: 27.0, img: 'sfbell', keys: [[0, at(sf.bell, 1.4)], [1.9, at(sf.bell, 1.62)]], caps: [[.2, 1.9, 'Approvals arrive in the Salesforce bell.']] },
+      { at: 29.0, img: 'sfappr', keys: [[0, at(sf.approval, 1.5)], [1.6, at(sf.approval, 1.75)]], caps: [[.2, 1.8, 'Approve it right on the record.']],
+        extra: (lt, C) => {
+          const a = sf.approve, cp = K(lt, [[.3, { x: a.x - 160, y: a.y + 120 }], [1.0, { x: a.x + 36, y: a.y + 15 }]]);
+          cursorAt(cp.x, cp.y, C.z, env(lt, .2, 1.8, .25, .2));
+          ripple($('ripple'), a.x + 36, a.y + 15, P(lt, 1.1, 1.6, E.out), C.z);
+        } },
+      { at: 30.8, img: 'sfafter', keys: [[0, at(sf.changes, 1.25, -260, 40)], [2.4, at(sf.changes, 1.7, 0, 30)]], caps: [[.2, 2.4, 'Every change is logged, with one-click undo.']],
+        extra: (lt) => { box($('ring'), sf.changes, 8); show($('ring'), env(lt, .6, 2.5, .4, .3)); } },
+    ], { rx: 10, ry: 8 })
+    // Each person's own access
+    ?? group(t, 33.4, 36.6, [{ at: 33.4, img: 'access', keys: [[0, Z0], [.9, Z0], [2.0, at(T.teamAccess.panel, 1.4, 0, -30)]],
+      caps: [[.8, 3.0, 'It sees only what each person can see in Salesforce.']] }])
+    // Build: type the request, the agent appears
+    ?? group(t, 37.9, 44.4, [
+      { at: 37.9, img: 'builder', keys: [[0, Z0], [.8, Z0], [1.6, { z: 1.55, fx: 300, fy: 720 }], [3.7, { z: 1.6, fx: 300, fy: 720 }]], caps: [[.6, 3.6, 'Say it in plain English.', 'top']],
+        extra: (lt, C) => {
+          const cp = K(lt, [[.7, { x: 700, y: 520 }], [1.6, { x: inp.x + 60, y: inp.y + 28 }]]);
+          cursorAt(cp.x, cp.y, C.z, env(lt, .6, 3.5, .3, .3));
+          ripple($('ripple'), inp.x + 60, inp.y + 28, P(lt, 1.65, 2.1, E.out), C.z);
+          const full = 'When a new case comes in, sort it by urgency and create a follow-up task for the owner';
+          $('typedText').textContent = full.slice(0, Math.floor(full.length * P(lt, 1.8, 3.5, (k) => k)));
+          set($('typed'), { left: inp.x + 'px', top: inp.y - 34 + 'px', width: inp.w + 'px', minHeight: inp.h + 34 + 'px' });
+          show($('typed'), P(lt, 1.7, 1.9)); $('caret').style.opacity = Math.floor(t * 2.5) % 2 ? 1 : 0.15;
+        } },
+      { at: 41.7, img: 'agent', keys: [[0, Z0], [2.4, { z: 1.22, fx: T.agent.steps.x + T.agent.steps.w / 2 + 160, fy: T.agent.steps.y + 90 }]], caps: [[.2, 2.4, 'A working agent, step by step.']] },
+    ])
+    // Fits what you have, proven before it's live
+    ?? group(t, 44.4, 51.6, [
+      { at: 44.4, img: 'xray', keys: [[0, Z0], [1.0, Z0], [2.4, at(T.xray.card, 1.32, 0, 20)]], caps: [[.8, 3.5, 'Works with your Flows and Apex. X-ray spots conflicts first.']] },
+      { at: 48.1, img: 'proof', keys: [[0, Z0], [.4, Z0], [2.2, at(T.proof.stats, 1.38, 0, -10)]], caps: [[.2, 3.0, 'Proven on your own records before it goes live.']] },
+    ])
+    // Approve in the app, then in Slack
+    ?? group(t, 53.1, 59.2, [{ at: 53.1, img: 'approvals', keys: [[0, Z0], [.8, Z0], [1.7, { z: 1.48, fx: card.x + card.w / 2, fy: card.y + card.h / 2 + 24 }]],
+      caps: [[.9, 3.4, 'Every change waits for a person.'], [3.9, 5.7, 'Or approve right in Slack.']],
+      extra: (lt, C) => {
+        box($('spot'), card, 10); show($('spot'), env(lt, 1.2, 3.7, .5, .5));
+        const cp = K(lt, [[1.7, { x: 980, y: 620 }], [2.5, { x: ap.x + 40, y: ap.y + 18 }]]);
+        cursorAt(cp.x, cp.y, C.z, env(lt, 1.6, 3.5, .3, .3));
+        ripple($('ripple'), ap.x + 40, ap.y + 18, P(lt, 2.6, 3.1, E.out), C.z);
+        box($('okbtn'), ap, 0); show($('okbtn'), P(lt, 2.65, 2.8));
+        set($('toast1'), { left: ap.x - 40 + 'px', top: ap.y + 52 + 'px', transform: `translateY(${(1 - P(lt, 2.8, 3.2, E.back)) * 14}px)` }); show($('toast1'), env(lt, 2.8, 3.9, .3, .3));
+      } }])
+    // Your data stays yours: masking, then your own AI and a daily cap
+    ?? group(t, 60.6, 69.6, [
+      { at: 60.6, img: 'trust', keys: [[0, Z0], [1.1, { z: 1.05, fx: 720, fy: 420 }], [2.1, { z: 1.85, fx: m.x + m.w / 2 + 60, fy: m.y + m.h / 2 + 40 }]], caps: [[1.1, 5.2, 'Personal data is masked before the AI sees it.']],
+        extra: (lt) => {
+          box($('ring'), m, 10); show($('ring'), env(lt, 1.9, 5.3, .4, .4));
+          $('mask').innerHTML = `<span class="to">→</span> ${scramble('maria.gonzalez@northwind.example', '[EMAIL_1]', P(lt, 2.9, 4.2, (x) => x))}`;
+          set($('mask'), { left: m.x + m.w + 'px', top: m.y - 122 + 'px', transform: `translateX(-100%) translateY(${(1 - P(lt, 2.3, 2.8, E.back)) * 16}px)` }); show($('mask'), env(lt, 2.3, 5.3, .35, .35));
+        } },
+      { at: 66.0, img: 'ai', keys: [[0, at(T.aiSettings.provider, 1.35, 0, 120)], [2.0, at(T.aiSettings.budget, 1.35, 0, -60)]], caps: [[.2, 3.3, 'Bring your own AI: Claude, OpenAI or Gemini. With a daily cap.']] },
+    ], { ry: 12 })
+    // More than agents: quick montage
+    ?? group(t, 71.0, 72.9, [{ at: 71.0, img: 'insights', keys: [[0, { z: 1.05, fx: 720, fy: 450 }], [1.6, at(T.insights.briefing, 1.3)]], caps: [[.3, 1.7, 'A plain-English briefing, every morning.']] }], { side: 1 })
+    ?? group(t, 72.9, 74.8, [{ at: 72.9, img: 'dashboard', keys: [[0, { z: 1.05, fx: 720, fy: 450 }], [1.6, at(T.dashboard.kpis, 1.25, 0, -80)]], caps: [[.3, 1.7, 'Dashboards from one sentence.']] }], { side: -1 })
+    ?? group(t, 74.8, 76.6, [{ at: 74.8, img: 'memory', keys: [[0, { z: 1.05, fx: 720, fy: 450 }], [1.5, at(T.memory.team, 1.3)]], caps: [[.3, 1.6, 'Memory that learns how your team works.']] }], { side: 1 })
+    ?? group(t, 76.6, 78.4, [{ at: 76.6, img: 'discover', keys: [[0, { z: 1.05, fx: 720, fy: 450 }], [1.5, at(T.discover.total, 1.4)]], caps: [[.3, 1.6, 'Finds the work worth automating.']] }], { side: -1 })
+    ?? group(t, 78.4, 80.2, [{ at: 78.4, img: 'impact', keys: [[0, { z: 1.05, fx: 720, fy: 450 }], [1.5, at({ x: 172, y: 231, w: 1096, h: 120 }, 1.28)]], caps: [[.3, 1.6, 'And shows the return. (Example workspace.)']] }], { side: 1 });
 
-  if (t >= 12.3 && t < 19.8) {
-    // 3. Build: type the request, then the agent appears
-    const inK = P(t, 12.3, 13.4, E.outQuint), outK = P(t, 19.2, 19.8, E.in);
-    W = { o: Math.min(inK * 1.4, 1) * (1 - outK), y: (1 - inK) * 160, zz: (1 - inK) * -500, rx: (1 - inK) * 22, ry: (1 - inK) * -6, blur: outK * 14, s: 1 + outK * .08 };
-    const inp = T.builder.input;
-    if (t < 16.7) {
-      img = 'builder';
-      C = K(t, [[12.3, { z: 1, fx: 720, fy: 450 }], [13.3, { z: 1, fx: 720, fy: 450 }], [14.2, { z: 1.55, fx: 300, fy: 720 }], [16.7, { z: 1.6, fx: 300, fy: 720 }]]);
-      const cz = C.z;
-      const cp = K(t, [[13.2, { x: 700, y: 520 }], [14.3, { x: inp.x + 60, y: inp.y + 28 }]]);
-      cursorAt(cp.x, cp.y, cz, env(t, 13.1, 16.4, .3, .3));
-      ripple($('ripple'), inp.x + 60, inp.y + 28, P(t, 14.35, 14.9, E.out), cz);
-      const full = 'When a new case comes in, sort it by urgency and create a follow-up task for the owner';
-      const n = Math.floor(full.length * P(t, 14.5, 16.3, (k) => k));
-      $('typedText').textContent = full.slice(0, n);
-      set($('typed'), { left: inp.x + 'px', top: inp.y - 34 + 'px', width: inp.w + 'px', minHeight: inp.h + 34 + 'px' });
-      show($('typed'), P(t, 14.4, 14.6)); $('caret').style.opacity = Math.floor(t * 2.5) % 2 ? 1 : 0.15;
-    } else if (t < 17.5) {
-      img = 'built'; img2 = 'agent'; mix = P(t, 17.05, 17.2);
-      W.blur = 12 * Math.sin(Math.PI * P(t, 16.75, 17.5, (x) => x)); W.s = 1 + .05 * Math.sin(Math.PI * P(t, 16.75, 17.5, (x) => x));
-      C = K(t, [[16.7, { z: 1.6, fx: 300, fy: 720 }], [17.0, { z: 1.3, fx: 260, fy: 300 }], [17.5, { z: 1.0, fx: 720, fy: 450 }]]);
-    } else {
-      img = 'agent';
-      const st = T.agent.steps;
-      C = K(t, [[17.5, { z: 1.0, fx: 720, fy: 450 }], [19.4, { z: 1.22, fx: st.x + st.w / 2 + 160, fy: st.y + 90 }]]);
-    }
-    caption(t, [[13.0, 16.6, 'Say it in plain English.', 'top'], [17.3, 19.4, 'Get a working agent, step by step.']]);
-  } else if (t >= 20.7 && t < 26.7) {
-    // 4. Approve, in the app and in Slack
-    img = 'approvals';
-    const inK = P(t, 20.7, 21.7, E.outQuint), slackK = P(t, 24.2, 25.0, E.inOut), outK = P(t, 26.2, 26.7, E.in);
-    W = { o: Math.min(inK * 1.4, 1) * (1 - outK), y: (1 - inK) * 120 + slackK * 30, zz: (1 - inK) * -400 - slackK * 260, ry: (1 - inK) * 10 + slackK * 16, rx: slackK * 4, x: -slackK * 300, blur: slackK * 3 + outK * 10 };
-    const card = T.approvals.card, ap = T.approvals.approve;
-    C = K(t, [[20.7, { z: 1, fx: 720, fy: 450 }], [21.5, { z: 1, fx: 720, fy: 450 }], [22.4, { z: 1.48, fx: card.x + card.w / 2, fy: card.y + card.h / 2 + 24 }]]);
-    box($('spot'), card, 10); show($('spot'), env(t, 21.9, 24.4, .5, .5));
-    const cp = K(t, [[22.4, { x: 980, y: 620 }], [23.2, { x: ap.x + 40, y: ap.y + 18 }]]);
-    cursorAt(cp.x, cp.y, C.z, env(t, 22.3, 24.2, .3, .3));
-    ripple($('ripple'), ap.x + 40, ap.y + 18, P(t, 23.3, 23.8, E.out), C.z);
-    box($('okbtn'), ap, 0); show($('okbtn'), P(t, 23.35, 23.5));
-    set($('toast1'), { left: ap.x - 40 + 'px', top: ap.y + 52 + 'px', transform: `translateY(${(1 - P(t, 23.5, 23.9, E.back)) * 14}px)` }); show($('toast1'), env(t, 23.5, 24.6, .3, .3));
-    // Slack card
-    const sk = P(t, 24.3, 25.1, E.outQuint), sOut = P(t, 26.2, 26.7, E.in);
+  // Slack, over the approvals window
+  if (t >= 56.6 && t < 59.2) {
+    const sk = P(t, 56.7, 57.5, E.outQuint), sOut = P(t, 58.7, 59.2, E.in);
     set($('slack'), { left: `${1060 + (1 - sk) * 600}px`, top: '300px', transform: `perspective(1600px) rotateY(${(1 - sk) * -24}deg) scale(${1 + sOut * .06})`, filter: `blur(${sOut * 10}px)` });
     show($('slack'), Math.min(sk * 1.3, 1) * (1 - sOut));
-    const okR = $('slOk').getBoundingClientRect(); const slOk = { x: okR.x + okR.width * .45, y: okR.y + okR.height * .55 }; // the Approve button, wherever the card is
-    const c2 = K(t, [[24.9, { x: 1500, y: 860 }], [25.6, { x: slOk.x, y: slOk.y }]]);
-    set($('cursor2'), { left: c2.x + 'px', top: c2.y + 'px' }); show($('cursor2'), env(t, 24.9, 26.4, .25, .3));
-    const rk = P(t, 25.7, 26.2, E.out); const r = 10 + 46 * rk; set($('ripple2'), { left: slOk.x - r + 'px', top: slOk.y - r + 'px', width: 2 * r + 'px', height: 2 * r + 'px' }); show($('ripple2'), rk > 0 && rk < 1 ? 1 - rk : 0);
-    const done = P(t, 25.75, 25.9); show($('slBtns'), 1 - done); $('slBtns').style.display = done >= 1 ? 'none' : 'flex'; show($('slDone'), done); $('slDone').style.display = done >= 1 ? 'flex' : 'none';
-    caption(t, [[21.6, 24.2, 'Every change waits for a person.'], [24.6, 26.4, 'Or approve right in Slack.']]);
-  } else if (t >= 27.7 && t < 33.8) {
-    // 5. Undo
-    img = 'run';
-    const inK = P(t, 27.7, 28.7, E.outQuint), outK = P(t, 33.2, 33.8, E.in);
-    W = { o: Math.min(inK * 1.4, 1) * (1 - outK), y: (1 - inK) * 120, zz: (1 - inK) * -400, rx: (1 - inK) * -14, blur: outK * 12, s: 1 + outK * .08 };
-    const ch = T.run.changes, ud = T.run.undo;
-    C = K(t, [[27.7, { z: 1, fx: 720, fy: 450 }], [28.5, { z: 1, fx: 720, fy: 450 }], [29.5, { z: 1.62, fx: ch.x + ch.w / 2, fy: ch.y + ch.h / 2 - 20 }]]);
-    box($('spot'), { x: ch.x, y: ch.y, w: ch.w, h: ch.h }, 8); show($('spot'), env(t, 29.0, 32.9, .5, .4));
-    const cp = K(t, [[29.6, { x: ch.x + 160, y: ch.y + 260 }], [30.4, { x: ud.x + 60, y: ud.y + 13 }]]);
-    cursorAt(cp.x, cp.y, C.z, env(t, 29.5, 31.4, .3, .3));
-    ripple($('ripple'), ud.x + 60, ud.y + 13, P(t, 30.5, 31.0, E.out), C.z);
-    const rs = P(t, 30.7, 31.2, E.out);
-    set($('restored'), { left: ch.x + 8 + 'px', top: ch.y + 44 + 'px', width: ch.w - 16 + 'px', height: ch.h - 60 + 'px', transform: `scale(${.96 + .04 * rs})` }); show($('restored'), rs);
-    caption(t, [[28.6, 30.4, 'Every change is logged with its old value.'], [30.8, 33.2, 'Undo it in one click.']]);
-  } else if (t >= 34.7 && t < 40.4) {
-    // 6. Trust: masking
-    img = 'trust';
-    const inK = P(t, 34.7, 35.8, E.outQuint), outK = P(t, 39.8, 40.4, E.in);
-    W = { o: Math.min(inK * 1.4, 1) * (1 - outK), y: (1 - inK) * 120, zz: (1 - inK) * -500, ry: (1 - inK) * -14 + Math.sin(t * .6) * 1.2, blur: outK * 12, s: 1 + outK * .08 };
-    const m = T.trust.masked;
-    C = K(t, [[34.7, { z: 1, fx: 720, fy: 450 }], [35.8, { z: 1.05, fx: 720, fy: 420 }], [36.8, { z: 1.85, fx: m.x + m.w / 2 + 60, fy: m.y + m.h / 2 + 40 }]]);
-    box($('ring'), m, 10); show($('ring'), env(t, 36.6, 39.6, .4, .4));
-    const k = P(t, 37.6, 38.9, (x) => x);
-    $('mask').innerHTML = `<span class="to">→</span> ${scramble('maria.gonzalez@northwind.example', '[EMAIL_1]', k)}`;
-    set($('mask'), { left: m.x + m.w + 'px', top: m.y - 66 + 'px', transform: `translateX(-100%) translateY(${(1 - P(t, 37.0, 37.5, E.back)) * 16}px)` }); show($('mask'), env(t, 37.0, 39.7, .35, .35));
-    caption(t, [[35.8, 39.6, 'Personal data is masked before the AI sees it.']]);
-  } else if (t >= 41.3 && t < 48.1) {
-    // 7. Montage
-    const parts = [['insights', 41.3, 43.7, T.insights.briefing, 1.35, 'A plain-English briefing, every morning.'], ['discover', 43.7, 45.9, T.discover.total, 1.45, 'Find the work worth automating.'], ['impact', 45.9, 48.1, { x: 172, y: 231, w: 1096, h: 120 }, 1.28, 'Prove the return.']];
-    const cur = parts.find((p) => t < p[2]) ?? parts[2];
-    const [name, a, b, r, z] = cur;
-    img = name;
-    const inK = P(t, a, a + .55, E.outQuint), outK = P(t, b - .45, b, E.in);
-    const dir = parts.indexOf(cur) % 2 ? -1 : 1;
-    W = { o: Math.min(inK * 1.6, 1) * (1 - outK), x: (1 - inK) * 380 * dir - outK * 380 * dir, ry: (1 - inK) * -18 * dir + outK * 18 * dir, zz: -outK * 200, blur: (1 - inK) * 10 + outK * 10, s: .98 };
-    C = K(t, [[a, { z: 1.05, fx: 720, fy: 450 }], [a + .5, { z: 1.05, fx: 720, fy: 450 }], [b - .2, { z, fx: r.x + r.w / 2, fy: r.y + r.h / 2 }]]);
-    caption(t, parts.map((p) => [p[1] + .4, p[2] - .2, p[5]]));
+    const okR = $('slOk').getBoundingClientRect(); const slOk = { x: okR.x + okR.width * .45, y: okR.y + okR.height * .55 };
+    const c2 = K(t, [[57.3, { x: 1500, y: 860 }], [58.0, { x: slOk.x, y: slOk.y }]]);
+    set($('cursor2'), { left: c2.x + 'px', top: c2.y + 'px' }); show($('cursor2'), env(t, 57.3, 58.8, .25, .3));
+    const rk = P(t, 58.1, 58.6, E.out); const r = 10 + 46 * rk; set($('ripple2'), { left: slOk.x - r + 'px', top: slOk.y - r + 'px', width: 2 * r + 'px', height: 2 * r + 'px' }); show($('ripple2'), rk > 0 && rk < 1 ? 1 - rk : 0);
+    const done = P(t, 58.15, 58.3); show($('slBtns'), 1 - done); $('slBtns').style.display = done >= 1 ? 'none' : 'flex'; show($('slDone'), done); $('slDone').style.display = done >= 1 ? 'flex' : 'none';
+  } else { $('slBtns').style.display = 'flex'; $('slDone').style.display = 'none'; }
+
+  if (G) {
+    const W = G.W;
+    // The approvals window steps back while Slack is in front
+    if (t >= 56.6 && t < 59.2) { const sl = P(t, 56.6, 57.4, E.inOut); W.x = (W.x || 0) - sl * 300; W.zz = (W.zz || 0) - sl * 260; W.ry = (W.ry || 0) + sl * 16; W.rx = (W.rx || 0) + sl * 4; W.blur = (W.blur || 0) + sl * 3; }
+    if (G.seg.extra) G.seg.extra(G.lt, G.C, t);
+    imgs.forEach((n) => show($('i-' + n), n === G.img ? 1 : 0));
+    caption(t, G.caps);
+    win(W); cam(G.C.z, G.C.fx, G.C.fy);
   } else {
     caption(t, []);
+    win({ o: 0 });
   }
-  if (img) {
-    imgs.forEach((n) => show($('i-' + n), n === img ? 1 : n === img2 ? mix : 0));
-    if (img2) $('i-' + img).style.opacity = 1;
-  }
-  win(W); cam(C.z, C.fx, C.fy);
 };
 </script>
 </body>
