@@ -3,7 +3,8 @@ import { pool } from './db.js';
 
 // Credentials are entered from the UI and stored encrypted. Per-account values override the
 // platform default (zero-uuid account), which in turn falls back to env vars.
-const PLATFORM = '00000000-0000-0000-0000-000000000000';
+/** Platform-wide values (set by CRMagents staff); also the fallback for every workspace. */
+export const PLATFORM = '00000000-0000-0000-0000-000000000000';
 
 export const SETTING_KEYS = {
   sfClientId: 'SF_CLIENT_ID',
@@ -36,6 +37,9 @@ export const SETTING_KEYS = {
   twilioSms: 'TWILIO_SMS_FROM',
   twilioWhatsapp: 'TWILIO_WHATSAPP_FROM',
   memoryEnabled: 'MEMORY_ENABLED',
+  // Platform only (staff console); not in the customer settings form.
+  resendKey: 'RESEND_API_KEY',
+  mailFrom: 'MAIL_FROM',
 } as const;
 
 /** Settings shown as plain values in the UI (not secrets). */

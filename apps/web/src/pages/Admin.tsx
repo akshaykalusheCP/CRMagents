@@ -1,4 +1,4 @@
-import { AlertTriangle, ArrowLeft, ArrowUpDown, Building2, ChevronDown, ChevronUp, CreditCard, Download, ExternalLink, Inbox, LayoutDashboard, LineChart, MoreHorizontal, RefreshCw, ScrollText, Search, Trash2, Users, X } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, ArrowUpDown, Building2, ChevronDown, ChevronUp, CreditCard, Download, ExternalLink, Inbox, LayoutDashboard, LineChart, MoreHorizontal, RefreshCw, ScrollText, Search, Settings2, Trash2, Users, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { PLAN_DEFS } from '@crmagents/shared';
 import { api, type AdminAccount, type AdminAccountDetail, type AdminOverview, type AdminRequest, type AdminRevenue, type AdminUser, type Health, type Me, type PlanId, type Stage, type StaffLogItem } from '../api';
@@ -8,7 +8,7 @@ import { Meter, SkeletonRows, Status, Toaster, Trend, toast, type Tone } from '.
 // Staff console (CRMagents staff only): a back office for tracking every client. Its own layout, dense tables,
 // and "who needs attention today" first. The server answers "Not found" to anyone else.
 
-type View = 'overview' | 'workspaces' | 'users' | 'revenue' | 'requests' | 'log';
+type View = 'overview' | 'workspaces' | 'users' | 'revenue' | 'requests' | 'log' | 'settings';
 const PLANS: PlanId[] = ['basic', 'plus', 'pro', 'promax'];
 const STAGE: Record<Stage, { label: string; tone: Tone }> = {
   trial: { label: 'Trial', tone: 'info' }, expired: { label: 'Trial ended', tone: 'neutral' }, paying: { label: 'Paying', tone: 'ok' },
@@ -443,6 +443,55 @@ function StaffLog({ rows, open }: { rows: StaffLogItem[]; open: (id: string) => 
   );
 }
 
+// ---------- Platform settings ----------
+function PlatformSettings({ me, billing }: { me: Me; billing: boolean }) {
+  const [mail, setMail] = useState<Awaited<ReturnType<typeof api.adminEmail>>>();
+  const [key, setKey] = useState('');
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState(me.email);
+  const [busy, setBusy] = useState(false);
+  const load = () => api.adminEmail().then((m) => { setMail(m); setFrom(m.from); }).catch((e) => toast((e as Error).message, 'bad'));
+  useEffect(() => { void load(); }, []);
+  const save = async (b: { resendKey?: string; mailFrom?: string }) => {
+    setBusy(true);
+    try { await api.adminSetEmail(b); setKey(''); toast('Saved'); await load(); } catch (e) { toast((e as Error).message, 'bad'); }
+    setBusy(false);
+  };
+  const test = async () => {
+    setBusy(true);
+    try { const r = await api.adminTestEmail(to); toast(r.ok ? `Test email sent to ${to}` : `Not sent: ${r.error}`, r.ok ? 'ok' : 'bad'); } catch (e) { toast((e as Error).message, 'bad'); }
+    setBusy(false);
+  };
+  if (!mail) return <SkeletonRows rows={4} cols={2} />;
+  return (
+    <>
+      <section className="sc-card">
+        <header><h2>Email</h2>{mail.configured ? <Status tone="ok">Sending through Resend</Status> : <Status tone="warn">Not set up</Status>}</header>
+        <p className="sc-muted" style={{ margin: '0 0 14px' }}>Invitations, password resets and alerts. Until this is set, each workspace's mail goes out through its own connected Salesforce org, and admins can copy invite and reset links by hand. Get a key at resend.com after verifying your sending domain there.</p>
+        <div className="sc-form">
+          <label className="sc-field">Resend API key {mail.keyHint && <span className="sc-muted">current: {mail.keyHint}</span>}
+            <span className="sc-inline" style={{ marginTop: 0 }}><input type="password" value={key} onChange={(e) => setKey(e.target.value)} placeholder={mail.configured ? 'Paste a new key to replace it' : 're_...'} autoComplete="off" />
+              <button className="sc-btn primary" disabled={busy || !key.trim()} onClick={() => void save({ resendKey: key })}>Save key</button>
+              {mail.configured && <button className="sc-btn" disabled={busy} onClick={() => { if (window.confirm('Remove the email key? Mail falls back to each workspace\'s Salesforce org.')) void save({ resendKey: '' }); }}>Remove</button>}</span>
+          </label>
+          <label className="sc-field">From address
+            <span className="sc-inline" style={{ marginTop: 0 }}><input value={from} onChange={(e) => setFrom(e.target.value)} placeholder="CRMagents <hello@yourdomain.com>" />
+              <button className="sc-btn" disabled={busy || from === mail.from} onClick={() => void save({ mailFrom: from })}>Save</button></span>
+          </label>
+          <label className="sc-field">Send a test email
+            <span className="sc-inline" style={{ marginTop: 0 }}><input value={to} onChange={(e) => setTo(e.target.value)} type="email" />
+              <button className="sc-btn" disabled={busy || !mail.configured || !to.includes('@')} onClick={() => void test()}>Send test</button></span>
+          </label>
+        </div>
+      </section>
+      <section className="sc-card">
+        <header><h2>Online payment</h2>{billing ? <Status tone="ok">Stripe connected</Status> : <Status tone="neutral">Off</Status>}</header>
+        <p className="sc-muted" style={{ margin: 0 }}>{billing ? 'Customers can buy Plus and Pro from the app; subscriptions and payments show under Revenue.' : 'Checkout is off until the server has the Stripe keys and prices: STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET and STRIPE_PRICE_PLUS_MONTHLY / _YEARLY, STRIPE_PRICE_PRO_MONTHLY / _YEARLY. They are set where the app is hosted, not here, so they never pass through a browser.'}</p>
+      </section>
+    </>
+  );
+}
+
 // ---------- Global search ----------
 function GlobalSearch({ open }: { open: (id: string) => void }) {
   const [q, setQ] = useState('');
@@ -508,6 +557,7 @@ export function AdminConsole({ me, onExit }: { me: Me; onExit: () => void }) {
     { id: 'revenue', label: 'Revenue', icon: <LineChart size={16} /> },
     { id: 'requests', label: 'Requests', icon: <Inbox size={16} />, n: openReq || undefined },
     { id: 'log', label: 'Staff log', icon: <ScrollText size={16} /> },
+    { id: 'settings', label: 'Settings', icon: <Settings2 size={16} /> },
   ];
   const title = client ? 'Client' : NAV.find((n) => n.id === view)!.label;
   return (
@@ -533,6 +583,7 @@ export function AdminConsole({ me, onExit }: { me: Me; onExit: () => void }) {
             : view === 'users' ? (users ? <UsersView users={users} open={open} /> : <SkeletonRows rows={8} cols={5} />)
             : view === 'revenue' ? (revenue ? <Revenue r={revenue} open={open} /> : <SkeletonRows rows={6} cols={4} />)
             : view === 'requests' ? (requests ? <Requests rows={requests} staff={staff} open={open} update={(r, b) => void updateRequest(r, b)} /> : <SkeletonRows rows={6} cols={4} />)
+            : view === 'settings' ? <PlatformSettings me={me} billing={ov?.billingConfigured ?? false} />
             : (log ? <StaffLog rows={log} open={open} /> : <SkeletonRows rows={6} cols={4} />)}
         </div>
       </div>

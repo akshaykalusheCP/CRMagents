@@ -27,6 +27,8 @@ function route(method: string, url: URL, body: any): Response {
   }
   if (/^\/api\/platform\/accounts\/[^/]+\/(meta|notes|trial|plan)$/.test(p) || /^\/api\/platform\/(notes|requests)\/[^/]+$/.test(p)) return json({ ok: true });
   if (p === '/api/platform/revenue') return json(DEMO_ADMIN.revenue);
+  if (p === '/api/platform/email') return json(method === 'GET' ? { configured: false, from: 'CRMagents <noreply@crmagents.app>', keyHint: null } : { ok: true });
+  if (p === '/api/platform/email/test') return json({ ok: false, error: 'No Resend key set' });
   if (p === '/api/platform/staff') return json(['owner@demo-company.com', 'sales@crmagents.example']);
   if (p === '/api/platform/staff-log') return json(DEMO_ADMIN.log);
   if (p === '/api/platform/search') {

@@ -5,6 +5,8 @@ import { pool } from './db.js';
 import { changePlan, isPlatformAdmin, planSummary } from './plans.js';
 import { audit } from './trust/audit.js';
 import { billingConfigured } from './billing/stripe.js';
+import { mailConfig, viaResend } from './mailer.js';
+import { PLATFORM, setSetting } from './settings.js';
 
 // Staff console (CRMagents staff, PLATFORM_ADMINS only; "Not found" for anyone else). Tracks every client: stage
 // (trial, paying, past due, churned...), health, the activation funnel, subscriptions and who bought them,
@@ -61,6 +63,9 @@ async function accountRows(where = 'true', params: unknown[] = []) {
     return { ...r, stage: clientStage(r), health: clientHealth(r.lastActive, r.orgIssue), mrr };
   });
 }
+
+const staffEvent = (accountId: string | null, by: string, what: string, detail: string | null) =>
+  pool.query('insert into staff_events (account_id, by_email, what, detail) values ($1,$2,$3,$4)', [accountId, by, what, detail]);
 
 export function registerPlatform(app: FastifyInstance) {
   app.addHook('preHandler', async (req, reply) => {
@@ -220,8 +225,19 @@ export function registerPlatform(app: FastifyInstance) {
   app.put('/api/platform/accounts/:id/meta', async (req) => {
     const b = z.object({ tags: z.array(z.string().trim().min(1).max(30)).max(12).optional(), staffOwner: z.string().max(200).nullable().optional() }).parse(req.body);
     const id = (req.params as { id: string }).id;
-    if (b.tags) await pool.query('update accounts set tags=$2 where id=$1', [id, [...new Set(b.tags.map((t) => t.toLowerCase()))]]);
-    if (b.staffOwner !== undefined) await pool.query('update accounts set staff_owner=$2 where id=$1', [id, b.staffOwner || null]);
+    const { rows } = await pool.query('select tags, staff_owner from accounts where id=$1', [id]);
+    if (!rows[0]) throw Object.assign(new Error('Workspace not found'), { statusCode: 404 });
+    if (b.tags) {
+      const tags = [...new Set(b.tags.map((t) => t.toLowerCase()))];
+      const before: string[] = rows[0].tags ?? [];
+      const added = tags.filter((t) => !before.includes(t)), removed = before.filter((t) => !tags.includes(t));
+      await pool.query('update accounts set tags=$2 where id=$1', [id, tags]);
+      if (added.length || removed.length) await staffEvent(id, req.user!.email, 'Changed tags', [added.length ? `added ${added.join(', ')}` : '', removed.length ? `removed ${removed.join(', ')}` : ''].filter(Boolean).join(' · '));
+    }
+    if (b.staffOwner !== undefined && (b.staffOwner || null) !== rows[0].staff_owner) {
+      await pool.query('update accounts set staff_owner=$2 where id=$1', [id, b.staffOwner || null]);
+      await staffEvent(id, req.user!.email, b.staffOwner ? 'Assigned a staff owner' : 'Removed the staff owner', b.staffOwner || rows[0].staff_owner);
+    }
     return { ok: true };
   });
 
@@ -232,7 +248,8 @@ export function registerPlatform(app: FastifyInstance) {
   });
 
   app.delete('/api/platform/notes/:id', async (req) => {
-    await pool.query('delete from account_notes where id=$1', [Number((req.params as { id: string }).id)]);
+    const { rows } = await pool.query('delete from account_notes where id=$1 returning account_id, text', [Number((req.params as { id: string }).id)]);
+    if (rows[0]) await staffEvent(rows[0].account_id, req.user!.email, 'Deleted a note', String(rows[0].text).slice(0, 140));
     return { ok: true };
   });
 
@@ -266,7 +283,31 @@ export function registerPlatform(app: FastifyInstance) {
     return { ok: true };
   });
 
-  // What staff changed: plans, trials, notes, request handling.
+  // Platform email (invitations, password resets, alerts): a Resend key and a From address, stored encrypted.
+  app.get('/api/platform/email', async () => {
+    const { key, from } = await mailConfig();
+    return { configured: !!key, from, keyHint: key ? `${key.slice(0, 5)}…${key.slice(-4)}` : null };
+  });
+  app.put('/api/platform/email', async (req) => {
+    const b = z.object({ resendKey: z.string().trim().max(200).optional(), mailFrom: z.string().trim().max(200).optional() }).parse(req.body);
+    if (b.resendKey !== undefined) {
+      if (b.resendKey && !/^re_[\w-]{8,}$/.test(b.resendKey)) throw Object.assign(new Error('That doesn\'t look like a Resend API key (they start with "re_").'), { statusCode: 400 });
+      await setSetting(PLATFORM, 'resendKey', b.resendKey);
+      await staffEvent(null, req.user!.email, b.resendKey ? 'Set the email key' : 'Removed the email key', null);
+    }
+    if (b.mailFrom !== undefined) {
+      if (b.mailFrom && !/^([^<>]+<)?[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+>?$/.test(b.mailFrom)) throw Object.assign(new Error('Use an address like "CRMagents <hello@yourdomain.com>".'), { statusCode: 400 });
+      await setSetting(PLATFORM, 'mailFrom', b.mailFrom);
+      await staffEvent(null, req.user!.email, 'Changed the From address', b.mailFrom || 'default');
+    }
+    return { ok: true };
+  });
+  app.post('/api/platform/email/test', async (req) => {
+    const b = z.object({ to: z.string().trim().email() }).parse(req.body);
+    return viaResend({ to: b.to, subject: 'CRMagents test email', text: `This is a test from the CRMagents staff console, sent by ${req.user!.email}. Invitations, password resets and alerts will arrive like this.` });
+  });
+
+  // What staff changed: plans, trials, notes, tags and owners, request handling.
   app.get('/api/platform/staff-log', async () => {
     const { rows } = await pool.query(
       `select * from (
@@ -278,6 +319,8 @@ export function registerPlatform(app: FastifyInstance) {
          union all
          select r.updated_at, r.handled_by, r.account_id, coalesce(a.name, r.company), 'Request marked ' || r.status, r.name || ' · ' || r.topic
          from sales_inquiries r left join accounts a on a.id = r.account_id where r.handled_by is not null and r.updated_at is not null
+         union all
+         select e.created_at, e.by_email, e.account_id, a.name, e.what, e.detail from staff_events e left join accounts a on a.id = e.account_id
        ) x order by "at" desc limit 300`);
     return rows;
   });
