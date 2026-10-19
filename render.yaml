@@ -1,4 +1,4 @@
-# Render blueprint: the Nimbus API and its Postgres database.
+# Render blueprint: the Nimbus API. The Postgres database is hosted on Neon (free, no expiry): paste its address as DATABASE_URL.
 # Render dashboard → New → Blueprint → pick this repo. Values marked sync:false are asked for once (see docs/DEPLOY.md).
 services:
   - type: web
@@ -14,10 +14,8 @@ services:
     envVars:
       - key: NODE_VERSION
         value: "22"
-      - key: DATABASE_URL
-        fromDatabase:
-          name: nimbus-db
-          property: connectionString
+      - key: DATABASE_URL        # Neon → Connect → "Pooled connection" string (postgresql://…-pooler….neon.tech/neondb?sslmode=require)
+        sync: false
       - key: TOKEN_ENC_KEY       # 64 hex chars: openssl rand -hex 32. Never change it later (it decrypts stored tokens and keys).
         sync: false
       - key: PUBLIC_URL          # the web address people use (Vercel), e.g. https://nimbus-app.vercel.app
@@ -41,9 +39,3 @@ services:
       - key: MAIL_FROM
         sync: false
 
-databases:
-  - name: nimbus-db
-    region: singapore
-    plan: free               # TRIAL: 1 GB, deleted 30 days after creation unless upgraded. Production: basic-256mb
-    postgresMajorVersion: "16"
-    ipAllowList: []            # reachable only from Render services

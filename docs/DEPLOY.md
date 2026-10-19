@@ -4,7 +4,7 @@
 people ──▶ Vercel (web app, nimbus-app.vercel.app)
               │  /api /oauth /public /hooks /stripe /sf  (rewrites in vercel.json)
               ▼
-           Render web service (API, nimbus-api.onrender.com) ──▶ Render Postgres
+           Render web service (API, nimbus-api.onrender.com) ──▶ Neon Postgres (Singapore)
               ▲
 Salesforce ───┘  Apex/Flow callouts go straight to Render (BRIDGE_URL)
 ```
@@ -12,12 +12,17 @@ Salesforce ───┘  Apex/Flow callouts go straight to Render (BRIDGE_URL)
 People only ever see the Vercel address, so the login cookie stays first-party and the Salesforce OAuth callback
 (`PUBLIC_URL/oauth/callback`) lands on the same site as the session.
 
-## 1. Render (API + database)
+## 0. Neon (database)
+1. neon.tech → sign up → **New project**: name `nimbus`, Postgres 16, region **AWS Asia Pacific (Singapore)**.
+2. **Connect** → turn on **Connection pooling** → copy the connection string. It is `DATABASE_URL` below.
+
+## 1. Render (API)
 1. render.com → **New → Blueprint** → connect GitHub → pick `akshaykalusheCP/CRMagents`. It reads `render.yaml`.
 2. Fill the values it asks for:
 
 | Key | Value |
 |---|---|
+| `DATABASE_URL` | The Neon connection string from step 0 |
 | `TOKEN_ENC_KEY` | Run `openssl rand -hex 32` and paste the output. **Keep a copy safe; never change it.** |
 | `PUBLIC_URL`, `WEB_URL` | Your Vercel address (step 2), e.g. `https://nimbus-app.vercel.app`. Put a placeholder now and fix after step 2. |
 | `BRIDGE_URL` | This service's own URL, e.g. `https://nimbus-api.onrender.com` |
