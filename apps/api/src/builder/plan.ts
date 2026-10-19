@@ -60,6 +60,43 @@ export interface Plan {
   questions: string[];
 }
 
+const arr = <T>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
+const txt = (v: unknown) => (typeof v === 'string' ? v : v == null ? '' : String(v));
+
+/** Fills anything a model left out (non-Claude providers don't always return every field of the schema), so the
+ *  compiler never meets a missing list or text. Pure; tested. */
+export function normalizePlan(raw: unknown): Plan {
+  const p = (raw && typeof raw === 'object' ? raw : {}) as Partial<Plan> & Record<string, unknown>;
+  const steps = arr<Partial<PlanStep>>(p.steps).filter((s) => s && typeof s === 'object').map((s) => ({
+    ...s,
+    action: s.action as Action,
+    instruction: txt(s.instruction),
+    input_fields: arr<string>(s.input_fields),
+    categories: arr<string>(s.categories),
+    outputs: arr<{ name: string; description: string }>(s.outputs),
+    object: txt(s.object),
+    fields: arr<{ field: string; value: string }>(s.fields),
+    subject: txt(s.subject),
+    message: txt(s.message),
+    where: txt(s.where),
+    limit: Number(s.limit) || 0,
+    only_if: s.only_if && typeof s.only_if === 'object' ? { value: txt(s.only_if.value), operator: s.only_if.operator ?? 'equals', compare: txt(s.only_if.compare) } : { value: '', operator: 'equals' as const, compare: '' },
+    per_record: !!s.per_record,
+  }));
+  return {
+    ...p,
+    name: txt(p.name),
+    trigger_kind: (['record', 'manual', 'schedule', 'webhook'] as const).includes(p.trigger_kind as never) ? p.trigger_kind! : 'manual',
+    changed_fields: arr<string>(p.changed_fields),
+    schedule: p.schedule && typeof p.schedule === 'object' ? { every: p.schedule.every ?? 'day', at: txt(p.schedule.at) } : { every: 'day', at: '' },
+    trigger_object: txt(p.trigger_object),
+    conditions: arr<Plan['conditions'][number]>(p.conditions),
+    steps,
+    require_approval: !!p.require_approval,
+    questions: arr<unknown>(p.questions).map(txt).filter(Boolean),
+  };
+}
+
 /** JSON schema for structured output; enums keep the model to real objects and fields. */
 export function planSchema(objects: string[], fields: string[], actions: string[] = []): Record<string, unknown> {
   const fieldEnum = fields.length ? fields : ['Id'];

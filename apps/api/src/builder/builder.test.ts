@@ -260,3 +260,17 @@ test('AI write after a query gets the query results even if the plan forgot to r
   const c2 = compilePlan(plan({ trigger_kind: 'manual', trigger_object: '', steps: [step({ action: 'query', object: 'Lead', fields: [{ field: 'Name', value: '' }] }), step({ action: 'ai_write', instruction: 'Summarise {step1.table}' })] }));
   assert.equal((String(c2.workflow.nodes.find((n) => n.type === 'ai.agent')!.config.prompt).match(/sf_query_1\.table/g) ?? []).length, 1);
 });
+
+test('normalizePlan: fields a non-Claude model left out become empty, so compiling never crashes', async () => {
+  const { normalizePlan } = await import('./plan.js');
+  const p = normalizePlan({ name: 'Case follow-up', trigger_kind: 'record', trigger_object: 'Case', steps: [{ action: 'create_task', subject: 'Follow up' }] });
+  assert.deepEqual(p.questions, []);
+  assert.deepEqual(p.conditions, []);
+  assert.equal(p.steps.length, 1);
+  assert.deepEqual(p.steps[0].fields, []);
+  assert.equal(p.steps[0].only_if.value, '');
+  assert.doesNotThrow(() => compilePlan(p));
+  const empty = normalizePlan(null);
+  assert.equal(empty.trigger_kind, 'manual');
+  assert.deepEqual(empty.steps, []);
+});

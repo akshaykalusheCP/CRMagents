@@ -13,7 +13,7 @@ import { spendGuard } from '../spend.js';
 import { accountOf } from '../tenants.js';
 import { compilePlan } from './compile.js';
 import { conflicts, orgAutomation, rulesContext } from '../smart/orgAutomation.js';
-import { PLANNER_SYSTEM, planSchema, type Plan } from './plan.js';
+import { PLANNER_SYSTEM, normalizePlan, planSchema, type Plan } from './plan.js';
 
 export interface Draft {
   name: string;
@@ -100,7 +100,7 @@ export async function draftWorkflow(tenantId: string, request: string, current?:
 
     const r = await llm.complete({ system: PLANNER_SYSTEM, prompt: ask, schema: planSchema(objectNames, fs.map((f) => f.name), actionKeys), model: config.builderModel });
     usage = addUsage(usage, r.usage);
-    plan = JSON.parse(r.text) as Plan;
+    plan = normalizePlan(JSON.parse(r.text));
     if (plan.questions.length && !plan.steps.length) { errors = []; compiled = compilePlan(plan); break; }
 
     // The model may pick another trigger object than we guessed; validate against that object's fields.

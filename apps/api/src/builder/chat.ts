@@ -59,12 +59,15 @@ export async function builderChat(tenantId: string, messages: ChatMsg[], current
     const r = await llm.complete({ system: CLARIFY_SYSTEM, prompt, schema: CLARIFY_SCHEMA, model: config.builderModel });
     cost += r.usage.costUsd;
     if (!r.reused) await logSpend(tenantId, 'builder chat', last, r.usage);
-    const j = JSON.parse(r.text) as { ready: boolean; request: string; question: string; options: string[] };
-    if (!j.ready && j.question.trim()) {
-      const q = j.question.trim().replace(/[^?]$/, '$&?');
-      return { reply: q, question: q, options: j.options.slice(0, 4), costUsd: cost };
+    // Non-Claude providers may leave fields out: treat missing ones as empty.
+    const raw = JSON.parse(r.text) as Partial<{ ready: boolean; request: string; question: string; options: string[] }>;
+    const question = typeof raw.question === 'string' ? raw.question.trim() : '';
+    const options = Array.isArray(raw.options) ? raw.options.filter((o): o is string => typeof o === 'string') : [];
+    if (!raw.ready && question) {
+      const q = question.replace(/[^?]$/, '$&?');
+      return { reply: q, question: q, options: options.slice(0, 4), costUsd: cost };
     }
-    if (j.request.trim()) request = j.request.trim();
+    if (typeof raw.request === 'string' && raw.request.trim()) request = raw.request.trim();
   }
 
   const draft = await draftWorkflow(tenantId, request, undefined, timezone);
