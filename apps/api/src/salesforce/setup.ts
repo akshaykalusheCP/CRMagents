@@ -49,6 +49,9 @@ async function ensurePackage(tenantId: string, sf: SalesforceClient) {
         SubscriberPackageVersionKey: config.packageVersionId,
         NameConflictResolution: 'Block',
         SecurityType: 'None', // admins only; users get access through the permission set below
+        // Compile only our classes: the default ('all') recompiles every class in the org, so one broken class of
+        // the customer's (e.g. a test that no longer compiles) would block the install.
+        ApexCompileType: 'package',
       });
     } catch (e) {
       if (attempt >= 40 || !/INVALID_CROSS_REFERENCE_KEY/.test(String(e))) throw e;
