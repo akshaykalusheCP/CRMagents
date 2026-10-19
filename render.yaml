@@ -22,7 +22,7 @@ services:
         sync: false
       - key: WEB_URL             # same as PUBLIC_URL
         sync: false
-      - key: BRIDGE_URL          # this service's own address, e.g. https://nimbus-api.onrender.com (Salesforce calls it directly)
+      - key: BRIDGE_URL          # this service's own address, e.g. https://nimbus-api-h5sj.onrender.com (Salesforce calls it directly)
         sync: false
       - key: SF_CLIENT_ID        # the Nimbus Connected App's Consumer Key
         sync: false

@@ -4,7 +4,7 @@
 people ──▶ Vercel (web app, nimbus-app.vercel.app)
               │  /api /oauth /public /hooks /stripe /sf  (rewrites in vercel.json)
               ▼
-           Render web service (API, nimbus-api.onrender.com) ──▶ Neon Postgres (Ohio)
+           Render web service (API, nimbus-api-h5sj.onrender.com) ──▶ Neon Postgres (Ohio)
               ▲
 Salesforce ───┘  Apex/Flow callouts go straight to Render (BRIDGE_URL)
 ```
@@ -25,7 +25,7 @@ People only ever see the Vercel address, so the login cookie stays first-party a
 | `DATABASE_URL` | The Neon connection string from step 0 |
 | `TOKEN_ENC_KEY` | Run `openssl rand -hex 32` and paste the output. **Keep a copy safe; never change it.** |
 | `PUBLIC_URL`, `WEB_URL` | Your Vercel address (step 2), e.g. `https://nimbus-app.vercel.app`. Put a placeholder now and fix after step 2. |
-| `BRIDGE_URL` | This service's own URL, e.g. `https://nimbus-api.onrender.com` |
+| `BRIDGE_URL` | This service's own URL, e.g. `https://nimbus-api-h5sj.onrender.com` |
 | `SF_CLIENT_ID` / `SF_CLIENT_SECRET` | Nimbus Connected App → Consumer Key / Secret |
 | `PLATFORM_ADMINS` | Your email (staff console) |
 | `ANTHROPIC_API_KEY` | Optional platform default |

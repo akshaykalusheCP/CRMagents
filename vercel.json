@@ -5,13 +5,13 @@
   "outputDirectory": "apps/web/dist",
   "framework": null,
   "rewrites": [
-    { "source": "/api/:path*", "destination": "https://nimbus-api.onrender.com/api/:path*" },
-    { "source": "/oauth/:path*", "destination": "https://nimbus-api.onrender.com/oauth/:path*" },
-    { "source": "/public/:path*", "destination": "https://nimbus-api.onrender.com/public/:path*" },
-    { "source": "/hooks/:path*", "destination": "https://nimbus-api.onrender.com/hooks/:path*" },
-    { "source": "/stripe/:path*", "destination": "https://nimbus-api.onrender.com/stripe/:path*" },
-    { "source": "/sf/:path*", "destination": "https://nimbus-api.onrender.com/sf/:path*" },
-    { "source": "/health", "destination": "https://nimbus-api.onrender.com/health" },
+    { "source": "/api/:path*", "destination": "https://nimbus-api-h5sj.onrender.com/api/:path*" },
+    { "source": "/oauth/:path*", "destination": "https://nimbus-api-h5sj.onrender.com/oauth/:path*" },
+    { "source": "/public/:path*", "destination": "https://nimbus-api-h5sj.onrender.com/public/:path*" },
+    { "source": "/hooks/:path*", "destination": "https://nimbus-api-h5sj.onrender.com/hooks/:path*" },
+    { "source": "/stripe/:path*", "destination": "https://nimbus-api-h5sj.onrender.com/stripe/:path*" },
+    { "source": "/sf/:path*", "destination": "https://nimbus-api-h5sj.onrender.com/sf/:path*" },
+    { "source": "/health", "destination": "https://nimbus-api-h5sj.onrender.com/health" },
     { "source": "/(.*)", "destination": "/index.html" }
   ],
   "headers": [
