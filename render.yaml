@@ -5,7 +5,7 @@ services:
     name: nimbus-api
     runtime: node
     region: singapore
-    plan: starter            # always on: scheduled agents and record watchers stop on the free plan (it sleeps)
+    plan: free               # TRIAL: sleeps after 15 min idle, so scheduled agents and watchers pause. Production: starter
     branch: main
     buildCommand: npm ci && npm run typecheck -w apps/api
     startCommand: npm start -w apps/api   # runs database migrations, then listens on $PORT
@@ -44,6 +44,6 @@ services:
 databases:
   - name: nimbus-db
     region: singapore
-    plan: basic-256mb
+    plan: free               # TRIAL: 1 GB, deleted 30 days after creation unless upgraded. Production: basic-256mb
     postgresMajorVersion: "16"
     ipAllowList: []            # reachable only from Render services
