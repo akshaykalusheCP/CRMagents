@@ -1284,7 +1284,7 @@ select.sm { height: 30px; padding: 0 28px 0 8px; font-size: 13px; width: auto; }
 :root:root .tour-dim { position: fixed; inset: 0; background: rgba(10,22,40,.55); pointer-events: auto; }
 :root:root .tour-hole { position: fixed; border-radius: 12px; box-shadow: 0 0 0 9999px rgba(10,22,40,.55), 0 0 0 3px #7a5cff, 0 0 30px rgba(122,92,255,.55); transition: left .35s ease, top .35s ease, width .35s ease, height .35s ease; pointer-events: none; }
 :root:root .tour-card { position: fixed; width: 380px; max-width: calc(100vw - 24px); background: var(--surface); color: var(--text); border-radius: 14px; box-shadow: 0 24px 60px rgba(10,22,40,.35); border: 1px solid var(--border); padding: 18px 20px 16px; pointer-events: auto; transition: left .3s ease, top .3s ease, opacity .2s; }
-:root:root .tour-card[data-ready='false'] { opacity: .0; }
+
 :root:root .tour-card.centred { left: 50%; top: 50%; transform: translate(-50%, -50%); }
 :root:root .tour-card.wide { width: 460px; }
 :root:root .tour-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }

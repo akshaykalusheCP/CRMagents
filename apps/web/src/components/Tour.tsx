@@ -9,8 +9,9 @@ import { createPortal } from 'react-dom';
 export interface TourStep {
   /** Page to show first (App's tab) and, for settings, the section. */
   tab?: string; section?: string;
-  /** What to light up: a CSS selector or a function; none = centred card. */
-  target?: string | (() => Element | null | undefined);
+  /** What to light up: a CSS selector, a list tried in order (first found wins, e.g. a panel, then the page header
+   *  when the panel is empty), or a function; none = centred card. */
+  target?: string | string[] | (() => Element | null | undefined);
   /** Something to do once the page is there (e.g. open a run), before looking for the target. */
   action?: () => void;
   /** Undo what `action` opened (e.g. close a drawer) when the tour moves on or closes. */
@@ -36,7 +37,7 @@ const shown = (el: Element) => { const r = el.getBoundingClientRect(); return r.
 export const visible = (sel: string) => [...document.querySelectorAll(sel)].find(shown) ?? null;
 const find = (t: TourStep['target']) => {
   if (!t) return null;
-  const el = typeof t === 'string' ? visible(t) : t();
+  const el = typeof t === 'string' ? visible(t) : Array.isArray(t) ? t.map(visible).find(Boolean) ?? null : t();
   return el && shown(el) ? el : null;
 };
 
@@ -68,17 +69,21 @@ export function Tour({ tours, go }: { tours: Record<string, TourDef>; go: (tab: 
     setReady(false); setRect(null);
     if (step.tab) go(step.tab, step.section);
     let alive = true, tries = 0, acted = false;
+    // The first target is preferred: it gets a head start (longer when the step opens something first) before a
+    // fallback (e.g. the page header) is accepted. Never more than ~1.5 s without a card.
+    const list = Array.isArray(step.target) ? step.target : step.target ? [step.target] : [];
+    const patience = step.action ? 14 : 6;
     const look = () => {
       if (!alive) return;
-      if (step.action && !acted && tries >= 6) { acted = true; step.action(); }
-      const el = find(step.target);
-      if (el || !step.target || tries > 40) {
+      if (step.action && !acted && tries >= 4) { acted = true; step.action(); }
+      const el = find(list[0] as TourStep['target']) ?? (tries >= patience ? find(list as string[]) : null);
+      if (el || !list.length || tries > (step.action ? 15 : 8)) {
         if (el) { el.scrollIntoView({ block: 'center', behavior: 'instant' as ScrollBehavior }); setRect(el.getBoundingClientRect()); }
         setReady(true); return;
       }
       tries++; setTimeout(look, 100);
     };
-    const t = setTimeout(look, 250);
+    const t = setTimeout(look, 120);
     return () => { alive = false; clearTimeout(t); };
   }, [id, i]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -153,7 +158,6 @@ export function Tour({ tours, go }: { tours: Record<string, TourDef>; go: (tab: 
 }
 
 // ---------- The tours ----------
-const navButton = (label: string) => () => [...document.querySelectorAll('.tnav-links button, .tnav-links a, .side-nav button')].find((b) => b.textContent?.trim().startsWith(label));
 
 /** For visitors: the demo workspace, start to finish (about 2 minutes). */
 export const visitorTour = (signUp: () => void): TourDef => ({
@@ -163,9 +167,9 @@ export const visitorTour = (signUp: () => void): TourDef => ({
     { tab: 'home', target: '.home2-top', title: 'Your day at a glance', body: 'What agents did, what\'s waiting for a person, and what the AI cost today, against the daily budget you set.' },
     { tab: 'home', target: '[aria-label="Suggested agents"]', title: 'Agents it suggests', body: 'Nimbus looks at your Salesforce data (counts only, no AI) and suggests agents worth building: stale deals, cold leads, cases left open.' },
     { tab: 'discover', target: '.dc-hero', title: 'The hand work in your org', body: 'Discover finds what your team does by hand that an agent could do, and how many hours a month it costs. Then it builds the agent and proves it on your own records.' },
-    { tab: 'agents', target: '.tbl-wrap', title: 'Agents, in plain English', body: 'Describe a job in a sentence and the builder turns it into steps you can read. They use your own Flows and Apex.' },
-    { tab: 'approvals', target: '.inbox-detail', title: 'Nothing changes until you say so', body: 'Agents stop here before changing Salesforce. Approve or reject in Nimbus, in the Salesforce bell, or right in Slack.' },
-    { tab: 'activity', action: () => (visible('.tbl tbody tr') as HTMLElement | null)?.click(), leave: () => (document.querySelector('.sheet-back') as HTMLElement | null)?.click(), target: '.chg', title: 'Every change, with one-click undo', body: 'Each change is logged with its old value. Undo a whole run in one click; anything a person edited since is never overwritten.' },
+    { tab: 'agents', target: ['.tbl-wrap', '.ph'], title: 'Agents, in plain English', body: 'Describe a job in a sentence and the builder turns it into steps you can read. They use your own Flows and Apex.' },
+    { tab: 'approvals', target: ['.inbox-detail', '.ph'], title: 'Nothing changes until you say so', body: 'Agents stop here before changing Salesforce. Approve or reject in Nimbus, in the Salesforce bell, or right in Slack.' },
+    { tab: 'activity', action: () => (visible('.tbl tbody tr') as HTMLElement | null)?.click(), leave: () => (document.querySelector('.sheet-back') as HTMLElement | null)?.click(), target: ['.chg', '.ph'], title: 'Every change, with one-click undo', body: 'Each change is logged with its old value. Undo a whole run in one click; anything a person edited since is never overwritten.' },
     { image: { src: '/tour/salesforce-panel.png', alt: 'The Nimbus panel and Suggestions card on a Salesforce Case page' }, title: 'It lives inside Salesforce', body: 'On every record: agents to run, an assistant to ask, approvals, and what agents changed, with Undo. Plus an "Ask Nimbus" button and Flow actions. It sees only what each person can see.' },
     { tab: 'trust', target: '.tour-safeguards', title: 'Your data stays yours', body: 'Personal data is masked before the AI sees it, every AI call is logged exactly as sent, and you choose the AI (Claude, OpenAI or Gemini) with a daily cap.' },
     { tab: 'insights', target: '.briefing', title: 'Your business, in plain English', body: 'A briefing on your Salesforce numbers, dashboards from one sentence, and answers to questions about your data.' },
@@ -174,16 +178,23 @@ export const visitorTour = (signUp: () => void): TourDef => ({
   ],
 });
 
-/** For a new workspace on first sign-in: where things are, then on to the setup steps. */
-export const welcomeTour = (name: string, connect: () => void): TourDef => ({
+/** For signed-in people (once for a new workspace, and from "Take the tour"): opens each page of their own workspace.
+ *  Every step falls back to the page header, so an empty workspace still gets a sensible stop on each page. */
+export const appTour = (o: { name: string; connected: boolean; connect: () => void; newAgent: () => void }): TourDef => ({
   id: 'welcome',
   steps: [
-    { tab: 'home', title: `Welcome to Nimbus${name ? `, ${name}` : ''}`, body: 'A one-minute look around, then you\'ll connect Salesforce and get your first agent working.' },
-    { tab: 'home', target: '.fr', title: 'Your first agent, step by step', body: 'Follow these steps: connect Salesforce, pick a starter agent, try it on a record, turn it on. About 10 minutes.' },
-    { tab: 'home', target: navButton('Agents'), title: 'Agents', body: 'Build agents by describing the job, or start from a proven use case. Assistants answer questions in Salesforce and here.' },
-    { tab: 'home', target: navButton('Approvals'), title: 'Approvals', body: 'Anything an agent wants to change in Salesforce waits here (and in the Salesforce bell) until someone approves.' },
-    { tab: 'home', target: 'button.acct', title: 'Trust center, team and settings', body: 'Your account menu has the Trust center (what the AI saw), your team, Slack and Teams, and settings.' },
-    { title: 'Ready?', body: 'Connect your Salesforce org: you log in on Salesforce\'s own page and Nimbus sets itself up.',
-      ctas: [{ label: 'Later', run: () => {} }, { label: 'Connect Salesforce', primary: true, run: connect }] },
+    { tab: 'home', title: `Welcome to Nimbus${o.name ? `, ${o.name}` : ''}`, body: 'A two-minute look around your workspace: each stop opens the page and shows what it\'s for.' },
+    { tab: 'home', target: ['.fr', '.home2-top', '.ph'], title: o.connected ? 'Your day at a glance' : 'Your first agent, step by step', body: o.connected ? 'What agents did, what\'s waiting for a person and what the AI cost today. Until your first agent is live, the setup steps sit here too.' : 'Connect Salesforce, pick a starter agent, try it on a record, turn it on. About 10 minutes.' },
+    { tab: 'discover', target: ['.dc-hero', '.ph'], title: 'Discover', body: 'Finds the work your team does by hand that an agent could do, and how many hours it costs. Build & prove builds the agent and tests it on your own records.' },
+    { tab: 'agents', target: ['.tbl-wrap', '.ph'], title: 'Agents', body: 'Your agents and assistants. Describe a job in a sentence and the builder turns it into steps you can read; they can use your Flows and Apex.' },
+    { tab: 'approvals', target: ['.inbox-detail', '.inbox', '.ph'], title: 'Approvals', body: 'Agents stop here before changing Salesforce. Approve or reject here, in the Salesforce bell, or in Slack and Teams.' },
+    { tab: 'activity', action: () => (visible('.tbl tbody tr') as HTMLElement | null)?.click(), leave: () => (document.querySelector('.sheet-back') as HTMLElement | null)?.click(), target: ['.chg', '.ph'], title: 'Activity and undo', body: 'Every run, step by step. Each change is logged with its old value, so a whole run can be undone in one click.' },
+    { tab: 'trust', target: ['.tour-safeguards', '.ph'], title: 'Trust center', body: 'How your data is handled, from your live settings: masking, what the AI saw, who did what. Export or delete everything here.' },
+    { tab: 'insights', target: ['.briefing', '.ph'], title: 'Insights', body: 'Your Salesforce numbers in plain English, dashboards from a sentence, and answers to questions about your data.' },
+    o.connected
+      ? { tab: 'home', title: 'Ready to build', body: 'Start with an agent from the suggestions, or describe a job in your own words. Replay this tour any time from the account menu.',
+          ctas: [{ label: 'Later', run: () => {} }, { label: 'Build an agent', primary: true, run: o.newAgent }] }
+      : { tab: 'home', title: 'Ready?', body: 'Connect your Salesforce org: you log in on Salesforce\'s own page and Nimbus sets itself up.',
+          ctas: [{ label: 'Later', run: () => {} }, { label: 'Connect Salesforce', primary: true, run: o.connect }] },
   ],
 });

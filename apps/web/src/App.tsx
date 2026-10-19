@@ -17,7 +17,7 @@ import { Ribbon, type RibbonPalette } from './components/Ribbon';
 import { SETTINGS_SECTIONS, SettingsHub, type SettingsSection } from './pages/SettingsHub';
 import { AlertsBell } from './components/AlertsBell';
 import { LinkPrompt } from './components/PersonLink';
-import { startTour, Tour, tourSeen, visitorTour, welcomeTour } from './components/Tour';
+import { appTour, startTour, Tour, tourSeen, visitorTour } from './components/Tour';
 import { LockedPage, PlanProvider, PlanTag, TrialBanner, UpgradePrompt, usePlanState } from './components/Plan';
 import type { Feature } from '@crmagents/shared';
 import { LogoMark } from './components/Logo';
@@ -127,9 +127,9 @@ export function App() {
     const first = (me?.email ?? '').split('@')[0].split(/[._]/)[0];
     return {
       visitor: visitorTour(() => { location.href = '/?signup'; }),
-      welcome: welcomeTour(first ? first[0].toUpperCase() + first.slice(1) : '', () => openSettings('orgs', true)),
+      welcome: appTour({ name: first ? first[0].toUpperCase() + first.slice(1) : '', connected: tenants.length > 0, connect: () => openSettings('orgs', true), newAgent: () => newAgent() }),
     };
-  }, [me?.email]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [me?.email, tenants.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const tourGo = (t: string, section?: string) => (section ? openSettings(section as SettingsSection) : setTab(t as Tab));
   const planValue = { ...planState, openPlans: () => openSettings('plan') };
   // An alert opens where it can be fixed: the org list for a disconnected org, else the agent's org and the Agents page.
