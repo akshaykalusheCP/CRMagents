@@ -582,7 +582,7 @@ const COLLECTION_SIZE = 200; // sObject Collections: records per call
 // still has the details (and code that matches on error codes keeps working).
 const SF_REASONS: [RegExp, (msg: string, fields: string) => string][] = [
   [/NO_APPLICABLE_PROCESS/, () => 'No approval process in Salesforce matches this record. In Salesforce Setup → Approval Processes, create and activate one for this object whose entry criteria fit this record, or remove the "submit for approval" step (Nimbus\'s own "Approve changes" step needs no setup).'],
-  [/0 recipients|NO_MASS_MAIL_PERMISSION|EMAIL_NOT_PROCESSED_DUE_TO_PRIOR_ERROR/, (m) => /0 recipients/.test(m) ? 'The email had no recipient: the recipient value came out empty. Check the "To"/recipient in that step points at a real user, contact or email address.' : `Salesforce didn't send the email${m ? `: ${m}` : ''}.`],
+  [/0 recipients|NO_MASS_MAIL_PERMISSION|EMAIL_NOT_PROCESSED_DUE_TO_PRIOR_ERROR/, (m) => /0 recipients/.test(m) ? 'The email had no recipient. Salesforce\'s Send email only accepts a Lead, Contact or Person Account in Recipient ID (not a user such as an owner); to email a user, put their email address in Email Addresses. Also check the value isn\'t empty.' : `Salesforce didn't send the email${m ? `: ${m}` : ''}.`],
   [/ALREADY_IN_PROCESS/, () => 'This record is already waiting in a Salesforce approval process.'],
   [/MANAGER_NOT_DEFINED/, () => "The approval process sends to the submitter's manager, but this user has no Manager set in Salesforce."],
   [/FIELD_CUSTOM_VALIDATION_EXCEPTION/, (m) => `A validation rule in Salesforce blocked this change${m ? `: "${m}"` : ''}.`],

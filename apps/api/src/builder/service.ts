@@ -178,6 +178,15 @@ async function validateAgainstOrg(tenantId: string, sf: SalesforceClient, plan: 
     if (s.action !== 'run_action') continue;
     const a = parseActionKey(s.org_action ?? '');
     if (!a) continue; // compile already reported it
+    // Salesforce's "Send email" only delivers to a Lead, Contact or Person Account Id in recipientId; a user Id there
+    // means 0 recipients at run time.
+    if (a.kind === 'standard' && a.name === 'emailSimple') {
+      const val = (k: string) => s.fields.find((f) => f.field === k)?.value.trim() ?? '';
+      if (/(OwnerId|CreatedById|LastModifiedById|UserId|Owner\.Id|\b005\w{12,15})\}*$/.test(val('recipientId'))) {
+        errors.push(`step ${i + 1}: recipientId is a user (${val('recipientId')}); Salesforce only emails a Lead, Contact or Person Account there. Put the user's email in emailAddresses instead (select Owner.Email in the query and use {stepN.first.Owner.Email}) and leave recipientId empty.`);
+      }
+      if (!val('recipientId') && !val('emailAddresses')) errors.push(`step ${i + 1}: the email has no recipient; set emailAddresses (or recipientId for a Lead/Contact).`);
+    }
     // Salesforce's own "Submit for approval" only works with an active Approval Process on that object.
     if (a.kind === 'standard' && a.name === 'submit') {
       const object = plan.trigger_object || s.object;

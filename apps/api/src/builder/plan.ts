@@ -184,6 +184,7 @@ Steps run in order. Actions:
 - attach_file: save text as a file on the triggering record (subject = file name, message = content, usually {stepN.text}).
 - delete_record: delete the triggering record (or the current record inside a per_record query). It goes to the Recycle Bin.
 - run_action: run one of the org's own automations listed under "Org actions" (org_action = its key; fields = its inputs as field=input name, value; fill every input marked *). Outputs: the action's listed outputs. Prefer an existing org action over rebuilding the same logic from steps.
+  standard:emailSimple: recipientId takes ONLY a Lead, Contact or Person Account Id, never a user (OwnerId, CreatedById are users). To email a user such as the record or account owner, put their address in emailAddresses: select Owner.Email in a query and use {stepN.first.Owner.Email}. relatedRecordId = the record the email is about.
 References inside text and values: {record.Field} = field of the triggering record, {stepN.key} = output of step N (1-based; one field of a query's first result is {stepN.first.Field}, e.g. {step1.first.OwnerId} for an email recipient or a lookup value; all of a query's results as text for an AI step or message is {stepN.table}), {trigger.input} = free text passed in, {item.Field} = field of the current record inside a per_record query.
 Rules:
 - "When a customer emails / replies on a case": trigger_object EmailMessage, trigger_event created, condition Incoming equals true; then read_emails, (search_knowledge), ai_write the reply, reply_email.
