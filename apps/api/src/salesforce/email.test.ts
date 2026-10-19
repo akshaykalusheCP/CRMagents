@@ -87,3 +87,9 @@ test('email agents only answer incoming emails, even when the plan forgot to say
   assert.equal(out.status, 'done');
   assert.match(JSON.stringify(st.steps), /Not a customer email/);
 });
+
+test('explainActionError: approval-process failures read in plain English', async () => {
+  const { explainActionError } = await import('./client.js');
+  assert.match(explainActionError('400: [{"errors":[{"statusCode":"NO_APPLICABLE_PROCESS","message":"No applicable approval process was found."}]}]') ?? '', /No approval process in Salesforce matches/);
+  assert.equal(explainActionError('something else'), undefined);
+});

@@ -375,11 +375,15 @@ export class SalesforceClient {
 
   /** Runs one action with one set of inputs. Throws with Salesforce's message when it reports a failure. */
   async runAction(kind: ActionKind, name: string, inputs: Record<string, unknown>) {
-    const r = await this.call<{ isSuccess: boolean; outputValues: Record<string, unknown> | null; errors: { message: string }[] | null }[]>(
-      'POST', this.actionPath(kind, name), { inputs: [inputs] },
-    );
+    let r: { isSuccess: boolean; outputValues: Record<string, unknown> | null; errors: { statusCode?: string; message: string }[] | null }[];
+    try {
+      r = await this.call('POST', this.actionPath(kind, name), { inputs: [inputs] });
+    } catch (e) { throw new Error(explainActionError(String((e as Error).message ?? e)) ?? (e as Error).message); }
     const first = r[0];
-    if (!first?.isSuccess) throw new Error(first?.errors?.map((e) => e.message).join('; ') || `Action ${name} failed`);
+    if (!first?.isSuccess) {
+      const raw = first?.errors?.map((x) => `${x.statusCode ?? ''} ${x.message}`).join('; ') ?? '';
+      throw new Error(explainActionError(raw) ?? (first?.errors?.map((x) => x.message).join('; ') || `Action ${name} failed`));
+    }
     return compactRecord(first.outputValues ?? {}) as Record<string, unknown>;
   }
 
@@ -573,6 +577,14 @@ export class SalesforceClient {
 const BATCH_SIZE = 25; // composite batch: subrequests per call
 const COLLECTION_SIZE = 200; // sObject Collections: records per call
 /** Above this many rows/records, a Bulk API 2.0 job uses fewer calls than paging or collections. */
+/** Plain-English reasons for common Salesforce action failures (the raw error stays in the run log). Pure; tested. */
+export function explainActionError(raw: string): string | undefined {
+  if (/NO_APPLICABLE_PROCESS/.test(raw)) return 'No approval process in Salesforce matches this record. In Salesforce Setup → Approval Processes, create and activate one for this object whose entry criteria fit this record (or remove the "submit for approval" step).';
+  if (/ALREADY_IN_PROCESS/.test(raw)) return 'This record is already waiting in a Salesforce approval process.';
+  if (/MANAGER_NOT_DEFINED/.test(raw)) return "The approval process sends to the submitter's manager, but this user has no Manager set in Salesforce.";
+  return undefined;
+}
+
 export const BULK_OVER = 10_000;
 
 export interface RecordFile { documentId: string; versionId: string; title: string; extension: string; size: number }
