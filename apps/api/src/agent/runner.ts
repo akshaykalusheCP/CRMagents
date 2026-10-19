@@ -22,6 +22,8 @@ export interface AgentSpec {
 }
 
 // Standalone single-agent run (the "Single agents" page). Workflows use the engine instead.
+const ANSWER_CAP_MS = 10 * 60_000;
+
 export async function runAgent(
   tenantId: string, agent: AgentSpec, userInput: string, context?: unknown, history?: { role: 'user' | 'assistant'; text: string }[],
   opts: {
@@ -97,14 +99,19 @@ export async function runAgent(
     };
   }
   opts.onStarted?.(runId);
+  // Heartbeat: a run whose server restarted mid-answer stops beating, and recovery marks it instead of it showing
+  // "Running" forever. A hard cap ends an answer stuck on a provider that never replies.
+  const beat = setInterval(() => { void pool.query('update runs set heartbeat_at=now() where id=$1', [runId]).catch(() => {}); }, 30_000);
+  let capTimer: NodeJS.Timeout | undefined;
+  const cap = new Promise<never>((_, reject) => { capTimer = setTimeout(() => reject(new Error('The answer took too long (over 10 minutes) and was stopped. Ask again, or ask something narrower.')), ANSWER_CAP_MS); });
   try {
-    const r = await aiContext.run({ tenantId, runId }, async () => llm.agent({
+    const r = await Promise.race([cap, aiContext.run({ tenantId, runId }, async () => llm.agent({
       system: systemPrompt,
       prompt: context ? `${userInput}\n\nContext:\n${JSON.stringify(context)}` : userInput,
       // Once guides are uploaded, every assistant can look things up in them (read-only, no AI cost).
       tools: knowledge && !tools.includes('search_knowledge') && (await hasKnowledge(accountId)) ? [...tools, 'search_knowledge'] : knowledge ? tools : tools.filter((t) => t !== 'search_knowledge'),
       history,
-    }));
+    }))]);
     await pool.query(
       `update runs set status='done', output=$2, trace=$3, input_tokens=$4, output_tokens=$5,
          cache_read_tokens=$6, cache_write_tokens=$7, cost_usd=$8 where id=$1`,
@@ -117,6 +124,8 @@ export async function runAgent(
     await pool.query(`update runs set status='error', output=$2 where id=$1`, [runId, e instanceof Error ? e.message : String(e)]);
     throw e;
   } finally {
+    clearInterval(beat);
+    clearTimeout(capTimer);
     endRemote(runId);
   }
 }

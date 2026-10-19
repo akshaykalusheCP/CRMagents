@@ -45,6 +45,11 @@ export function safeToResume(graph: Workflow, st: Pick<RunState, 'cursor' | 'act
 }
 
 export async function recoverRuns(log: { error: (o: unknown, m: string) => void }) {
+  // Assistant answers live in the server's memory: after a restart there is nothing to resume, so say so.
+  await pool.query(
+    `update runs set status='error', output='Interrupted: the server restarted while answering. Ask again.'
+     where status='running' and workflow_id is null and coalesce(heartbeat_at, created_at) < now() - ($1 || ' milliseconds')::interval`,
+    [String(STALE_MS)]).catch((e) => log.error({ err: String(e) }, 'assistant recovery failed'));
   const { rows } = await pool.query(
     `select id, tenant_id, state from runs where status='running' and workflow_id is not null
        and coalesce(heartbeat_at, created_at) < now() - ($1 || ' milliseconds')::interval limit 20`, [String(STALE_MS)]);
