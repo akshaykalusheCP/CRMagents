@@ -200,6 +200,13 @@ function serverToolFor(def: Anthropic.ToolUnion, model: string): Anthropic.ToolU
   return def;
 }
 
+/** Text from a model's JSON field, or '' when a provider left it out. */
+export const asText = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' : String(v));
+/** A list from a model's JSON field, or [] when a provider left it out. */
+export const asList = <T = unknown>(v: unknown): T[] => (Array.isArray(v) ? (v as T[]) : []);
+
+/** The JSON object in a model's reply. Claude returns exactly the schema; other providers sometimes wrap it in
+ *  ```json fences or prose, or leave fields out, so callers read fields with asText/asList. */
 export function parseJsonLoose(text: string): any {
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');

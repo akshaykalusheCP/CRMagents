@@ -1,4 +1,5 @@
 import { pool } from '../db.js';
+import { asText, parseJsonLoose } from '../agent/llm.js';
 import { draftWorkflow } from '../builder/service.js';
 import { saveVersion } from '../engine/admin.js';
 import { logSpend, setup } from '../insights/ai.js';
@@ -200,7 +201,8 @@ export async function explainObject(tenantId: string, object: string) {
     `Problems found by code: ${x.findings.filter((f) => f.object === object).map((f) => f.title).join('; ') || 'none'}`].join('\n\n').slice(0, 24_000);
   const r = await llm.complete({ system: 'You explain Salesforce automation to business admins in plain English. Be concrete and short. Never invent behavior that is not in the description.', prompt, schema: EXPLAIN_SCHEMA, model: config.builderModel });
   if (!r.reused) await logSpend(tenantId, 'automation x-ray', object, r.usage);
-  const j = JSON.parse(r.text) as { summary: string; risks: string; replacement: string };
+  const raw = parseJsonLoose(r.text);
+  const j = { summary: asText(raw.summary), risks: asText(raw.risks), replacement: asText(raw.replacement) };
   return { object, ...j, costUsd: r.reused ? 0 : r.usage.costUsd };
 }
 

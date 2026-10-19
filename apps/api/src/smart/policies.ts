@@ -1,4 +1,5 @@
 import { config } from '../config.js';
+import { asList, parseJsonLoose } from '../agent/llm.js';
 import { pool } from '../db.js';
 import { logSpend, setup } from '../insights/ai.js';
 import type { SalesforceClient } from '../salesforce/client.js';
@@ -103,7 +104,8 @@ export async function compileRule(tenantId: string, text: string, defaultTz: str
     schema: SCHEMA, model: config.builderModel,
   });
   if (!r.reused) await logSpend(tenantId, 'rule', text.slice(0, 120), r.usage);
-  const j = JSON.parse(r.text) as Rule & { understood: boolean };
+  const j = parseJsonLoose(r.text) as Rule & { understood: boolean };
+  j.days = asList<number>(j.days);
   if (!j.understood) throw new Error('That does not read like a rule about what agents may do. Try "Never email customers on weekends".');
   try { new Intl.DateTimeFormat('en-US', { timeZone: j.timezone }); } catch { j.timezone = defaultTz; }
   j.days = [...new Set(j.days.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))];

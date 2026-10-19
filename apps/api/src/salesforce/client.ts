@@ -228,7 +228,10 @@ export class SalesforceClient {
         markExhausted(this.tenantId);
         throw Object.assign(new Error('This Salesforce org has used its whole daily API allowance. Nimbus resumes automatically as the allowance frees up over the next hours.'), { statusCode: 429 });
       }
-      throw new Error(`Salesforce ${method} ${path.split('?')[0]} -> ${res.status}: ${text}`);
+      const raw = `Salesforce ${method} ${path.split('?')[0]} -> ${res.status}: ${text}`;
+      // Reads keep the raw error: SOQL errors are fed back to the AI to correct its query.
+      const plain = method === 'GET' ? undefined : explainSalesforceError(text);
+      throw new Error(plain ? `${plain}\n\nDetails: ${raw}` : raw);
     }
     return res;
   }
@@ -376,13 +379,11 @@ export class SalesforceClient {
   /** Runs one action with one set of inputs. Throws with Salesforce's message when it reports a failure. */
   async runAction(kind: ActionKind, name: string, inputs: Record<string, unknown>) {
     let r: { isSuccess: boolean; outputValues: Record<string, unknown> | null; errors: { statusCode?: string; message: string }[] | null }[];
-    try {
-      r = await this.call('POST', this.actionPath(kind, name), { inputs: [inputs] });
-    } catch (e) { throw new Error(explainActionError(String((e as Error).message ?? e)) ?? (e as Error).message); }
+    r = await this.call('POST', this.actionPath(kind, name), { inputs: [inputs] });
     const first = r[0];
     if (!first?.isSuccess) {
       const raw = first?.errors?.map((x) => `${x.statusCode ?? ''} ${x.message}`).join('; ') ?? '';
-      throw new Error(explainActionError(raw) ?? (first?.errors?.map((x) => x.message).join('; ') || `Action ${name} failed`));
+      throw new Error(explainSalesforceError(raw) ?? (first?.errors?.map((x) => x.message).join('; ') || `Action ${name} failed`));
     }
     return compactRecord(first.outputValues ?? {}) as Record<string, unknown>;
   }
@@ -577,13 +578,40 @@ export class SalesforceClient {
 const BATCH_SIZE = 25; // composite batch: subrequests per call
 const COLLECTION_SIZE = 200; // sObject Collections: records per call
 /** Above this many rows/records, a Bulk API 2.0 job uses fewer calls than paging or collections. */
-/** Plain-English reasons for common Salesforce action failures (the raw error stays in the run log). Pure; tested. */
-export function explainActionError(raw: string): string | undefined {
-  if (/NO_APPLICABLE_PROCESS/.test(raw)) return 'No approval process in Salesforce matches this record. In Salesforce Setup → Approval Processes, create and activate one for this object whose entry criteria fit this record (or remove the "submit for approval" step).';
-  if (/ALREADY_IN_PROCESS/.test(raw)) return 'This record is already waiting in a Salesforce approval process.';
-  if (/MANAGER_NOT_DEFINED/.test(raw)) return "The approval process sends to the submitter's manager, but this user has no Manager set in Salesforce.";
+// Salesforce error codes people actually hit, in plain words. The original error is kept after it, so the run log
+// still has the details (and code that matches on error codes keeps working).
+const SF_REASONS: [RegExp, (msg: string, fields: string) => string][] = [
+  [/NO_APPLICABLE_PROCESS/, () => 'No approval process in Salesforce matches this record. In Salesforce Setup → Approval Processes, create and activate one for this object whose entry criteria fit this record, or remove the "submit for approval" step (Nimbus\'s own "Approve changes" step needs no setup).'],
+  [/ALREADY_IN_PROCESS/, () => 'This record is already waiting in a Salesforce approval process.'],
+  [/MANAGER_NOT_DEFINED/, () => "The approval process sends to the submitter's manager, but this user has no Manager set in Salesforce."],
+  [/FIELD_CUSTOM_VALIDATION_EXCEPTION/, (m) => `A validation rule in Salesforce blocked this change${m ? `: "${m}"` : ''}.`],
+  [/REQUIRED_FIELD_MISSING/, (m, f) => `Salesforce needs a value for a required field${f ? ` (${f})` : ''}${m && !f ? `: ${m}` : ''}.`],
+  [/ENTITY_IS_LOCKED/, () => 'This record is locked in Salesforce (usually because it is in an approval process), so it cannot be changed right now.'],
+  [/INSUFFICIENT_ACCESS/, () => "The Salesforce user Nimbus works as isn't allowed to do this (sharing, profile or permission set). Give that user access, or turn on acting as each person."],
+  [/INVALID_OR_NULL_FOR_RESTRICTED_PICKLIST/, (m, f) => `That value isn't one of the allowed picklist values${f ? ` for ${f}` : ''}${m ? `: ${m}` : ''}.`],
+  [/STRING_TOO_LONG/, (_m, f) => `The text is longer than Salesforce allows${f ? ` for ${f}` : ''}.`],
+  [/DUPLICATES_DETECTED|DUPLICATE_VALUE/, () => 'A duplicate rule in Salesforce blocked this: a matching record already exists.'],
+  [/INVALID_FIELD_FOR_INSERT_UPDATE|INVALID_FIELD\b|No such column/, (m) => `A field the agent uses doesn't exist or can't be edited${m ? `: ${m}` : ''}. Check the field in the agent's steps.`],
+  [/ENTITY_IS_DELETED|NOT_FOUND/, () => 'The record no longer exists in Salesforce (it was deleted or merged).'],
+  [/CANNOT_EXECUTE_FLOW_TRIGGER|CANNOT_INSERT_UPDATE_ACTIVATE_ENTITY/, (m) => `A Flow or Apex trigger in Salesforce failed while saving this record${m ? `: ${m}` : ''}. That automation needs a look in Salesforce.`],
+  [/API_DISABLED_FOR_ORG/, () => "API access isn't enabled for this Salesforce edition or user. Nimbus needs an edition with API access (Enterprise, Unlimited, Developer, or Professional with API add-on)."],
+];
+
+/** Plain-English reason for a Salesforce error body, or undefined when it's not one we know. Pure; tested. */
+export function explainSalesforceError(raw: string): string | undefined {
+  let msg = '';
+  let fields = '';
+  try {
+    const j = JSON.parse(raw.slice(raw.indexOf('[')));
+    const first = Array.isArray(j) ? (j[0]?.errors?.[0] ?? j[0]) : undefined;
+    msg = String(first?.message ?? '').replace(/^[A-Z_]+:\s*/, '').trim();
+    fields = Array.isArray(first?.fields) ? first.fields.join(', ') : '';
+  } catch { /* not JSON */ }
+  for (const [re, say] of SF_REASONS) if (re.test(raw)) return say(msg, fields);
   return undefined;
 }
+/** @deprecated use explainSalesforceError */
+export const explainActionError = explainSalesforceError;
 
 export const BULK_OVER = 10_000;
 

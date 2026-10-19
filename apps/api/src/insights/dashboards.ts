@@ -1,4 +1,5 @@
 import { allowed, apiLevel, assertBudget } from '../salesforce/limits.js';
+import { asList, asText, parseJsonLoose } from '../agent/llm.js';
 import { config } from '../config.js';
 import { pool } from '../db.js';
 import type { SalesforceClient } from '../salesforce/client.js';
@@ -156,10 +157,10 @@ export async function draftDashboard(tenantId: string, prompt: string, opts: { m
   for (let attempt = 0; attempt < 2; attempt++) {
     const r = await llm.complete({ system, prompt: ask, schema: DRAFT_SCHEMA, model: config.insightsModel });
     cost += r.usage.costUsd;
-    const j = JSON.parse(r.text);
-    if (attempt === 0) meta = { name: j.name, description: j.description, questions: j.questions ?? [] };
+    const j = parseJsonLoose(r.text);
+    if (attempt === 0) meta = { name: asText(j.name), description: asText(j.description), questions: asList<unknown>(j.questions).map(asText).filter(Boolean) };
     const failed: { tile: any; error: string }[] = [];
-    for (const raw of (j.tiles ?? []).slice(0, one ? 1 : 8)) {
+    for (const raw of asList<any>(j.tiles).slice(0, one ? 1 : 8)) {
       try { ok.push(await check(sf, toSpec(raw), range)); }
       catch (e) { failed.push({ tile: raw, error: e instanceof Error ? e.message.replace(/^Salesforce GET \S+ -> /, '').slice(0, 300) : String(e) }); }
     }

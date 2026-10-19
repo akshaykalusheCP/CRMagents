@@ -1,4 +1,5 @@
 import { config } from '../config.js';
+import { parseJsonLoose } from '../agent/llm.js';
 import { logSpend, setup } from '../insights/ai.js';
 import { listOrgActions, rankActions } from '../salesforce/actions.js';
 import { detectObjects, objects as listObjects } from '../salesforce/schema.js';
@@ -60,7 +61,7 @@ export async function builderChat(tenantId: string, messages: ChatMsg[], current
     cost += r.usage.costUsd;
     if (!r.reused) await logSpend(tenantId, 'builder chat', last, r.usage);
     // Non-Claude providers may leave fields out: treat missing ones as empty.
-    const raw = JSON.parse(r.text) as Partial<{ ready: boolean; request: string; question: string; options: string[] }>;
+    const raw = parseJsonLoose(r.text) as Partial<{ ready: boolean; request: string; question: string; options: string[] }>;
     const question = typeof raw.question === 'string' ? raw.question.trim() : '';
     const options = Array.isArray(raw.options) ? raw.options.filter((o): o is string => typeof o === 'string') : [];
     if (!raw.ready && question) {

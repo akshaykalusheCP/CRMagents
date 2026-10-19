@@ -172,7 +172,9 @@ export const EXECUTORS: Record<string, Executor> = {
       },
       ...aiOptions(node),
     });
-    return { output: { data: parseJsonLoose(r.text), examplesUsed: examples.length }, usage: r.usage, reused: r.reused };
+    const got = parseJsonLoose(r.text);
+    const data = Object.fromEntries(specs.map((f) => [f.name, got?.[f.name] == null ? '' : got[f.name]]));
+    return { output: { data, examplesUsed: examples.length }, usage: r.usage, reused: r.reused };
   },
 
   async 'sf.query'(node, scope, env) {

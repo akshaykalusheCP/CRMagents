@@ -88,8 +88,11 @@ test('email agents only answer incoming emails, even when the plan forgot to say
   assert.match(JSON.stringify(st.steps), /Not a customer email/);
 });
 
-test('explainActionError: approval-process failures read in plain English', async () => {
-  const { explainActionError } = await import('./client.js');
-  assert.match(explainActionError('400: [{"errors":[{"statusCode":"NO_APPLICABLE_PROCESS","message":"No applicable approval process was found."}]}]') ?? '', /No approval process in Salesforce matches/);
-  assert.equal(explainActionError('something else'), undefined);
+test('explainSalesforceError: common Salesforce failures read in plain English', async () => {
+  const { explainSalesforceError: x } = await import('./client.js');
+  assert.match(x('[{"actionName":"submit","errors":[{"statusCode":"NO_APPLICABLE_PROCESS","message":"No applicable approval process was found."}]}]') ?? '', /No approval process in Salesforce matches/);
+  assert.equal(x('[{"message":"Close date must be in the future","errorCode":"FIELD_CUSTOM_VALIDATION_EXCEPTION","fields":[]}]'), 'A validation rule in Salesforce blocked this change: "Close date must be in the future".');
+  assert.match(x('[{"message":"Required fields are missing: [StageName]","errorCode":"REQUIRED_FIELD_MISSING","fields":["StageName"]}]') ?? '', /required field \(StageName\)/);
+  assert.match(x('[{"message":"insufficient access rights on object id","errorCode":"INSUFFICIENT_ACCESS_OR_READONLY"}]') ?? '', /isn't allowed/);
+  assert.equal(x('something else'), undefined);
 });

@@ -1,4 +1,5 @@
 import { NODE_DEF_BY_TYPE, type Workflow } from '@crmagents/shared';
+import { asList, asText, parseJsonLoose } from '../agent/llm.js';
 import { config } from '../config.js';
 import { pool } from '../db.js';
 import { logSpend, setup } from '../insights/ai.js';
@@ -64,7 +65,8 @@ export async function diagnoseRun(tenantId: string, runId: string): Promise<Diag
   ].filter(Boolean).join('\n\n');
   const r = await llm.complete({ system: 'You fix failing Salesforce automation steps. Be brief and concrete. Only propose changes you are confident fix the error.', prompt, schema: SCHEMA, model: config.builderModel });
   if (!r.reused) await logSpend(tenantId, 'diagnose', error.slice(0, 120), r.usage);
-  const j = JSON.parse(r.text) as { explanation: string; action: Diagnosis['action']; can_fix: boolean; changes: { key: string; value: string }[]; summary: string };
+  const raw = parseJsonLoose(r.text);
+  const j = { explanation: asText(raw.explanation), action: raw.action as Diagnosis['action'], can_fix: !!raw.can_fix, changes: asList<any>(raw.changes).filter((c) => c && typeof c.key === 'string').map((c) => ({ key: c.key as string, value: asText(c.value) })), summary: asText(raw.summary) };
   const allowed = new Set(def?.fields.map((f) => f.key) ?? []);
   const changes = Object.fromEntries(j.changes.filter((c) => allowed.has(c.key)).map((c) => [c.key, c.value]));
   return {

@@ -1,7 +1,7 @@
 import { aiClient } from '../agent/provider.js';
 import { listDocuments } from '../knowledge/store.js';
 import type { Workflow } from '@crmagents/shared';
-import { createLlm } from '../agent/llm.js';
+import { createLlm, parseJsonLoose } from '../agent/llm.js';
 import { addUsage, emptyUsage, type Usage } from '../agent/pricing.js';
 import { dbResultCache } from '../agent/resultCache.js';
 import { config } from '../config.js';
@@ -100,7 +100,7 @@ export async function draftWorkflow(tenantId: string, request: string, current?:
 
     const r = await llm.complete({ system: PLANNER_SYSTEM, prompt: ask, schema: planSchema(objectNames, fs.map((f) => f.name), actionKeys), model: config.builderModel });
     usage = addUsage(usage, r.usage);
-    plan = normalizePlan(JSON.parse(r.text));
+    plan = normalizePlan(parseJsonLoose(r.text));
     if (plan.questions.length && !plan.steps.length) { errors = []; compiled = compilePlan(plan); break; }
 
     // The model may pick another trigger object than we guessed; validate against that object's fields.
@@ -178,6 +178,12 @@ async function validateAgainstOrg(tenantId: string, sf: SalesforceClient, plan: 
     if (s.action !== 'run_action') continue;
     const a = parseActionKey(s.org_action ?? '');
     if (!a) continue; // compile already reported it
+    // Salesforce's own "Submit for approval" only works with an active Approval Process on that object.
+    if (a.kind === 'standard' && a.name === 'submit') {
+      const object = plan.trigger_object || s.object;
+      const procs = object ? await sf.query(`SELECT Id FROM ProcessDefinition WHERE TableEnumOrId = '${object.replace(/[^\w]/g, '')}' AND State = 'Active' LIMIT 1`).catch(() => null) : null;
+      if (!procs?.records.length) errors.push(`step ${i + 1}: ${object || 'this object'} has no active Salesforce approval process, so standard:submit would fail. Remove this step and set require_approval = true (Nimbus's own approval) instead.`);
+    }
     try {
       const d = await describeOrgAction(tenantId, sf, a.kind, a.name);
       const names = new Set(d.inputs.map((x) => x.name));

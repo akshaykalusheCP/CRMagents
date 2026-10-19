@@ -1,5 +1,5 @@
 import { aiClient } from '../agent/provider.js';
-import { createLlm, type Llm } from '../agent/llm.js';
+import { asList, asText, createLlm, parseJsonLoose, type Llm } from '../agent/llm.js';
 import type { Usage } from '../agent/pricing.js';
 import { dbResultCache } from '../agent/resultCache.js';
 import { config } from '../config.js';
@@ -81,7 +81,12 @@ Use only the numbers given. Plain words, no jargon, no filler, no hedging.
     schema: SUMMARY_SCHEMA,
     model: config.insightsModel,
   });
-  const j = JSON.parse(r.text) as Omit<Summary, 'costUsd' | 'reused'>;
+  const raw = parseJsonLoose(r.text);
+  const j: Omit<Summary, 'costUsd' | 'reused'> = {
+    headline: asText(raw.headline),
+    highlights: asList<any>(raw.highlights).map((h) => ({ title: asText(h?.title), detail: asText(h?.detail), tone: (['good', 'watch', 'bad'].includes(h?.tone) ? h.tone : 'watch') as Summary['highlights'][number]['tone'] })),
+    actions: asList<any>(raw.actions).map((a) => ({ title: asText(a?.title), detail: asText(a?.detail) })),
+  };
   // Hard caps in case the model runs long: the card must stay scannable.
   const words = (t: string, n: number) => {
     const clean = t.replace(/[\s'"`{}[\]():#,;|]+$/, '').trim(); // models sometimes leave stray JSON/markdown at the end
@@ -180,7 +185,8 @@ Rules: valid SOQL only (GROUP BY with aggregates and aliases, date literals like
   for (let attempt = 0; attempt < 2; attempt++) {
     const r = await llm.complete({ system, prompt, schema: ASK_SCHEMA, model: config.insightsModel });
     total += r.usage.costUsd;
-    const j = JSON.parse(r.text) as { soql: string; title: string; chart: Answer['chart']; label_column: string; value_column: string; explanation: string };
+    const raw = parseJsonLoose(r.text);
+    const j = { soql: asText(raw.soql), title: asText(raw.title) || question, chart: (raw.chart ?? 'table') as Answer['chart'], label_column: asText(raw.label_column), value_column: asText(raw.value_column), explanation: asText(raw.explanation) };
     try {
       const { columns, rows } = await runSoql(sf, j.soql);
       const pick = (want: string, fallback?: string) => columns.find((c) => c === want) ?? columns.find((c) => c.toLowerCase() === want.toLowerCase()) ?? fallback ?? '';

@@ -1,4 +1,5 @@
 import { config } from '../config.js';
+import { asText, parseJsonLoose } from './llm.js';
 import { pool } from '../db.js';
 import { logSpend, setup } from '../insights/ai.js';
 import { websiteSpec } from './publicChat.js';
@@ -141,7 +142,8 @@ async function runTests(tenantId: string, runId: string, spec: { id: string; sys
           system: JUDGE_SYSTEM, schema: JUDGE_SCHEMA, model: config.builderModel,
           prompt: `Question: ${t.question}\n\nExpected answer:\n${t.expect}\n\nAssistant's answer:\n${answer.slice(0, 6000)}`,
         });
-        const v = JSON.parse(j.text) as { pass: boolean; reason: string };
+        const p = parseJsonLoose(j.text);
+        const v = { pass: p.pass === true, reason: asText(p.reason) || 'The answer did not match what was expected.' };
         if (!j.reused) { runCost += j.usage.costUsd; await logSpend(tenantId, 'assistant test', t.question, j.usage); }
         if (!v.pass) reasons.push(v.reason);
       } catch (e) {
