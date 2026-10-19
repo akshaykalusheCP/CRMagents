@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "start": "tsx src/index.ts",
     "dev": "tsx watch --env-file=../../.env src/index.ts",
     "build": "tsc -p .",
     "typecheck": "tsc -p . --noEmit",
@@ -15,13 +16,16 @@
     "fastify": "^5.0.0",
     "mammoth": "^1.13.0",
     "pg": "^8.13.0",
+    "tsx": "^4.19.0",
     "unpdf": "^1.9.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/pg": "^8.11.0",
-    "tsx": "^4.19.0",
     "typescript": "^5.6.0"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

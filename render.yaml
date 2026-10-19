@@ -1,0 +1,49 @@
+# Render blueprint: the Nimbus API and its Postgres database.
+# Render dashboard → New → Blueprint → pick this repo. Values marked sync:false are asked for once (see docs/DEPLOY.md).
+services:
+  - type: web
+    name: nimbus-api
+    runtime: node
+    region: singapore
+    plan: starter            # always on: scheduled agents and record watchers stop on the free plan (it sleeps)
+    branch: main
+    buildCommand: npm ci && npm run typecheck -w apps/api
+    startCommand: npm start -w apps/api   # runs database migrations, then listens on $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: nimbus-db
+          property: connectionString
+      - key: TOKEN_ENC_KEY       # 64 hex chars: openssl rand -hex 32. Never change it later (it decrypts stored tokens and keys).
+        sync: false
+      - key: PUBLIC_URL          # the web address people use (Vercel), e.g. https://nimbus-app.vercel.app
+        sync: false
+      - key: WEB_URL             # same as PUBLIC_URL
+        sync: false
+      - key: BRIDGE_URL          # this service's own address, e.g. https://nimbus-api.onrender.com (Salesforce calls it directly)
+        sync: false
+      - key: SF_CLIENT_ID        # the Nimbus Connected App's Consumer Key
+        sync: false
+      - key: SF_CLIENT_SECRET
+        sync: false
+      - key: SF_LOGIN_URL
+        value: https://login.salesforce.com
+      - key: PLATFORM_ADMINS     # staff console access (comma-separated emails)
+        sync: false
+      - key: ANTHROPIC_API_KEY   # optional platform default; workspaces can add their own keys in Settings
+        sync: false
+      - key: RESEND_API_KEY      # optional: invite / password-reset / alert emails
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+
+databases:
+  - name: nimbus-db
+    region: singapore
+    plan: basic-256mb
+    postgresMajorVersion: "16"
+    ipAllowList: []            # reachable only from Render services
