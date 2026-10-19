@@ -32,11 +32,11 @@ People only ever see the Vercel address, so the login cookie stays first-party a
 | `RESEND_API_KEY`, `MAIL_FROM` | Optional, for invite and reset emails |
 
 3. **Apply.** The first deploy runs every database migration, then `/health` turns green.
-4. If the service name was taken, Render gives a different URL: update the 7 Render addresses in `vercel.json`.
+4. If the service name was taken, Render gives a different URL: update the Render addresses in `apps/web/vercel.json`.
 
 ## 2. Vercel (web app)
 1. vercel.com → **Add New → Project** → import the same repo.
-2. Keep **Root Directory** as the repo root (`vercel.json` sets install, build and output). **Deploy.**
+2. On the "web" app click **Import single project** (Root Directory `apps/web`; `apps/web/vercel.json` sets install, build and rewrites). **Deploy.**
 3. Copy the address, then in Render set `PUBLIC_URL` and `WEB_URL` to it (that redeploys the API).
 
 ## 3. Salesforce Connected App
