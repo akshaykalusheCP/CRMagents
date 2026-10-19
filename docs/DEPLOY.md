@@ -14,7 +14,8 @@ People only ever see the Vercel address, so the login cookie stays first-party a
 
 ## 0. Neon (database)
 1. neon.tech → sign up → **New project**: name `nimbus`, Postgres 16, region **AWS US East 2 (Ohio)** (the API runs in Render's Ohio region next to it).
-2. **Connect** → turn on **Connection pooling** → copy the connection string. It is `DATABASE_URL` below.
+2. **Connect** → turn **Connection pooling OFF** → copy the connection string (no `-pooler` in the host; drop `&channel_binding=require`).
+   It is `DATABASE_URL` below. The background worker uses session-level Postgres locks, which a transaction pooler breaks.
 
 ## 1. Render (API)
 1. render.com → **New → Blueprint** → connect GitHub → pick `akshaykalusheCP/CRMagents`. It reads `render.yaml`.
@@ -46,6 +47,14 @@ In the org that owns the Nimbus Connected App: Setup → App Manager → Nimbus 
 ## 4. Check
 - `https://<vercel address>/health` → `{"ok":true}`
 - Sign up, connect a Salesforce org, run an agent, and run a Flow that uses "Run Nimbus agent".
+
+## Free-plan limits (trial)
+- Render free sleeps after 15 min without traffic: schedules, record watchers and wait steps pause until someone
+  opens the app (first request takes ~50 s). Upgrade nimbus-api to Starter before real customers.
+- While the API is awake, its worker touches the database every minute, so Neon's compute stays on. Watch Neon →
+  Usage; the free plan's monthly compute hours run out if it is kept awake around the clock.
+- Without `RESEND_API_KEY` + `MAIL_FROM`, "Forgot password" and invite emails are not sent (admins can still copy
+  invite and reset links from the Team page).
 
 ## Notes
 - Every push to `main` deploys both (Render autoDeploy, Vercel git integration).

@@ -25,7 +25,7 @@ public with sharing class CRMClient {
         System.HttpRequest req = new System.HttpRequest();
         req.setEndpoint(c.Base_Url__c.removeEnd('/') + pathAndQuery);
         req.setMethod(method);
-        req.setTimeout(Math.max(1000, Math.min(timeoutMs, remainingCalloutMs)));
+        req.setTimeout(System.Math.max(1000, System.Math.min(timeoutMs, remainingCalloutMs)));
         req.setHeader('Content-Type', 'application/json');
         req.setHeader('X-CRM-Org', System.UserInfo.getOrganizationId());
         req.setHeader('X-CRM-Timestamp', ts);

@@ -6,9 +6,20 @@ import { pool } from '../db.js';
 import { getSfConfig } from '../settings.js';
 import { forgetPersonToken, primeAccessToken } from './client.js';
 
-// Phase 1: in-memory. Move to Postgres/Redis before running more than one instance.
+// Logins in progress are kept in Postgres (encrypted), so a restart or deploy mid-login doesn't lose them.
 interface OwnApp { clientId: string; clientSecret?: string }
-const pending = new Map<string, { verifier: string; loginUrl: string; accountId: string; own?: OwnApp; person?: { userId: string; tenantId: string; orgId: string } }>();
+type Pending = { verifier: string; loginUrl: string; accountId: string; own?: OwnApp; person?: { userId: string; tenantId: string; orgId: string } };
+const pending = {
+  async set(state: string, v: Pending) {
+    await pool.query("delete from oauth_pending where created_at < now() - interval '30 minutes'");
+    await pool.query('insert into oauth_pending (state, data_enc) values ($1,$2)', [state, encrypt(JSON.stringify(v))]);
+  },
+  /** Reads and removes it in one step (a state works once). */
+  async take(state: string): Promise<Pending | undefined> {
+    const { rows } = await pool.query("delete from oauth_pending where state=$1 and created_at > now() - interval '30 minutes' returning data_enc", [state]);
+    return rows[0] ? JSON.parse(decrypt(rows[0].data_enc)) as Pending : undefined;
+  },
+};
 
 export const redirectUri = () => `${config.publicUrl}/oauth/callback`;
 const b64url = (b: Buffer) => b.toString('base64url');
@@ -35,7 +46,7 @@ export async function buildAuthorizeUrl(accountId: string, sandbox = false, cust
   const verifier = b64url(randomBytes(32));
   const challenge = b64url(createHash('sha256').update(verifier).digest());
   const state = b64url(randomBytes(16));
-  pending.set(state, { verifier, loginUrl, accountId, own });
+  await pending.set(state, { verifier, loginUrl, accountId, own });
   const p = new URLSearchParams({
     response_type: 'code',
     client_id: sf.clientId,
@@ -61,7 +72,7 @@ export async function buildPersonAuthorizeUrl(accountId: string, tenantId: strin
   const challenge = b64url(createHash('sha256').update(verifier).digest());
   const state = b64url(randomBytes(16));
   const loginUrl = normalizeLoginUrl(t.sf_instance_url);
-  pending.set(state, { verifier, loginUrl, accountId, own, person: { userId, tenantId, orgId: t.sf_org_id } });
+  await pending.set(state, { verifier, loginUrl, accountId, own, person: { userId, tenantId, orgId: t.sf_org_id } });
   const p = new URLSearchParams({ response_type: 'code', client_id: clientId, redirect_uri: redirectUri(), scope: 'api refresh_token', code_challenge: challenge, code_challenge_method: 'S256', prompt: 'login consent', state });
   return `${loginUrl}/services/oauth2/authorize?${p}`;
 }
@@ -69,9 +80,8 @@ export async function buildPersonAuthorizeUrl(accountId: string, tenantId: strin
 export type CallbackResult = { kind: 'org'; tenantId: string } | { kind: 'person'; tenantId: string };
 
 export async function handleCallback(code: string, state: string): Promise<CallbackResult> {
-  const ctx = pending.get(state);
-  if (!ctx) throw new Error('Unknown or expired OAuth state');
-  pending.delete(state);
+  const ctx = await pending.take(state);
+  if (!ctx) throw new Error('This Salesforce login link expired or was already used. Click Connect again.');
   const sf = ctx.own ? { clientId: ctx.own.clientId, clientSecret: ctx.own.clientSecret ?? '' } : await getSfConfig(ctx.accountId);
 
   const body = new URLSearchParams({

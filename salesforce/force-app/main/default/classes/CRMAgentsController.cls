@@ -221,7 +221,7 @@ public with sharing class CRMAgentsController {
                     break;
                 }
             }
-            List<SObject> rows = Database.queryWithBinds(
+            List<SObject> rows = System.Database.queryWithBinds(
                 'SELECT ' + String.join(fields, ',') + ' FROM ' + d.getName() + ' WHERE Id = :rid LIMIT 1',
                 new Map<String, Object>{ 'rid' => rid }, AccessLevel.USER_MODE
             );

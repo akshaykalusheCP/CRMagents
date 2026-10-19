@@ -16,12 +16,12 @@ public with sharing class CRMToolRunner {
             Map<String, Object> r = new Map<String, Object>{ 'id' => c.get('id') };
             Map<String, Object> input = c.get('input') == null ? new Map<String, Object>() : (Map<String, Object>) c.get('input');
             // One failed change never leaves half of it behind.
-            System.Savepoint sp = Database.setSavepoint();
+            System.Savepoint sp = System.Database.setSavepoint();
             try {
                 r.put('result', one((String) c.get('name'), input));
                 r.put('ok', true);
             } catch (Exception e) {
-                Database.rollback(sp);
+                System.Database.rollback(sp);
                 r.put('ok', false);
                 r.put('error', e.getMessage());
             }
@@ -50,12 +50,12 @@ public with sharing class CRMToolRunner {
         }
         String q = soql.trim();
         // Keep it small: the assistant only sees the first rows anyway.
-        if (!Pattern.compile('(?i)\\blimit\\s+\\d+').matcher(q).find() && !Pattern.compile('(?i)\\b(count|sum|avg|min|max)\\s*\\(').matcher(q).find()) {
+        if (!System.Pattern.compile('(?i)\\blimit\\s+\\d+').matcher(q).find() && !System.Pattern.compile('(?i)\\b(count|sum|avg|min|max)\\s*\\(').matcher(q).find()) {
             q += ' LIMIT 200';
         }
-        List<SObject> rows = Database.query(q, AccessLevel.USER_MODE);
+        List<SObject> rows = System.Database.query(q, AccessLevel.USER_MODE);
         List<SObject> shown = new List<SObject>();
-        for (Integer i = 0; i < Math.min(rows.size(), MAX_ROWS); i++) {
+        for (Integer i = 0; i < System.Math.min(rows.size(), MAX_ROWS); i++) {
             shown.add(rows[i]);
         }
         return new Map<String, Object>{ 'totalSize' => rows.size(), 'records' => System.JSON.deserializeUntyped(System.JSON.serialize(shown)) };
@@ -72,13 +72,13 @@ public with sharing class CRMToolRunner {
         List<String> names = new List<String>();
         for (Object f : fields) {
             String n = String.valueOf(f);
-            if (!Pattern.matches('[A-Za-z][\\w.]*', n)) {
+            if (!System.Pattern.matches('[A-Za-z][\\w.]*', n)) {
                 throw new ToolException('Bad field name ' + n);
             }
             names.add(n);
         }
         Id rid = (Id) recordId;
-        List<SObject> rows = Database.queryWithBinds(
+        List<SObject> rows = System.Database.queryWithBinds(
             'SELECT ' + String.join(names, ',') + ' FROM ' + rid.getSObjectType().getDescribe().getName() + ' WHERE Id = :rid LIMIT 1',
             new Map<String, Object>{ 'rid' => rid }, AccessLevel.USER_MODE
         );
@@ -182,7 +182,7 @@ public with sharing class CRMToolRunner {
         if (names.isEmpty()) {
             return out;
         }
-        List<SObject> rows = Database.queryWithBinds(
+        List<SObject> rows = System.Database.queryWithBinds(
             'SELECT ' + String.join(names, ',') + ' FROM ' + t.getDescribe().getName() + ' WHERE Id = :rid LIMIT 1',
             new Map<String, Object>{ 'rid' => recordId }, AccessLevel.USER_MODE
         );
