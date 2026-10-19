@@ -69,8 +69,12 @@ export function compilePlan(plan: Plan): CompileResult {
 
   // {record.X} / {stepN.key} / {trigger.input} -> {{...}} references, validated as we go.
   let inLoop = false; // set once a per-record query starts; later steps run once per found record
-  const convert = (text: string, upTo: number): string =>
-    String(text ?? '').replace(/\{(record|trigger|item|step(\d+))\.([\w.]+)\}/g, (_m, kind: string, n: string | undefined, path: string) => {
+  const convert = (text: string, upTo: number): string => {
+    const out = String(text ?? '')
+      // One field of a query's first result: models often write {stepN.table[0].Field} or {stepN.records[0].Field};
+      // `table` is text for AI prompts, so those would come out empty. Both mean {stepN.first.Field}.
+      .replace(/\{(step\d+)\.(?:table|records)(?:\[0\]|\.0)?\.([A-Z][\w.]*)\}/g, '{$1.first.$2}')
+      .replace(/\{(record|trigger|item|step(\d+))\.([\w.]+)\}/g, (_m, kind: string, n: string | undefined, path: string) => {
       if (kind === 'item') {
         if (!inLoop) { errors.push(`{item.${path}} is only available after a query step with per_record`); return ''; }
         return `{{item.${path}}}`;
@@ -91,6 +95,12 @@ export function compilePlan(plan: Plan): CompileResult {
       }
       return target.action === 'extract' ? `{{${target.id}.data.${path}}}` : `{{${target.id}.${path}}}`;
     });
+    // Anything still shaped like a reference was not understood: it would be sent to Salesforce as literal text.
+    for (const m of out.matchAll(/(?<!\{)\{(?:record|trigger|item|step\d+)[.[][^{}]*\}(?!\})/g)) {
+      errors.push(`${m[0]} is not a valid reference; use {stepN.first.Field} for one field of a query's first result, {stepN.table} for all results as text`);
+    }
+    return out;
+  };
   const convertQuiet = (text: string, upTo: number) => {
     const before = errors.length;
     const out = convert(text, upTo);
@@ -232,7 +242,7 @@ export function compilePlan(plan: Plan): CompileResult {
         const select = cols.join(', ');
         const where = s.where.trim() ? ` WHERE ${convert(s.where, i)}` : '';
         node = add('sf.query', { soql: `SELECT ${select} FROM ${s.object}${where} LIMIT ${s.limit > 0 ? Math.min(s.limit, 200) : 20}` }, `Find ${s.object}`);
-        keys = 'any';
+        keys = new Set(['first', 'records', 'table', 'totalSize']);
         result = `{{${node.id}.totalSize}} ${s.object} record(s):\n{{${node.id}.table}}`;
         break;
       }

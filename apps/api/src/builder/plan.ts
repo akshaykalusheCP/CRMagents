@@ -184,7 +184,7 @@ Steps run in order. Actions:
 - attach_file: save text as a file on the triggering record (subject = file name, message = content, usually {stepN.text}).
 - delete_record: delete the triggering record (or the current record inside a per_record query). It goes to the Recycle Bin.
 - run_action: run one of the org's own automations listed under "Org actions" (org_action = its key; fields = its inputs as field=input name, value; fill every input marked *). Outputs: the action's listed outputs. Prefer an existing org action over rebuilding the same logic from steps.
-References inside text and values: {record.Field} = field of the triggering record, {stepN.key} = output of step N (1-based; a query's results are {stepN.table}), {trigger.input} = free text passed in, {item.Field} = field of the current record inside a per_record query.
+References inside text and values: {record.Field} = field of the triggering record, {stepN.key} = output of step N (1-based; one field of a query's first result is {stepN.first.Field}, e.g. {step1.first.OwnerId} for an email recipient or a lookup value; all of a query's results as text for an AI step or message is {stepN.table}), {trigger.input} = free text passed in, {item.Field} = field of the current record inside a per_record query.
 Rules:
 - "When a customer emails / replies on a case": trigger_object EmailMessage, trigger_event created, condition Incoming equals true; then read_emails, (search_knowledge), ai_write the reply, reply_email.
 - When the admin mentions guides, documents, knowledge, SOPs, policies or "our troubleshooting steps": search_knowledge, then ai_write, then suggest (or create_task/update_record if they asked for that).

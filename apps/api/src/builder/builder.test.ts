@@ -274,3 +274,19 @@ test('normalizePlan: fields a non-Claude model left out become empty, so compili
   assert.equal(empty.trigger_kind, 'manual');
   assert.deepEqual(empty.steps, []);
 });
+
+test('compile: {stepN.table[0].Field} becomes the first result\'s field; unknown references are reported', () => {
+  const base = { name: 'Email owner', trigger_kind: 'record' as const, trigger_object: 'Opportunity', trigger_event: 'updated' as const, changed_fields: [], schedule: { every: 'day' as const, at: '' }, conditions: [], require_approval: false, questions: [] };
+  const step = (o: Record<string, unknown>) => ({ instruction: '', input_fields: [], categories: [], outputs: [], object: '', fields: [], subject: '', message: '', where: '', limit: 1, only_if: { value: '', operator: 'equals' as const, compare: '' }, per_record: false, ...o });
+  const plan = { ...base, steps: [
+    step({ action: 'query', object: 'Account', fields: [{ field: 'OwnerId', value: '' }], where: "Id = '{record.AccountId}'" }),
+    step({ action: 'run_action', org_action: 'standard:emailSimple', fields: [{ field: 'recipientId', value: '{step1.table[0].OwnerId}' }, { field: 'emailBody', value: 'Won {trigger.input}' }] }),
+  ] } as never;
+  const c = compilePlan(plan);
+  const json = JSON.stringify(c.workflow);
+  assert.match(json, /\.first\.OwnerId\}\}/);
+  assert.doesNotMatch(json, /table\[0\]/);
+  assert.deepEqual(c.errors.filter((e) => /not a valid reference/.test(e)), []);
+  const bad = compilePlan({ ...base, steps: [step({ action: 'query', object: 'Account' }), step({ action: 'create_task', subject: 'Hi {step1.records[2].Name}' })] } as never);
+  assert.ok(bad.errors.some((e) => /not a valid reference/.test(e)), bad.errors.join('; '));
+});
