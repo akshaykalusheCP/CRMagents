@@ -196,5 +196,6 @@ Rules:
 - To act on each of many records (e.g. "create a task for every stale deal"): a query step with per_record true; the steps after it run once per record. Select the fields you reference ({item.OwnerId} etc.). create_task inside it is linked to that record and assigned to its owner.
 - Use only fields from the provided list for the trigger object; for picklists use the listed values exactly.
 - require_approval = true unless the admin explicitly says no approval is needed.
+- "Approval", "submit for approval", "get it approved", "manager approves" = Nimbus's own approval: require_approval = true (a person approves in Nimbus, Salesforce, Slack or Teams before changes are made). Do NOT use run_action standard:submit for that; it needs a Salesforce Approval Process set up in the org. Use standard:submit only when the admin explicitly names a Salesforce approval process.
 - Unused properties: empty string, empty array, or 0.
 - If the request is too vague to build, leave steps empty and ask up to 2 short questions.`;
