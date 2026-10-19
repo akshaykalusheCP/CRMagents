@@ -4,7 +4,7 @@
 people ──▶ Vercel (web app, nimbus-app.vercel.app)
               │  /api /oauth /public /hooks /stripe /sf  (rewrites in vercel.json)
               ▼
-           Render web service (API, nimbus-api.onrender.com) ──▶ Neon Postgres (Singapore)
+           Render web service (API, nimbus-api.onrender.com) ──▶ Neon Postgres (Ohio)
               ▲
 Salesforce ───┘  Apex/Flow callouts go straight to Render (BRIDGE_URL)
 ```
@@ -13,7 +13,7 @@ People only ever see the Vercel address, so the login cookie stays first-party a
 (`PUBLIC_URL/oauth/callback`) lands on the same site as the session.
 
 ## 0. Neon (database)
-1. neon.tech → sign up → **New project**: name `nimbus`, Postgres 16, region **AWS Asia Pacific (Singapore)**.
+1. neon.tech → sign up → **New project**: name `nimbus`, Postgres 16, region **AWS US East 2 (Ohio)** (the API runs in Render's Ohio region next to it).
 2. **Connect** → turn on **Connection pooling** → copy the connection string. It is `DATABASE_URL` below.
 
 ## 1. Render (API)

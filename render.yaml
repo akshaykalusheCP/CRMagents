@@ -4,7 +4,7 @@ services:
   - type: web
     name: nimbus-api
     runtime: node
-    region: singapore
+    region: ohio             # next to the Neon database (AWS us-east-2)
     plan: free               # TRIAL: sleeps after 15 min idle, so scheduled agents and watchers pause. Production: starter
     branch: main
     buildCommand: npm ci && npm run typecheck -w apps/api
