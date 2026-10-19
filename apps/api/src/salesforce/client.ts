@@ -376,10 +376,24 @@ export class SalesforceClient {
     return this.call<ActionDescribe>('GET', this.actionPath(kind, name));
   }
 
+  /** Salesforce's Send email only delivers to a Lead, Contact or Person Account in recipientId. A user there (an owner,
+   *  say) gets 0 recipients, so send to that user's email address instead. */
+  private async emailUsersByAddress(inputs: Record<string, unknown>): Promise<Record<string, unknown>> {
+    const rid = String(inputs.recipientId ?? '').trim();
+    if (!/^005[a-zA-Z0-9]{12}([a-zA-Z0-9]{3})?$/.test(rid)) return inputs;
+    const u = await this.query(`SELECT Email FROM User WHERE Id = '${rid}' LIMIT 1`);
+    const email = (u.records[0] as { Email?: string } | undefined)?.Email;
+    if (!email) return inputs;
+    const { recipientId: _r, ...rest } = inputs;
+    const existing = String(rest.emailAddresses ?? '').trim();
+    return { ...rest, emailAddresses: existing ? `${existing},${email}` : email };
+  }
+
   /** Runs one action with one set of inputs. Throws with Salesforce's message when it reports a failure. */
   async runAction(kind: ActionKind, name: string, inputs: Record<string, unknown>) {
-    let r: { isSuccess: boolean; outputValues: Record<string, unknown> | null; errors: { statusCode?: string; message: string }[] | null }[];
-    r = await this.call('POST', this.actionPath(kind, name), { inputs: [inputs] });
+    if (kind === 'standard' && name === 'emailSimple') inputs = await this.emailUsersByAddress(inputs);
+    const r: { isSuccess: boolean; outputValues: Record<string, unknown> | null; errors: { statusCode?: string; message: string }[] | null }[] =
+      await this.call('POST', this.actionPath(kind, name), { inputs: [inputs] });
     const first = r[0];
     if (!first?.isSuccess) {
       const raw = first?.errors?.map((x) => `${x.statusCode ?? ''} ${x.message}`).join('; ') ?? '';
