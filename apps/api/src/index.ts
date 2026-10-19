@@ -8,6 +8,7 @@ import { dailyBudgetUsd } from './spend.js';
 import { grantAccessToAll, setupOrg } from './salesforce/setup.js';
 import { loadSample, removeSample, sampleStatus } from './salesforce/sample.js';
 import { registerChatApprovals } from './channels/chatApprovals.js';
+import { registerAiKeys } from './agent/keys.js';
 import { TOOLS } from './agent/tools.js';
 import { validateWorkflow, type Workflow } from '@crmagents/shared';
 import { runAgent } from './agent/runner.js';
@@ -74,6 +75,7 @@ registerTwilio(app);
 registerAudit(app);
 registerPlatform(app);
 registerChatApprovals(app);
+registerAiKeys(app);
 
 app.setErrorHandler((err: Error & { statusCode?: number }, _req, reply) => {
   const code = err instanceof z.ZodError ? 400 : (err.statusCode ?? 500);
@@ -177,6 +179,9 @@ app.get('/api/settings', async (req) => {
     // Non-secret settings are returned as values so the form can show them.
     out[name] = PLAIN_SETTINGS.includes(name) ? (v ?? '') : { set: !!v };
   }
+  // AI is ready when the workspace has any key (or the platform provides a default).
+  const { activeKeys } = await import('./agent/keys.js');
+  out.aiReady = (await activeKeys(accountId)).length > 0 || (out.anthropicKey as { set: boolean }).set || (out.providerKey as { set: boolean }).set;
   return out;
 });
 

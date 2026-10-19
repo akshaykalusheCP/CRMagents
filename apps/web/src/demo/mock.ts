@@ -33,6 +33,12 @@ function route(method: string, url: URL, body: any): Response {
   if (p === '/api/platform/integrations') return json({ stripe: false, slack: false });
   if (p === '/api/chat-approvals') return json({ slack: { available: true, connected: true, team: 'Demo Company', channel: '#approvals', by: 'owner@demo-company.com' }, teams: { connected: false, by: null } });
   if (p === '/api/chat-approvals/test') return json({ ok: true });
+  if (p === '/api/ai-keys' && method === 'GET') return json({ platformDefault: false, keys: [
+    { id: 'demo-key-1', label: 'Claude · production', provider: 'anthropic', hint: 'sk-ant-api03-…7Q2c', baseUrl: null, model: null, fastModel: null, priceIn: null, priceOut: null, workspaceId: null, primary: true, backup: false, sort: 0, lastTest: { at: new Date(Date.now() - 36e5).toISOString(), ok: true, ms: 612, model: 'claude-haiku-5-5' }, lastError: null, lastUsedAt: new Date(Date.now() - 6e5).toISOString(), createdAt: '2026-09-01T10:00:00Z' },
+    { id: 'demo-key-2', label: 'OpenAI · backup', provider: 'openai', hint: 'sk-proj-…k9Fa', baseUrl: null, model: 'gpt-5', fastModel: 'gpt-5-mini', priceIn: 1.25, priceOut: 10, workspaceId: null, primary: false, backup: true, sort: 1, lastTest: { at: new Date(Date.now() - 864e5).toISOString(), ok: true, ms: 840, model: 'gpt-5' }, lastError: null, lastUsedAt: null, createdAt: '2026-09-12T10:00:00Z' },
+  ] });
+  if (/^\/api\/ai-keys\/(test|[^/]+\/test)$/.test(p)) return json({ ok: true, ms: 540, model: 'claude-haiku-5-5', reply: 'OK' });
+  if (p.startsWith('/api/ai-keys')) return json({ error: DEMO_ONLY }, 400);
   if (p === '/api/platform/email') return json(method === 'GET' ? { configured: false, from: 'Nimbus <noreply@crmagents.app>', keyHint: null } : { ok: true });
   if (p === '/api/platform/email/test') return json({ ok: false, error: 'No Resend key set' });
   if (p === '/api/platform/staff') return json(['owner@demo-company.com', 'sales@crmagents.example']);
@@ -127,7 +133,7 @@ function route(method: string, url: URL, body: any): Response {
   if (/^\/t\/workflows\/[^/]+\/backtest$/.test(p)) return json(DEMO_BACKTEST);
   if (p === '/t/runs' && method === 'GET') return json(url.searchParams.get('status') === 'waiting' ? DEMO_RUNS.filter((r) => r.status === 'waiting') : DEMO_RUNS);
   if (p === '/api/usage') return json({ runs: 23, costUsd: 0.42, budgetUsd: 2, cacheHitRate: 0.61, tokens: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 } });
-  if (p === '/api/settings') return json({ maskPii: 'on', maskFields: 'Salary__c', maxAiCalls: '', maxToolCalls: '', maxTokens: '', retentionDays: '30', sfClientId: '3MVG9demo', sfLoginUrl: 'https://login.salesforce.com', sfClientSecret: { set: false }, anthropicKey: { set: true }, actAsPerson: 'on', dailyBudgetUsd: '2', anthropicWorkspaceId: '', aiCacheHours: '24', callbackUrl: 'https://app.crmagents.example/oauth/callback' });
+  if (p === '/api/settings') return json({ maskPii: 'on', maskFields: 'Salary__c', maxAiCalls: '', maxToolCalls: '', maxTokens: '', retentionDays: '30', sfClientId: '3MVG9demo', sfLoginUrl: 'https://login.salesforce.com', sfClientSecret: { set: false }, anthropicKey: { set: true }, aiReady: true, actAsPerson: 'on', dailyBudgetUsd: '2', anthropicWorkspaceId: '', aiCacheHours: '24', callbackUrl: 'https://app.crmagents.example/oauth/callback' });
   if (p === '/t/insights/ask') return json({ error: 'Asking questions needs a connected org (this is demo data).' }, 400);
   if (p === '/t/dashboards' && method === 'GET') return json(fx.dashboards);
   if (p === '/t/dashboards/run') return json(body.tiles.map((t: any) => ({ ...fx.dashboard.tiles.find((x: any) => x.title === t.title), ...t })));

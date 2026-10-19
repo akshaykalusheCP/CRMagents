@@ -136,7 +136,7 @@ export interface Settings {
   callbackUrl: string; sfClientId: string; sfLoginUrl: string;
   sfClientSecret: { set: boolean }; anthropicKey: { set: boolean }; dailyBudgetUsd: string; anthropicWorkspaceId: string; aiCacheHours: string;
   maskPii?: string; maskFields?: string; maxAiCalls?: string; maxToolCalls?: string; maxTokens?: string; retentionDays?: string;
-  actAsPerson?: string; memoryEnabled?: string;
+  actAsPerson?: string; memoryEnabled?: string; aiReady?: boolean;
   aiProvider?: string; providerKey?: { set: boolean }; aiBaseUrl?: string; aiModel?: string; aiFastModel?: string; aiPriceIn?: string; aiPriceOut?: string;
   auditInSalesforce?: string; alertEmails?: string; autoPauseAfter?: string;
   twilioSid?: string; twilioToken?: { set: boolean }; twilioSms?: string; twilioWhatsapp?: string;
@@ -200,6 +200,12 @@ export interface AdminRevenue {
   subscriptions: { id: string; name: string; plan: PlanId; status: string; interval: string | null; amountCents: number | null; mrr: number; renewsAt: string | null; purchasedBy: string | null; cancelAtPeriodEnd: boolean | null }[];
 }
 export interface StaffLogItem { at: string; by: string | null; accountId: string | null; accountName: string | null; what: string; detail: string | null }
+export interface AiKey {
+  id: string; label: string; provider: 'anthropic' | 'openai' | 'gemini' | 'compatible'; hint: string; baseUrl: string | null; model: string | null; fastModel: string | null;
+  priceIn: number | null; priceOut: number | null; workspaceId: string | null; primary: boolean; backup: boolean; sort: number;
+  lastTest: { at: string; ok: boolean; ms: number; model: string } | null; lastError: { at: string; message: string } | null; lastUsedAt: string | null; createdAt: string;
+}
+export interface AiKeyInput { label: string; provider: AiKey['provider']; key: string; baseUrl?: string; model?: string; fastModel?: string; priceIn?: number; priceOut?: number; workspaceId?: string }
 export interface SampleStatus { loaded: boolean; counts: Record<string, number>; loadedAt: string | null; allowed: boolean | null; orgKind: string | null }
 export interface AdminUser { id: string; email: string; role: string; createdAt: string; lastLoginAt: string | null; accountId: string; accountName: string; plan: PlanId }
 export interface AdminPayment { id: number; type: string; plan: string | null; amountCents: number | null; currency: string | null; invoiceUrl: string | null; detail: string | null; createdAt: string; accountId: string | null; accountName: string | null }
@@ -414,6 +420,13 @@ export const api = {
   setTeamsApprovals: (webhookUrl: string) => req<{ ok: true }>('PUT', '/api/chat-approvals/teams', { webhookUrl }),
   removeChatApprovals: (kind: 'slack' | 'teams') => req<{ ok: true }>('DELETE', `/api/chat-approvals/${kind}`),
   testChatApprovals: (kind: 'slack' | 'teams') => req<{ ok: boolean; error?: string }>('POST', '/api/chat-approvals/test', { kind }),
+  aiKeys: () => req<{ keys: AiKey[]; platformDefault: boolean }>('GET', '/api/ai-keys'),
+  addAiKey: (b: AiKeyInput & { makePrimary?: boolean }) => req<AiKey>('POST', '/api/ai-keys', b),
+  updateAiKey: (id: string, b: Partial<AiKeyInput> & { backup?: boolean; sort?: number }) => req<AiKey>('PUT', `/api/ai-keys/${id}`, b),
+  removeAiKey: (id: string) => req<{ ok: true }>('DELETE', `/api/ai-keys/${id}`),
+  makePrimaryAiKey: (id: string) => req<{ ok: true }>('POST', `/api/ai-keys/${id}/primary`),
+  testAiKey: (id: string) => req<{ ok: boolean; ms: number; model: string; reply?: string; error?: string }>('POST', `/api/ai-keys/${id}/test`),
+  testNewAiKey: (b: Omit<AiKeyInput, 'label'>) => req<{ ok: boolean; ms: number; model: string; reply?: string; error?: string }>('POST', '/api/ai-keys/test', b),
   grantAccess: (t: string) => req<{ granted: number; total: number }>('POST', `/api/tenants/${t}/grant-access`),
   workflows: (t: string) => req<WorkflowRow[]>('GET', `/api/tenants/${t}/workflows`),
   createWorkflow: (t: string, b: { name: string; graph: Workflow }) => req<{ id: string }>('POST', `/api/tenants/${t}/workflows`, b),

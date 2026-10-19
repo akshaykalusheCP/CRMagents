@@ -1,3 +1,4 @@
+import { claudeKey } from '../agent/keys.js';
 import { anthropicClient } from '../agent/llm.js';
 import { usageFrom } from '../agent/pricing.js';
 import { pool } from '../db.js';
@@ -13,10 +14,10 @@ const MAX_PAGES = 100;
 
 export async function ocrPdf(accountId: string, pdf: Buffer, pages: number, title: string): Promise<string> {
   if (pages > MAX_PAGES) throw new Error(`This scanned PDF has ${pages} pages; reading scans works up to ${MAX_PAGES}. Split it into smaller files.`);
-  const key = await getSetting(accountId, 'anthropicKey');
-  if (!key) throw new Error('Reading scanned PDFs uses Claude: add an Anthropic API key in Settings → AI & spending.');
+  const ck = await claudeKey(accountId);
+  if (!ck) throw new Error('Reading scanned PDFs uses Claude: add a Claude key in Settings → AI & spending.');
   await spendGuard(accountId)(0);
-  const client = anthropicClient(key, await getSetting(accountId, 'anthropicWorkspaceId'));
+  const client = anthropicClient(ck.key, ck.workspaceId ?? undefined);
   // Long transcripts: streamed so the request can't time out.
   const msg = await client.messages.stream({
     model: OCR_MODEL,

@@ -1300,3 +1300,27 @@ select.sm { height: 30px; padding: 0 28px 0 8px; font-size: 13px; width: auto; }
 :root:root .tour-dots i.on { width: 18px; background: var(--accent); }
 :root:root .tour-actions { display: flex; align-items: center; gap: 8px; }
 @media (max-width: 700px) { :root:root .tour-card, :root:root .tour-card.centred, :root:root .tour-card.wide { left: 12px !important; right: 12px; top: auto !important; bottom: 12px; transform: none; width: auto; } }
+
+/* AI keys (Settings › AI & spending) */
+:root:root .aik-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+:root:root .aik-list li { display: flex; justify-content: space-between; align-items: center; gap: 14px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); flex-wrap: wrap; }
+:root:root .aik-list li.primary { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent) 25%, transparent); }
+:root:root .aik-main { display: flex; flex-direction: column; gap: 3px; min-width: 0; flex: 1; }
+:root:root .aik-title { display: flex; align-items: center; gap: 8px; }
+:root:root .aik-title b { font-weight: 600; }
+:root:root .aik-sub { font-size: 13px; color: var(--text-2); }
+:root:root .aik-sub code { font-size: 12px; padding: 1px 6px; border-radius: 4px; background: var(--surface-2); }
+:root:root .aik-test { font-size: 12.5px; color: var(--text-2); display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+:root:root .aik-test .ok { color: var(--ok); } :root:root .aik-test .bad { color: var(--danger); }
+:root:root .aik-warn { color: color-mix(in srgb, var(--warn) 85%, var(--text)); margin-left: 6px; }
+:root:root .aik-actions { display: flex; gap: 6px; align-items: center; }
+:root:root .aik-empty { display: flex; align-items: center; gap: 14px; padding: 16px; border: 1px dashed var(--border-strong); border-radius: 10px; }
+:root:root .aik-empty > div { display: flex; flex-direction: column; gap: 2px; flex: 1; }
+:root:root .aik-empty span { font-size: 13px; color: var(--text-2); }
+:root:root .aik-form { display: flex; flex-direction: column; gap: 14px; }
+:root:root .aik-form .fl { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 500; }
+:root:root .aik-result { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; border-radius: 10px; font-size: 13.5px; line-height: 1.45; }
+:root:root .aik-result.ok { background: color-mix(in srgb, var(--ok) 12%, transparent); color: var(--text); }
+:root:root .aik-result.ok svg { color: var(--ok); flex: none; margin-top: 1px; }
+:root:root .aik-result.bad { background: color-mix(in srgb, var(--danger) 10%, transparent); }
+:root:root .aik-result.bad svg { color: var(--danger); flex: none; margin-top: 1px; }

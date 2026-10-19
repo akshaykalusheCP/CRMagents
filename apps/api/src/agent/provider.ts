@@ -21,6 +21,11 @@ const missing = (what: string) => Object.assign(new Error(`${what} is not config
 /** The AI client for a workspace, or a clear error when its key is missing. */
 /** The workspace's AI client. Every call through it is recorded in the AI call log (trust/aiLog.ts). */
 export async function aiClient(accountId: string, ctx: AiContext = {}): Promise<AiClient> {
+  // The workspace's keys: the primary, with backups tried in order if it fails (agent/keys.ts).
+  const { activeKeys, failoverClient } = await import('./keys.js');
+  const keys = await activeKeys(accountId);
+  if (keys.length) return failoverClient(accountId, keys, ctx);
+  // No keys of its own: the platform's default, if one is set.
   const provider = ((await getSetting(accountId, 'aiProvider')) || 'anthropic') as Provider;
   return withAiLog(await rawClient(accountId, provider), accountId, provider, ctx);
 }

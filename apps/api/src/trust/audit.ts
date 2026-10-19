@@ -82,7 +82,7 @@ export async function listAudit(accountId: string, limit = 200) {
 export async function trustFacts(accountId: string) {
   const s = (k: Parameters<typeof getSetting>[1]) => getSetting(accountId, k);
   const [provider, mask, maskFields, retention, maxAi, maxTools, maxTokens, alerts, budget, memory] = await Promise.all([
-    s('aiProvider'), s('maskPii'), s('maskFields'), s('retentionDays'), s('maxAiCalls'), s('maxToolCalls'), s('maxTokens'), s('alertEmails'), s('dailyBudgetUsd'), s('memoryEnabled')]);
+    import('../agent/keys.js').then((m) => m.primaryProvider(accountId)).then(async (p) => p ?? (await s('aiProvider'))), s('maskPii'), s('maskFields'), s('retentionDays'), s('maxAiCalls'), s('maxToolCalls'), s('maxTokens'), s('alertEmails'), s('dailyBudgetUsd'), s('memoryEnabled')]);
   const { rows: mem } = await pool.query("select count(*) filter (where scope='team')::int team, count(*) filter (where scope='personal')::int personal from memories where account_id=$1", [accountId]);
   const { rows: notes } = await pool.query('select count(*)::int n from record_notes n join tenants t on t.id = n.tenant_id where t.account_id=$1', [accountId]);
   const { rows: orgs } = await pool.query('select id, sf_username as username, sf_instance_url as url, setup_status as status, created_at as "connectedAt" from tenants where account_id=$1', [accountId]);

@@ -11,7 +11,7 @@ import { ChatApprovalsPage } from './ChatApprovals';
 // Settings with a section menu on the left; each section keeps its own page.
 const SECTIONS = [
   { id: 'orgs', label: 'Salesforce orgs', desc: 'Connect orgs and check their status.' },
-  { id: 'ai', label: 'AI & spending', desc: 'Your AI key, daily budget and answer reuse.' },
+  { id: 'ai', label: 'AI & spending', desc: 'AI keys with a primary and backups, a daily budget and answer reuse.' },
   { id: 'plan', label: 'Plan', desc: 'What your workspace includes, what it uses, and upgrades.' },
   { id: 'team', label: 'Team', desc: 'Who can sign in, and what each person may do. Invite people by email.' },
   { id: 'approvals', label: 'Slack & Teams', desc: 'Send approval requests to Slack (approve right in the message) or Microsoft Teams.' },
@@ -33,7 +33,7 @@ export function SettingsHub({ tenants, onChange, tenant, section, focusConnect, 
         </nav>
         <div>
           <div className="ph-text" style={{ marginBottom: 16 }}><h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>{cur.label}</h2><p className="ph-desc">{cur.desc}</p></div>
-          {tab === 'orgs' ? <ConnectionsPage tenants={tenants} onChange={onChange} goSettings={() => setTab('ai')} focusConnect={focusConnect} /> : tab === 'ai' ? <SettingsPage /> : tab === 'team' ? <TeamPage me={me} tenant={tenant} /> : tab === 'plan' ? <PlanPage me={me} openAdmin={openAdmin} /> : tab === 'approvals' ? <ChatApprovalsPage me={me} /> : <RulesPage tenant={tenant} />}
+          {tab === 'orgs' ? <ConnectionsPage tenants={tenants} onChange={onChange} goSettings={() => setTab('ai')} focusConnect={focusConnect} /> : tab === 'ai' ? <SettingsPage me={me} /> : tab === 'team' ? <TeamPage me={me} tenant={tenant} /> : tab === 'plan' ? <PlanPage me={me} openAdmin={openAdmin} /> : tab === 'approvals' ? <ChatApprovalsPage me={me} /> : <RulesPage tenant={tenant} />}
         </div>
       </div>
     </div>

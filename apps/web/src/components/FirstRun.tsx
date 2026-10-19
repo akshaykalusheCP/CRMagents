@@ -33,7 +33,7 @@ export function FirstRun({ tenant, settings, agents, tried, live, isAdmin, openS
   const dataDone = !testOrg || !!st?.loaded || skipData || agents > 0;
   const steps = [
     { id: 'connect', title: 'Connect Salesforce', done: ready, why: "Log in on Salesforce's own page. Nothing is installed and nothing changes in your org." },
-    { id: 'ai', title: 'Connect AI', done: !!settings?.anthropicKey?.set || !!settings?.providerKey?.set, why: 'Agents use AI to read and decide. Add your AI key; you set a daily spending limit.' },
+    { id: 'ai', title: 'Connect AI', done: !!settings?.aiReady || !!settings?.anthropicKey?.set || !!settings?.providerKey?.set, why: 'Agents use AI to read and decide. Add your AI key; you set a daily spending limit.' },
     { id: 'data', title: 'Give agents something to work on', done: dataDone, why: 'This is a test org. Fill it with realistic accounts, deals, cases and leads: urgent cases to triage, leads to score, overdue deals to chase. Removable in one click.' },
     { id: 'agent', title: 'Pick a first agent', done: agents > 0, why: 'Start from a proven job. The builder fits it to your fields; nothing runs until you turn it on.' },
     { id: 'try', title: 'Try it on a record', done: tried, why: 'Open your agent and press Test: it runs on one record and shows every step and change before anything is live.' },

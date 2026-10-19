@@ -1,13 +1,14 @@
 import { Loader2 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import { api, type Settings, type UsageSummary } from '../api';
+import { api, type Me, type Settings, type UsageSummary } from '../api';
+import { AiKeys } from '../components/AiKeys';
 import { Meter, Panel, Status, toast } from '../components/ui';
 
-// AI & spending: the AI key, the daily budget and answer reuse. Secrets are write-only; a save bar appears on change.
+// AI & spending: the AI keys (components/AiKeys), the daily budget and answer reuse. Secrets are write-only; a save bar appears on change.
 
 const EMPTY = { sfClientId: '', sfClientSecret: '', sfLoginUrl: '', anthropicKey: '', dailyBudgetUsd: '', anthropicWorkspaceId: '', aiCacheHours: '', maskPii: '', maskFields: '', maxAiCalls: '', maxToolCalls: '', maxTokens: '', retentionDays: '', aiProvider: '', providerKey: '', aiBaseUrl: '', aiModel: '', aiFastModel: '', aiPriceIn: '', aiPriceOut: '', auditInSalesforce: '', alertEmails: '', autoPauseAfter: '', twilioSid: '', twilioToken: '', twilioSms: '', twilioWhatsapp: '' };
 
-export function SettingsPage() {
+export function SettingsPage({ me }: { me?: Me }) {
   const [s, setS] = useState<Settings>();
   const [usage, setUsage] = useState<UsageSummary>();
   const [form, setForm] = useState(EMPTY);
@@ -49,57 +50,7 @@ export function SettingsPage() {
 
   return (
     <div className="smart-col">
-      <Panel title="AI provider">
-        <div className="form">
-          <div className="frow">
-            <div className="flabel"><b>Provider</b><span>Claude is recommended and tested most. Others use your own account and key.</span></div>
-            <div className="ffield">
-              <select value={form.aiProvider || 'anthropic'} onChange={(e) => { setMsg(''); setForm({ ...form, aiProvider: e.target.value === 'anthropic' ? '' : e.target.value }); }} aria-label="AI provider">
-                <option value="anthropic">Claude (Anthropic)</option>
-                <option value="openai">OpenAI</option>
-                <option value="gemini">Google Gemini</option>
-                <option value="compatible">Other (OpenAI-compatible: Azure, Mistral, DeepSeek, self-hosted…)</option>
-              </select>
-            </div>
-          </div>
-          {form.aiProvider && form.aiProvider !== 'anthropic' && <>
-            <div className="frow">
-              <div className="flabel"><b>API key</b><span>Stored encrypted.</span></div>
-              <div className="ffield"><div className="row" style={{ gap: 8 }}>
-                <input type="password" value={form.providerKey} onChange={set('providerKey')} placeholder={s?.providerKey?.set ? '•••••••• saved, type to replace' : 'Key from the provider'} />
-                {s?.providerKey?.set ? <Status tone="ok">Saved</Status> : <Status tone="warn">Missing</Status>}
-              </div></div>
-            </div>
-            {form.aiProvider === 'compatible' && (
-              <div className="frow"><div className="flabel"><b>Base URL</b><span>Ends before /chat/completions.</span></div>
-                <div className="ffield"><input value={form.aiBaseUrl} onChange={set('aiBaseUrl')} placeholder="https://api.example.com/v1" /></div></div>
-            )}
-            <div className="frow"><div className="flabel"><b>Model</b><span>Used for writing and research. The low-cost model is used for sorting into categories.</span></div>
-              <div className="ffield row" style={{ gap: 8 }}><input value={form.aiModel} onChange={set('aiModel')} placeholder="Main model name" /><input value={form.aiFastModel} onChange={set('aiFastModel')} placeholder="Low-cost model (optional)" /></div></div>
-            <div className="frow"><div className="flabel"><b>Prices</b><span>USD per million tokens, so spending and the daily budget stay right.</span></div>
-              <div className="ffield row" style={{ gap: 8 }}><input value={form.aiPriceIn} onChange={set('aiPriceIn')} placeholder="Input, e.g. 5" /><input value={form.aiPriceOut} onChange={set('aiPriceOut')} placeholder="Output, e.g. 15" /></div></div>
-            <p className="muted small" style={{ margin: 0 }}>Reading scanned PDFs still uses Claude, so keep a Claude key below if you upload scans.</p>
-          </>}
-        </div>
-      </Panel>
-
-      <Panel title="Claude key">
-        <div className="form">
-          <div className="frow">
-            <div className="flabel"><b>Anthropic API key</b><span>Stored encrypted and never shown again.</span></div>
-            <div className="ffield">
-              <div className="row" style={{ gap: 8 }}>
-                <input id="ai-key" type="password" value={form.anthropicKey} onChange={set('anthropicKey')} placeholder={s?.anthropicKey?.set ? '•••••••• saved, type to replace' : 'sk-ant-…'} />
-                {s?.anthropicKey?.set ? <Status tone="ok">Saved</Status> : <Status tone="warn">Missing</Status>}
-              </div>
-            </div>
-          </div>
-          <div className="frow">
-            <div className="flabel"><b>Workspace ID</b><span>Only for user keys (sk-ant-usr-…). Find it in the Claude Console under Settings → Workspaces.</span></div>
-            <div className="ffield"><input id="ai-ws" value={form.anthropicWorkspaceId} onChange={set('anthropicWorkspaceId')} placeholder="wrkspc_…" /></div>
-          </div>
-        </div>
-      </Panel>
+      <AiKeys me={me} />
 
       <Panel title="Spending">
         <div className="form">
