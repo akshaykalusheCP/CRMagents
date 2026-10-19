@@ -14,6 +14,51 @@ const PROVIDERS: { id: AiKey['provider']; label: string; hint: string }[] = [
 ];
 const NAME = Object.fromEntries(PROVIDERS.map((p) => [p.id, p.label])) as Record<AiKey['provider'], string>;
 const ago = (d: string) => { const m = (Date.now() - Date.parse(d)) / 60000; return m < 1 ? 'just now' : m < 60 ? `${Math.round(m)} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`; };
+// Common models per provider (USD per 1M tokens, input/output, where known). Anything else: "Other" and type the name.
+const MODELS: Partial<Record<AiKey['provider'], { id: string; name: string; price?: [number, number] }[]>> = {
+  openai: [
+    { id: 'gpt-5', name: 'GPT-5', price: [1.25, 10] },
+    { id: 'gpt-5-mini', name: 'GPT-5 mini', price: [0.25, 2] },
+    { id: 'gpt-5-nano', name: 'GPT-5 nano', price: [0.05, 0.4] },
+    { id: 'gpt-4.1', name: 'GPT-4.1', price: [2, 8] },
+    { id: 'gpt-4.1-mini', name: 'GPT-4.1 mini', price: [0.4, 1.6] },
+    { id: 'gpt-4o', name: 'GPT-4o', price: [2.5, 10] },
+    { id: 'gpt-4o-mini', name: 'GPT-4o mini', price: [0.15, 0.6] },
+    { id: 'o3', name: 'o3', price: [2, 8] },
+    { id: 'o4-mini', name: 'o4-mini', price: [1.1, 4.4] },
+  ],
+  gemini: [
+    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', price: [1.25, 10] },
+    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', price: [0.3, 2.5] },
+    { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash-Lite', price: [0.1, 0.4] },
+  ],
+  compatible: [
+    { id: 'mistral-large-latest', name: 'Mistral Large' },
+    { id: 'mistral-small-latest', name: 'Mistral Small' },
+    { id: 'deepseek-chat', name: 'DeepSeek Chat' },
+    { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner' },
+    { id: 'llama-3.3-70b-versatile', name: 'Llama 3.3 70B' },
+  ],
+};
+const OTHER = '__other__';
+
+/** A model picklist with "Other…" to type any name the provider supports. */
+function ModelPick({ label, provider, value, onChange, optional }: { label: string; provider: AiKey['provider']; value: string; onChange: (m: string) => void; optional?: boolean }) {
+  const list = MODELS[provider] ?? [];
+  const [typing, setTyping] = useState(!!value && !list.some((m) => m.id === value));
+  useEffect(() => { setTyping(!!value && !list.some((m) => m.id === value)); }, [provider]); // eslint-disable-line react-hooks/exhaustive-deps
+  return (
+    <label className="fl" style={{ flex: 1, minWidth: 0 }}><span>{label}{optional && <span className="muted small"> · optional</span>}</span>
+      <select value={typing ? OTHER : value} onChange={(e) => { if (e.target.value === OTHER) { setTyping(true); onChange(''); } else { setTyping(false); onChange(e.target.value); } }}>
+        <option value="">{optional ? 'Same as model' : 'Choose a model…'}</option>
+        {list.map((m) => <option key={m.id} value={m.id}>{m.name} · {m.id}</option>)}
+        <option value={OTHER}>Other (type the name)…</option>
+      </select>
+      {typing && <input autoFocus value={value} onChange={(e) => onChange(e.target.value)} placeholder={provider === 'gemini' ? 'gemini-…' : provider === 'openai' ? 'gpt-…' : 'exact model name'} aria-label={`${label} name`} />}
+    </label>
+  );
+}
+
 type TestResult = Awaited<ReturnType<typeof api.testAiKey>>;
 
 export function AiKeys({ me }: { me?: Me }) {
@@ -106,6 +151,12 @@ function KeyDrawer({ k, first, onClose, onSaved }: { k: AiKey | null; first: boo
   const [err, setErr] = useState('');
   const set = (p: Partial<typeof f>) => { setF({ ...f, ...p }); setResult(null); setErr(''); };
   const other = f.provider !== 'anthropic';
+  const [autoPrice, setAutoPrice] = useState(!k);
+  const pickModel = (field: 'model' | 'fastModel', m: string) => {
+    const p = field === 'model' ? MODELS[f.provider]?.find((x) => x.id === m)?.price : undefined;
+    if (p && (autoPrice || (f.priceIn == null && f.priceOut == null))) { set({ [field]: m, priceIn: p[0], priceOut: p[1] }); setAutoPrice(true); }
+    else set({ [field]: m });
+  };
   const body = (): AiKeyInput => ({ label: f.label.trim() || `${NAME[f.provider]} key`, provider: f.provider, key: f.key.trim(), baseUrl: f.baseUrl?.trim() || '', model: f.model?.trim() || undefined, fastModel: f.fastModel?.trim() || undefined, priceIn: f.priceIn, priceOut: f.priceOut, workspaceId: f.workspaceId?.trim() || undefined });
   const test = async () => {
     setBusy('test'); setErr('');
@@ -140,22 +191,22 @@ function KeyDrawer({ k, first, onClose, onSaved }: { k: AiKey | null; first: boo
       <div className="form aik-form">
         <label className="fl">Name<input value={f.label} onChange={(e) => set({ label: e.target.value })} placeholder={`e.g. ${NAME[f.provider]} · production`} maxLength={60} /></label>
         {!k && <label className="fl">Provider
-          <select value={f.provider} onChange={(e) => set({ provider: e.target.value as AiKey['provider'] })}>{PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</select>
+          <select value={f.provider} onChange={(e) => { setAutoPrice(true); set({ provider: e.target.value as AiKey['provider'], model: '', fastModel: '', priceIn: undefined, priceOut: undefined }); }}>{PROVIDERS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}</select>
           <span className="muted small">{PROVIDERS.find((p) => p.id === f.provider)?.hint}</span>
         </label>}
         <label className="fl">API key<input type="password" autoComplete="off" value={f.key} onChange={(e) => set({ key: e.target.value })} placeholder={k ? `${k.hint} saved · paste a new key to replace it` : f.provider === 'anthropic' ? 'sk-ant-…' : f.provider === 'gemini' ? 'AIza…' : 'sk-…'} /></label>
         {f.provider === 'anthropic' && <label className="fl">Workspace ID <span className="muted small">optional · only for user keys (sk-ant-usr-…)</span><input value={f.workspaceId ?? ''} onChange={(e) => set({ workspaceId: e.target.value })} placeholder="wrkspc_…" /></label>}
         {f.provider === 'compatible' && <label className="fl">Base URL <span className="muted small">ends before /chat/completions</span><input value={f.baseUrl ?? ''} onChange={(e) => set({ baseUrl: e.target.value })} placeholder="https://api.example.com/v1" /></label>}
         {other && <>
-          <div className="row" style={{ gap: 10 }}>
-            <label className="fl" style={{ flex: 1 }}>Model<input value={f.model ?? ''} onChange={(e) => set({ model: e.target.value })} placeholder={f.provider === 'openai' ? 'gpt-…' : f.provider === 'gemini' ? 'gemini-…' : 'model name'} /></label>
-            <label className="fl" style={{ flex: 1 }}>Low-cost model <span className="muted small">optional</span><input value={f.fastModel ?? ''} onChange={(e) => set({ fastModel: e.target.value })} placeholder="for sorting tasks" /></label>
+          <div className="row" style={{ gap: 10, alignItems: 'flex-start' }}>
+            <ModelPick label="Model" provider={f.provider} value={f.model ?? ''} onChange={(m) => pickModel('model', m)} />
+            <ModelPick label="Low-cost model" optional provider={f.provider} value={f.fastModel ?? ''} onChange={(m) => pickModel('fastModel', m)} />
           </div>
           <div className="row" style={{ gap: 10 }}>
-            <label className="fl" style={{ flex: 1 }}>Input price <span className="muted small">USD per 1M tokens</span><input inputMode="decimal" value={f.priceIn ?? ''} onChange={(e) => set({ priceIn: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="5" /></label>
-            <label className="fl" style={{ flex: 1 }}>Output price <span className="muted small">USD per 1M tokens</span><input inputMode="decimal" value={f.priceOut ?? ''} onChange={(e) => set({ priceOut: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="15" /></label>
+            <label className="fl" style={{ flex: 1 }}>Input price <span className="muted small">USD per 1M tokens</span><input inputMode="decimal" value={f.priceIn ?? ''} onChange={(e) => { setAutoPrice(false); set({ priceIn: e.target.value === '' ? undefined : Number(e.target.value) }); }} placeholder="5" /></label>
+            <label className="fl" style={{ flex: 1 }}>Output price <span className="muted small">USD per 1M tokens</span><input inputMode="decimal" value={f.priceOut ?? ''} onChange={(e) => { setAutoPrice(false); set({ priceOut: e.target.value === '' ? undefined : Number(e.target.value) }); }} placeholder="15" /></label>
           </div>
-          <p className="muted small" style={{ margin: 0 }}>Prices keep spending and the daily budget right. Reading scanned PDFs always uses a Claude key.</p>
+          <p className="muted small" style={{ margin: 0 }}>Prices fill in for listed models; check them against your provider's price page, since they change. They keep spending and the daily budget right. Reading scanned PDFs always uses a Claude key.</p>
         </>}
         {!k && !first && <label className="check"><input type="checkbox" checked={f.makePrimary} onChange={(e) => set({ makePrimary: e.target.checked })} /> Make this the primary key</label>}
         {result && <div className={'aik-result ' + (result.ok ? 'ok' : 'bad')}>{result.ok ? <><CheckCircle2 size={16} /> <span><b>It works.</b> {result.model} answered in {result.ms} ms.</span></> : <><XCircle size={16} /> <span><b>It didn't work.</b> {result.error}</span></>}</div>}
