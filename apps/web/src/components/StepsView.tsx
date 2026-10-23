@@ -104,6 +104,8 @@ function describe(n: WFRFNode, byId: Map<string, WFRFNode>, exitsElsewhere: bool
       : { title: <>Wait <b>{c.amount ?? 1} {c.unit ?? 'days'}</b></>, detail: 'Then carry on with the next step' };
     case 'logic.approval': return { title: <>Ask {approverText(c)} to approve</>, detail: P(c.message) };
     case 'sf.createTask': return { title: <>Create a task: {P(c.subject || 'Follow up')}</>, detail: c.description ? P(c.description) : undefined };
+    case 'knowledge.playbook': return { title: <>Find the procedure in your guides and plan its steps</>, detail: <>Looks up {P(c.query || 'the record')}{c.docs ? <> in {P(c.docs)}</> : null}; changes nothing yet</> };
+    case 'crm.applyActions': return { title: <>Apply the planned changes</>, detail: 'Field updates and tasks from the procedure, each checked against your rules (can be undone)' };
     case 'sf.updateRecord': {
       let fields: Record<string, unknown> = {};
       try { fields = JSON.parse(String(c.fields || '{}')); } catch { /* shown raw below */ }

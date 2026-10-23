@@ -124,6 +124,7 @@ function route(method: string, url: URL, body: any): Response {
       records: [{ object: 'Case', label: 'Your cases', match: 'contact', fields: ['CaseNumber', 'Subject', 'Status'] }, { object: 'Order', label: 'Your orders', match: 'account', fields: ['OrderNumber', 'Status', 'TotalAmount', 'EffectiveDate'] }],
       actions: [{ key: 'flow:Start_Return', label: 'Start a return', description: 'For delivered orders under 30 days old' }] } });
   if (p === '/t/impact') return json(demoImpact(Number(url.searchParams.get('days') || 30)));
+  if (/^\/api\/knowledge\/[^/]+\/text$/.test(p)) return json({ title: 'Enterprise Network Troubleshooting Guide', text: '## VPN drops every few minutes\n\n1. Set the case Priority to High if more than 10 users are affected.\n2. Create a task for the network team: "Check the VPN concentrator logs".\n3. Ask the customer for the VPN client version.' });
   if (p === '/api/knowledge' && method === 'GET') return json(DEMO_DOCS);
   if (p === '/api/knowledge/search') return json(DEMO_HITS);
   if (p === '/t/record-suggestions' && method === 'GET') return json(DEMO_RECORD_SUGGESTIONS);

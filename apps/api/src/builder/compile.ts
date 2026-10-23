@@ -8,7 +8,7 @@ import type { Plan, PlanStep } from './plan.js';
 const isWrite = (t: PlanStep) => WRITES.has(t.action) || (t.action === 'reply_email' && !!t.send_now);
 const WRITES = new Set(['create_task', 'update_record', 'create_record', 'run_action', 'delete_record', 'attach_file', 'send_text']);
 // Rough per-run cost of each AI action (USD), from typical prompt sizes at current prices.
-const COST: Record<string, number> = { classify: 0.0003, extract: 0.004, ai_write: 0.01, research: 0.03, web_research: 0.05 };
+const COST: Record<string, number> = { classify: 0.0003, extract: 0.004, ai_write: 0.01, research: 0.03, web_research: 0.05, follow_playbook: 0.01 };
 const KNOWLEDGE_RULES = 'Base the steps on the knowledge sections given and cite them like [1]. If they do not cover the problem, say so in one line and give general guidance. Be concise.';
 const CLASSIFY_MODEL = 'claude-haiku-5-5'; // matched Opus on real cases at ~2% of the cost (evals/model-eval.mts)
 const READ_TOOLS = ['soql_query', 'get_record', 'describe_object'];
@@ -45,7 +45,7 @@ export function compilePlan(plan: Plan): CompileResult {
 
   let x = 0;
   const add = (type: string, config: Record<string, unknown>, label?: string, y = 120): WFNode => {
-    const prefix = { 'trigger.salesforce': 'trigger', 'trigger.manual': 'trigger', 'sf.getRecord': 'sf_get', 'logic.branch': 'branch', 'logic.approval': 'approval', 'util.output': 'output', 'ai.classify': 'ai_classify', 'ai.extract': 'ai_extract', 'ai.agent': 'ai_agent', 'sf.query': 'sf_query', 'sf.createTask': 'sf_task', 'sf.updateRecord': 'sf_update', 'sf.createRecord': 'sf_create', 'notify.slack': 'slack', 'sf.action': 'sf_action', 'logic.wait': 'wait', 'knowledge.search': 'kb', 'crm.suggest': 'suggest', 'trigger.webhook': 'trigger', 'trigger.schedule': 'trigger', 'sf.deleteRecord': 'sf_delete', 'sf.readFiles': 'files', 'sf.attachFile': 'attach', 'sf.emailThread': 'emails', 'sf.emailReply': 'reply' }[type] ?? 'node';
+    const prefix = { 'trigger.salesforce': 'trigger', 'trigger.manual': 'trigger', 'sf.getRecord': 'sf_get', 'logic.branch': 'branch', 'logic.approval': 'approval', 'util.output': 'output', 'ai.classify': 'ai_classify', 'ai.extract': 'ai_extract', 'ai.agent': 'ai_agent', 'sf.query': 'sf_query', 'sf.createTask': 'sf_task', 'sf.updateRecord': 'sf_update', 'sf.createRecord': 'sf_create', 'notify.slack': 'slack', 'sf.action': 'sf_action', 'logic.wait': 'wait', 'knowledge.search': 'kb', 'crm.suggest': 'suggest', 'trigger.webhook': 'trigger', 'trigger.schedule': 'trigger', 'sf.deleteRecord': 'sf_delete', 'sf.readFiles': 'files', 'sf.attachFile': 'attach', 'sf.emailThread': 'emails', 'sf.emailReply': 'reply', 'knowledge.playbook': 'playbook', 'crm.applyActions': 'apply' }[type] ?? 'node';
     const n: WFNode = { id: nextId(prefix), type, position: { x, y }, config, ...(label ? { label } : {}) };
     if (y === 120) x += 280;
     nodes.push(n);
@@ -292,6 +292,28 @@ export function compilePlan(plan: Plan): CompileResult {
         keys = new Set(['text', 'sources', 'count']);
         break;
       }
+      case 'follow_playbook': {
+        // Plan from the matching procedure, stop if there's nothing to do, ask (if wanted), then apply the plan.
+        if (!isRecord || inLoop) errors.push(`step ${i + 1}: follow_playbook works on the record that starts the agent (a record trigger, not inside a per-record query)`);
+        const q = s.input_fields.length ? s.input_fields.map((f) => { recordFields.add(f); return `{{sf_get_1.record.${f}}}`; }).join(' ') : convert(s.instruction, i);
+        const pb = add('knowledge.playbook', { query: q, object: plan.trigger_object, docs: s.subject?.trim() ?? '', instructions: convert(s.message, i) }, 'Find the procedure');
+        link(pb);
+        const b = add('logic.branch', { left: `{{${pb.id}.count}}`, operator: 'greater_than', right: '0' }, 'If the procedure has changes to make');
+        link(b);
+        prev = { id: b.id, handle: 'true' };
+        sideOutput(b.id, 'false', `{{${pb.id}.summary}}`);
+        if (plan.require_approval) {
+          // Its own approval: the changes are only known once the procedure is read, and the approver sees them.
+          const a = add('logic.approval', { message: `Carry out these steps from your procedure?\n{{${pb.id}.summary}}` }, 'Approve the procedure\'s changes');
+          link(a);
+          prev = { id: a.id, handle: 'approved' };
+          sideOutput(a.id, 'rejected', 'Not approved: nothing was changed.');
+        }
+        node = add('crm.applyActions', { from: pb.id }, 'Apply the planned changes');
+        keys = new Set(['applied', 'results']);
+        result = result || `{{${pb.id}.summary}}`;
+        break;
+      }
       case 'suggest': {
         if (!isRecord && !inLoop) errors.push(`step ${i + 1}: suggest needs a record trigger or a per-record query before it`);
         const lastAi = [...stepNodes.slice(0, i)].reverse().find((x) => x?.action === 'ai_write' || x?.action === 'research');
@@ -481,6 +503,7 @@ function describe(s: PlanStep, plan: Plan): string {
     case 'reply_email': return s.send_now ? 'Emails the reply to the customer' : 'Puts the reply on the case for a person to check and send';
     case 'attach_file': return `Attaches "${cut(s.subject || 'Nimbus note', 40)}" as a file on the record`;
     case 'suggest': return `Shows "${cut(s.subject || 'Suggestion', 40)}" on the record in Salesforce (changes nothing)`;
+    case 'follow_playbook': return `Finds the procedure in your guides that fits the ${plan.trigger_object || 'record'} and carries out its steps (field updates, tasks)${plan.require_approval ? ', after a person approves them' : ''}`;
     default: return s.action;
   }
 }

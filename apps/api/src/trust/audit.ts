@@ -88,7 +88,7 @@ export async function trustFacts(accountId: string) {
   const { rows: orgs } = await pool.query('select id, sf_username as username, sf_instance_url as url, setup_status as status, created_at as "connectedAt" from tenants where account_id=$1', [accountId]);
   const { rows: wf } = await pool.query('select w.graph, w.live, w.monthly_cap_usd from workflows w join tenants t on t.id = w.tenant_id where t.account_id=$1', [accountId]);
   const live = wf.filter((w) => w.live);
-  const writes = (g: Workflow) => g.nodes.filter((n) => ['sf.createRecord', 'sf.updateRecord', 'sf.deleteRecord', 'sf.upsertRecord', 'sf.createTask', 'sf.action', 'sf.emailReply', 'notify.sms'].includes(n.type));
+  const writes = (g: Workflow) => g.nodes.filter((n) => ['sf.createRecord', 'sf.updateRecord', 'sf.deleteRecord', 'sf.upsertRecord', 'sf.createTask', 'sf.action', 'sf.emailReply', 'notify.sms', 'crm.applyActions'].includes(n.type));
   const asks = (g: Workflow) => g.nodes.some((n) => n.type === 'logic.approval') || writes(g).every((n) => n.config.askFirst === 'Yes');
   const liveWriting = live.filter((w) => writes(w.graph).length);
   const { rows: calls } = await pool.query("select count(*)::int n, coalesce(sum(masked_values),0)::int masked, count(distinct model)::int models from ai_calls where account_id=$1 and created_at > now() - interval '30 days'", [accountId]);

@@ -12,6 +12,7 @@ import { recordsToTable } from '../salesforce/table.js';
 import { safeFetch } from './net.js';
 import { render, renderJson, resolveRaw } from './template.js';
 import { hitSources, hitsToText, searchKnowledge } from '../knowledge/store.js';
+import { fieldGuide, PLAN_SCHEMA, PLAN_SYSTEM, planSummary, validatePlan, type PlannedAction } from './playbook.js';
 import { saveSuggestion } from '../knowledge/suggestions.js';
 import { usePrefetched } from './prefetch.js';
 import { fileNameFor, recordFilesText } from '../salesforce/files.js';
@@ -432,6 +433,70 @@ export const EXECUTORS: Record<string, Executor> = {
       if (r) { usage = r.usage; hits = await searchKnowledge(env.sf.accountId, r.text, limit, docs); }
     }
     return { output: { text: hitsToText(hits), sources: hitSources(hits), count: hits.length }, ...(usage ? { usage } : {}) };
+  },
+
+  // Follow playbook: find the procedure for this record in the company's documents and plan its steps as changes.
+  // Plans only; 'crm.applyActions' carries the plan out (after an approval when the agent asks for one).
+  async 'knowledge.playbook'(node, scope, env) {
+    const recordId = String(scope.trigger?.recordId ?? '');
+    const object = cfg(node, 'object', scope) || String(scope.trigger?.objectApiName ?? '');
+    if (!recordId || !object) throw new Error('Follow playbook works on the record that starts the agent.');
+    const record = await env.sf.getRecord(object, recordId) as Record<string, unknown>;
+    const query = cfg(node, 'query', scope) || [record.Subject, record.Description, record.Name].filter((v) => typeof v === 'string' && v.trim()).join(' ');
+    const docs = lines(cfg(node, 'docs', scope));
+    let usage = emptyUsage();
+    let hits = query ? await searchKnowledge(env.sf.accountId, query, 6, docs) : [];
+    if (!hits.length && query) {
+      const r = await env.llm.complete({ system: 'You help search a company knowledge base. Reply with search words only.', prompt: `Nothing matched: "${query.slice(0, 500)}". Give 8 to 15 other words a procedure document would use for this, separated by spaces.`, model: 'claude-haiku-5-5' }).catch(() => null);
+      if (r) { usage = addUsage(usage, r.usage); hits = await searchKnowledge(env.sf.accountId, r.text, 6, docs); }
+    }
+    const none = (why: string) => ({ output: { matched: false, procedure: '', summary: why, actions: [], count: 0, skipped: '', sources: hitSources(hits), recordId, object }, usage });
+    if (!hits.length) return none('No procedure in the knowledge base matches this record.');
+    const fields = await env.sf.describe(object);
+    const extra = cfg(node, 'instructions', scope);
+    const r = await env.llm.complete({
+      system: PLAN_SYSTEM + (extra ? `\n\nThe admin's guidance: ${extra}` : ''),
+      prompt: `Record (${object} ${recordId}):\n${JSON.stringify(record).slice(0, 8000)}\n\nFields you may change on it:\n${fieldGuide(fields)}\n\nSections from the company's documents:\n${hitsToText(hits)}`,
+      schema: PLAN_SCHEMA as unknown as Record<string, unknown>,
+      ...aiOptions(node),
+    });
+    usage = addUsage(usage, r.usage);
+    const raw = parseJsonLoose(r.text);
+    if (raw.matched !== true) return none('None of the guides found is the procedure for this record.');
+    const { actions, dropped } = validatePlan(raw, fields, record);
+    const manual = (Array.isArray(raw.manual_steps) ? raw.manual_steps : []).map((x: unknown) => String(x)).filter(Boolean);
+    const procedure = String(raw.procedure ?? '');
+    const owner = /^005/.test(String(record.OwnerId ?? '')) ? String(record.OwnerId) : '';
+    return {
+      output: { matched: true, procedure, summary: planSummary(procedure, actions, object, manual, dropped), actions, count: actions.length, skipped: manual.join('\n'), sources: hitSources(hits), recordId, object, ownerId: owner },
+      usage,
+    };
+  },
+
+  // Carries out what a 'Follow playbook' step planned: each change checked against the rules and logged for undo.
+  async 'crm.applyActions'(node, scope, env) {
+    const from = cfg(node, 'from', scope) || 'playbook_1';
+    const plan = scope[from] as { actions?: PlannedAction[]; recordId?: string; object?: string; ownerId?: string } | undefined;
+    if (!plan) throw new Error(`Nothing was planned by "${from}".`);
+    const { recordId = '', object = '' } = plan;
+    const results: { change: string; ok: boolean }[] = [];
+    for (const a of plan.actions ?? []) {
+      if (a.kind === 'update' && a.fields && Object.keys(a.fields).length) {
+        const fields = env.unmask ? env.unmask({ ...a.fields }) : { ...a.fields };
+        await env.guard?.({ approved: env.approved, action: 'update', object, values: fields, recordId });
+        if (!env.dryRun) await env.sf.updateRecord(object, recordId, fields);
+        results.push({ change: `${env.dryRun ? 'Would update' : 'Updated'} ${object}: ${Object.entries(fields).map(([k, v]) => `${k} → ${v}`).join(', ')}`, ok: true });
+      } else if (a.kind === 'task' && a.subject) {
+        const fields: Record<string, unknown> = { Subject: a.subject, Description: a.description ?? '', Status: 'Not Started' };
+        if (/^(003|00Q)/.test(recordId)) fields.WhoId = recordId; else fields.WhatId = recordId;
+        if (plan.ownerId) fields.OwnerId = plan.ownerId;
+        if (env.unmask) Object.assign(fields, env.unmask({ Subject: fields.Subject, Description: fields.Description }));
+        await env.guard?.({ approved: env.approved, action: 'task', object: 'Task', values: fields });
+        if (!env.dryRun) await env.sf.createRecord('Task', fields);
+        results.push({ change: `${env.dryRun ? 'Would create' : 'Created'} task "${a.subject}"`, ok: true });
+      }
+    }
+    return { output: { applied: results.length, results } };
   },
 
   // Saves advice against a record, shown on that record's page in Salesforce. Not a Salesforce write.

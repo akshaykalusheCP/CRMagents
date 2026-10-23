@@ -2,7 +2,7 @@
 // so the model only spends tokens on understanding the request, not on wiring blocks together.
 
 export const OPERATORS = ['equals', 'not_equals', 'contains', 'greater_than', 'less_than', 'is_empty', 'not_empty'] as const;
-export const ACTIONS = ['classify', 'extract', 'ai_write', 'research', 'query', 'create_task', 'update_record', 'create_record', 'notify_slack', 'run_action', 'wait', 'search_knowledge', 'suggest', 'delete_record', 'read_files', 'attach_file', 'web_research', 'read_emails', 'reply_email', 'meeting_times', 'send_text'] as const;
+export const ACTIONS = ['classify', 'extract', 'ai_write', 'research', 'query', 'create_task', 'update_record', 'create_record', 'notify_slack', 'run_action', 'wait', 'search_knowledge', 'suggest', 'delete_record', 'read_files', 'attach_file', 'web_research', 'read_emails', 'reply_email', 'meeting_times', 'send_text', 'follow_playbook'] as const;
 
 export type Action = (typeof ACTIONS)[number];
 
@@ -188,7 +188,8 @@ Steps run in order. Actions:
 References inside text and values: {record.Field} = field of the triggering record, {stepN.key} = output of step N (1-based; one field of a query's first result is {stepN.first.Field}, e.g. {step1.first.OwnerId} for an email recipient or a lookup value; all of a query's results as text for an AI step or message is {stepN.table}), {trigger.input} = free text passed in, {item.Field} = field of the current record inside a per_record query.
 Rules:
 - "When a customer emails / replies on a case": trigger_object EmailMessage, trigger_event created, condition Incoming equals true; then read_emails, (search_knowledge), ai_write the reply, reply_email.
-- When the admin mentions guides, documents, knowledge, SOPs, policies or "our troubleshooting steps": search_knowledge, then ai_write, then suggest (or create_task/update_record if they asked for that).
+- When the admin mentions guides, documents, knowledge, SOPs, policies or "our troubleshooting steps" and wants advice or a suggestion: search_knowledge, then ai_write, then suggest (or create_task/update_record if they asked for that).
+- follow_playbook: find the company's written procedure (uploaded SOPs, playbooks, runbooks) that fits the triggering record and CARRY OUT its steps on that record (field updates, follow-up tasks); steps that need a person are listed for them. instruction = what to look up, usually the record's own words, e.g. "{record.Subject} {record.Description}"; subject = optional document titles to limit to (comma-separated); message = optional guidance (e.g. "never close a case"). Use it when the admin wants the agent to act according to their procedures/playbooks/predefined steps, different per record. It adds its own approval when require_approval is true (keep require_approval true unless the admin explicitly says to act without asking). One follow_playbook step replaces search_knowledge + ai_write + update steps.
 - Use AI actions only where judgement or writing is needed; prefer query/create_task/update_record otherwise.
 - Use conditions to skip records that don't need processing (e.g. closed ones); they mean "run only when all are true" for the whole workflow.
 - To make one step conditional, use its only_if (e.g. value "{step1.category}", operator equals, compare "Breakdown"); leave only_if.value empty to always run the step.

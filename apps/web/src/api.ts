@@ -373,6 +373,7 @@ export const api = {
   diagnose: (t: string, runId: string) => req<Diagnosis>('POST', `/api/tenants/${t}/runs/${runId}/diagnose`),
   applyFix: (t: string, id: string, nodeId: string, changes: Record<string, string>) => req('POST', `/api/tenants/${t}/workflows/${id}/apply-fix`, { nodeId, changes }),
   knowledge: () => req<KnowledgeDoc[]>('GET', '/api/knowledge'),
+  knowledgeText: (id: string) => req<{ title: string; text: string }>('GET', `/api/knowledge/${id}/text`),
   addKnowledge: (b: { fileName?: string; data?: string; title?: string; text?: string }) => req<{ id: string; chunks: number }>('POST', '/api/knowledge', b),
   deleteKnowledge: (id: string) => req('DELETE', `/api/knowledge/${id}`),
   searchKnowledge: (query: string) => req<KnowledgeHit[]>('POST', '/api/knowledge/search', { query }),

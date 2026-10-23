@@ -1,7 +1,4 @@
-import {
-  Bot, Braces, CalendarClock, Cloud, Database, FileSearch, FilePlus2, FilePen, Flag, GitBranch, Globe, ListTodo,
-  MessageSquare, Repeat, ScanText, ShieldCheck, Tags, Workflow, Zap, Hourglass, type LucideIcon,
-} from 'lucide-react';
+import { Bot, Braces, CalendarClock, Cloud, Database, FileSearch, FilePlus2, FilePen, Flag, GitBranch, Globe, ListTodo, MessageSquare, Repeat, ScanText, ShieldCheck, Tags, Workflow, Zap, Hourglass, type LucideIcon, BookOpenCheck, ListChecks } from 'lucide-react';
 import { CATEGORY_COLORS, NODE_DEF_BY_TYPE, type Category } from '@crmagents/shared';
 
 export const NODE_ICONS: Record<string, LucideIcon> = {
@@ -25,6 +22,8 @@ export const NODE_ICONS: Record<string, LucideIcon> = {
   'notify.slack': MessageSquare,
   'util.set': Braces,
   'util.output': Flag,
+  'knowledge.playbook': BookOpenCheck,
+  'crm.applyActions': ListChecks,
 };
 
 export function categoryOf(type: string): Category {

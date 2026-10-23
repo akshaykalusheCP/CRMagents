@@ -12,6 +12,10 @@ import { Empty, PageHeader, Panel, SkeletonRows, Status, Table, toast, useConfir
 const ACCEPT = '.pdf,.docx,.md,.txt,.html,.htm,.csv,.png,.jpg,.jpeg,.gif,.webp';
 const MAX_MB = 15;
 const CASE_AGENT = 'When a new Case is created, look up our support guides using the case subject and description, write short troubleshooting steps for the support agent, and show them as a suggestion on the case.';
+const PLAYBOOK_AGENT = 'When a new Case is created, find the procedure in our guides that fits the case and carry out its steps on the case (field updates and follow-up tasks), after a person approves them. List the steps a person has to do themselves.';
+/** A request for Build with AI that turns one procedure document into a fixed agent. Pure. */
+export const procedureRequest = (title: string, text: string) =>
+  `Build an agent that carries out this procedure from our guide "${title}" on each record it applies to. Ask me which records and when it should run if that isn't clear.\n\nThe procedure:\n${text.slice(0, 3000)}${text.length > 3000 ? '\n…' : ''}`;
 
 const KIND: Record<KnowledgeDoc['kind'], string> = { pdf: 'PDF', docx: 'Word', text: 'Text' };
 const ago = (iso: string) => {
@@ -108,7 +112,10 @@ export function KnowledgePage({ tenant, onAutomate }: { tenant?: Tenant; onAutom
     { key: 'kind', header: 'Type', hideSm: true, render: (d) => (d.source === 'sf_article' ? 'Knowledge article' : d.source === 'sf_library' ? `${KIND[d.kind]} · Salesforce Files` : KIND[d.kind]) },
     { key: 'chunks', header: 'Sections', align: 'right', render: (d) => d.chunks.toLocaleString() },
     { key: 'by', header: 'Added', hideSm: true, render: (d) => <div className="cell-main"><span>{ago(d.createdAt)}</span><span className="cell-sub">{d.createdBy ?? ''}</span></div> },
-    { key: 'x', header: '', align: 'right', render: (d) => <button className="ghost icon sm" onClick={() => void remove(d)} aria-label={`Remove ${d.title}`}><Trash2 size={14} /></button> },
+    { key: 'x', header: '', align: 'right', render: (d) => <div className="row" style={{ gap: 4, justifyContent: 'flex-end' }}>
+      <button className="ghost sm" title="Build an agent that carries out this procedure" onClick={() => void api.knowledgeText(d.id).then((t) => onAutomate(procedureRequest(t.title, t.text))).catch((e) => toast((e as Error).message, 'bad'))}>Make an agent</button>
+      <button className="ghost icon sm" onClick={() => void remove(d)} aria-label={`Remove ${d.title}`}><Trash2 size={14} /></button>
+    </div> },
   ];
 
   const sugCols: Column<RecordSuggestion>[] = [
@@ -128,8 +135,11 @@ export function KnowledgePage({ tenant, onAutomate }: { tenant?: Tenant; onAutom
       {confirmUi}
       <PageHeader
         title="Knowledge"
-        description="Your own guides and policies. Assistants look things up here before answering, and agents use them to suggest fixes on records."
-        actions={<button className="primary" onClick={() => onAutomate(CASE_AGENT)}>Build a case-suggestion agent</button>}
+        description="Your own guides and policies. Assistants look things up here before answering, and agents use them to suggest fixes, or carry out your procedures on records after approval."
+        actions={<div className="row" style={{ gap: 8 }}>
+          <button onClick={() => onAutomate(CASE_AGENT)}>Build a case-suggestion agent</button>
+          <button className="primary" onClick={() => onAutomate(PLAYBOOK_AGENT)} title="One agent that finds the matching procedure for each case and carries out its steps, after approval">Build a playbook agent</button>
+        </div>}
       />
 
       <div

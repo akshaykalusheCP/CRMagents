@@ -613,6 +613,16 @@ app.post('/api/tenants/:tenantId/workflows/:id/webhook/rotate', async (req) => {
 
 // ---- Knowledge base (per account: the same guides serve every connected org) ----
 app.get('/api/knowledge', async (req) => listDocuments(req.user!.accountId));
+// A document's text (its sections in order, without the search summary), e.g. to build an agent from a procedure.
+app.get('/api/knowledge/:id/text', async (req, reply) => {
+  const { id } = req.params as { id: string };
+  const { rows } = await pool.query(
+    `select d.title, string_agg(case when c.heading <> '' then '## ' || c.heading || E'\n\n' || c.body else c.body end, E'\n\n' order by c.seq) as text
+     from knowledge_docs d join knowledge_chunks c on c.doc_id = d.id
+     where d.id = $1 and d.account_id = $2 and c.seq >= 0 group by d.title`, [id, req.user!.accountId]);
+  if (!rows[0]) return reply.code(404).send({ error: 'Document not found' });
+  return { title: rows[0].title, text: String(rows[0].text ?? '').slice(0, 20_000) };
+});
 
 app.post('/api/knowledge', { bodyLimit: Math.ceil(MAX_UPLOAD_BYTES * 1.4) }, async (req) => {
   const b = z.object({

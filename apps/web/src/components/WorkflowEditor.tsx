@@ -25,6 +25,7 @@ const ID_PREFIX: Record<string, string> = {
   'ai.extract': 'ai_extract', 'sf.query': 'sf_query', 'sf.getRecord': 'sf_get', 'sf.createRecord': 'sf_create',
   'sf.updateRecord': 'sf_update', 'sf.createTask': 'sf_task', 'logic.branch': 'branch', 'logic.loop': 'loop',
   'logic.approval': 'approval', 'http.request': 'http', 'notify.slack': 'slack', 'util.set': 'set', 'util.output': 'output',
+  'knowledge.playbook': 'playbook', 'crm.applyActions': 'apply',
 };
 
 const toRF = (w: Workflow): { nodes: WFRFNode[]; edges: Edge[] } => ({

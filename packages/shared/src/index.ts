@@ -363,6 +363,29 @@ export const NODE_DEFS: NodeDef[] = [
     outputs: ['text', 'sources', 'count'],
   },
   {
+    type: 'knowledge.playbook',
+    label: 'Follow playbook',
+    category: 'AI',
+    description: "Finds the procedure in your documents that fits the record and plans its steps as concrete changes (field updates, tasks). Changes nothing itself: put Human approval and 'Apply planned actions' after it.",
+    fields: [
+      { key: 'query', label: 'Look up', kind: 'textarea', placeholder: '{{sf_get_1.record.Subject}} {{sf_get_1.record.Description}}' },
+      { key: 'docs', label: 'Only these documents (optional)', kind: 'text', placeholder: 'Escalation playbook', help: 'Document titles, comma-separated. Empty = all documents.' },
+      { key: 'instructions', label: 'Extra guidance (optional)', kind: 'textarea', placeholder: 'Never close a case; only escalate or assign.' },
+      { key: 'model', label: 'Model', kind: 'select', options: ['default', 'claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'], default: 'default' },
+    ],
+    outputs: ['matched', 'procedure', 'summary', 'actions', 'count', 'skipped', 'sources'],
+  },
+  {
+    type: 'crm.applyActions',
+    label: 'Apply planned actions',
+    category: 'Salesforce',
+    description: "Carries out the changes a 'Follow playbook' step planned, on the triggering record: field updates and tasks. Each change is checked against your rules and can be undone.",
+    fields: [
+      { key: 'from', label: 'Planned by (block id)', kind: 'text', placeholder: 'playbook_1', default: 'playbook_1' },
+    ],
+    outputs: ['applied', 'results'],
+  },
+  {
     type: 'crm.suggest',
     label: 'Show suggestion on record',
     category: 'Salesforce',
@@ -430,7 +453,7 @@ export const NODE_DEFS: NodeDef[] = [
 ];
 
 /** Steps that change data or send it out; each can ask a person first. */
-export const WRITE_NODE_TYPES = ['sf.createRecord', 'sf.updateRecord', 'sf.deleteRecord', 'sf.upsertRecord', 'sf.createTask', 'sf.action', 'notify.slack', 'http.request', 'sf.attachFile', 'sf.emailReply', 'notify.sms'];
+export const WRITE_NODE_TYPES = ['sf.createRecord', 'sf.updateRecord', 'sf.deleteRecord', 'sf.upsertRecord', 'sf.createTask', 'sf.action', 'notify.slack', 'http.request', 'sf.attachFile', 'sf.emailReply', 'notify.sms', 'crm.applyActions'];
 for (const d of NODE_DEFS) {
   if (!WRITE_NODE_TYPES.includes(d.type)) continue;
   d.fields.push(
