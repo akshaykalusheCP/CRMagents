@@ -87,18 +87,47 @@
                             <div class="thread">
                                 <template for:each={messages} for:item="m">
                                     <div key={m.key} class={m.css}>
-                                        <template lwc:if={m.mine}>{m.text}</template>
+                                        <template lwc:if={m.mine}>
+                                            <template for:each={m.pics} for:item="p"><img key={p.key} src={p.src} class="bubble-img" alt=""></template>
+                                            {m.text}
+                                        </template>
                                         <template lwc:else><lightning-formatted-rich-text value={m.html}></lightning-formatted-rich-text></template>
                                     </div>
+                                    <template lwc:if={m.canRead}>
+                                        <lightning-button key={m.readKey} variant="base" class="read-btn" label={m.readLabel} icon-name={m.readIcon} data-index={m.key} onclick={readMessage}></lightning-button>
+                                    </template>
                                     <template for:each={m.memory} for:item="r"><p key={r.key} class="mem-note">{r.text}</p></template>
                                 </template>
                                 <template lwc:if={asking}><div class="bubble ai weak">Looking it up…</div></template>
                             </div>
-                            <lightning-textarea label="Question" variant="label-hidden" value={question} onchange={handleQuestion} onkeydown={handleQuestionKey} placeholder="Ask about this record, e.g. What's the history with this customer?"></lightning-textarea>
+                            <template lwc:if={hasImages}>
+                                <div class="img-chips">
+                                    <template for:each={images} for:item="im">
+                                        <span key={im.key} class="img-chip" title={im.name}>
+                                            <img src={im.preview} alt={im.name}>
+                                            <button type="button" class="img-x" data-key={im.key} onclick={removeImage} aria-label="Remove image">×</button>
+                                        </span>
+                                    </template>
+                                    <span class="slds-text-color_weak img-note">Images go to the AI as they are.</span>
+                                </div>
+                            </template>
+                            <div onpaste={handlePaste}>
+                                <lightning-textarea label="Question" variant="label-hidden" value={question} onchange={handleQuestion} onkeydown={handleQuestionKey} placeholder={questionPlaceholder}></lightning-textarea>
+                            </div>
+                            <input type="file" class="img-input" accept="image/png,image/jpeg,image/gif,image/webp" multiple onchange={handleFiles} hidden>
                             <div class="ask-actions">
                                 <lightning-button variant="base" label="New conversation" onclick={newConversation}></lightning-button>
-                                <lightning-button variant="brand" label="Ask" onclick={send} disabled={cannotAsk}></lightning-button>
+                                <div class="ask-right">
+                                    <lightning-button-icon icon-name="utility:image" variant="border-filled" alternative-text="Attach an image" title="Attach an image (or paste a screenshot)" onclick={pickImages} disabled={cannotAttach}></lightning-button-icon>
+                                    <template lwc:if={canListen}>
+                                        <lightning-button-icon icon-name={micIcon} variant={micVariant} alternative-text={micLabel} title={micLabel} onclick={toggleListen}></lightning-button-icon>
+                                    </template>
+                                    <lightning-button variant="brand" label="Ask" onclick={send} disabled={cannotAsk}></lightning-button>
+                                </div>
                             </div>
+                            <template lwc:if={canSpeak}>
+                                <lightning-input type="checkbox" class="read-aloud" label="Read answers aloud" checked={readAloud} onchange={handleReadAloud}></lightning-input>
+                            </template>
                         </template>
                         <template lwc:else>
                             <p class="slds-text-color_weak empty">No assistants yet. Create one in Nimbus under Agents → Assistants.</p>

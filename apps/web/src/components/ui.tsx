@@ -142,14 +142,20 @@ export function Trend({ points, format, height = 180 }: { points: { label: strin
 export interface Command { id: string; label: string; hint?: string; group: string; run: () => void }
 
 /** ⌘K palette: type to filter pages and agents, Enter to open. */
-export function CommandPalette({ open, onClose, commands }: { open: boolean; onClose: () => void; commands: Command[] }) {
+export function CommandPalette({ open, onClose, commands, initial = '' }: { open: boolean; onClose: () => void; commands: Command[]; initial?: string }) {
   const [q, setQ] = useState('');
   const [i, setI] = useState(0);
   const input = useRef<HTMLInputElement>(null);
-  useEffect(() => { if (open) { setQ(''); setI(0); setTimeout(() => input.current?.focus(), 10); } }, [open]);
+  useEffect(() => { if (open) { setQ(initial); setI(0); setTimeout(() => input.current?.focus(), 10); } }, [open]); // eslint-disable-line react-hooks/exhaustive-deps
   const list = useMemo(() => {
     const s = q.trim().toLowerCase();
-    return commands.filter((c) => !s || c.label.toLowerCase().includes(s) || c.group.toLowerCase().includes(s)).slice(0, 12);
+    if (!s) return commands.slice(0, 12);
+    const exact = commands.filter((c) => c.label.toLowerCase().includes(s) || c.group.toLowerCase().includes(s));
+    if (exact.length) return exact.slice(0, 12);
+    // A spoken or longer phrase: rank by how many of its words appear in the label.
+    const words = s.split(/\s+/).filter((w) => w.length > 2 && !['the', 'and', 'open', 'show', 'please'].includes(w));
+    return commands.map((c) => ({ c, n: words.filter((w) => c.label.toLowerCase().includes(w)).length })).filter((x) => x.n > 0)
+      .sort((a, b) => b.n - a.n).map((x) => x.c).slice(0, 12);
   }, [q, commands]);
   if (!open) return null;
   const run = (c?: Command) => { if (c) { onClose(); c.run(); } };

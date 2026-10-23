@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { NODE_DEF_BY_TYPE } from '@crmagents/shared';
 import { api, type ChatMsg, type Draft } from '../api';
 import { NodeTile } from './nodeIcons';
+import { MicButton } from './Voice';
 
 // Build an agent by chatting. Left: the conversation (the AI asks at most two short questions, answers are one
 // tap). Right: the agent as it takes shape — when it runs, its rules, its steps, what it may use — so the admin
@@ -96,6 +97,7 @@ export function AgentBuilder({ tenantId, first, onBack, onOpen }: {
           <textarea rows={2} value={text} onChange={(e) => setText(e.target.value)} disabled={busy} autoFocus
             placeholder={draft ? 'Ask for a change, e.g. "also email the owner"' : lastAi?.options?.length ? 'Pick an answer above or type your own' : 'Describe your agent…'}
             onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); void send(text); } }} />
+          <MicButton value={text} onChange={setText} onDone={(v) => void send(v)} label="Describe it by voice" />
           <button type="submit" className="primary icon" disabled={busy || text.trim().length < 3} aria-label="Send"><ArrowUp size={16} /></button>
         </form>
       </section>

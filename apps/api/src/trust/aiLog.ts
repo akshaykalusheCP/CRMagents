@@ -25,7 +25,7 @@ export function readable(content: unknown): unknown {
       case 'tool_use': return { tool: b.name, input: cut(str(b.input), TOOL_RESULT) };
       case 'tool_result': return { result: cut(str(b.content), TOOL_RESULT) };
       case 'document': return { document: `${b.source?.media_type ?? 'file'} (not stored here)` };
-      case 'image': return { image: '(not stored here)' };
+      case 'image': return { image: `${b.source?.media_type ?? 'image'}, ${Math.round(String(b.source?.data ?? '').length * 0.75 / 1024)} KB (not stored here)` };
       case 'server_tool_use': return { tool: b.name, input: cut(str(b.input), TOOL_RESULT) };
       case 'web_search_tool_result': return { webResults: Array.isArray(b.content) ? b.content.length : 0 };
       default: return { [b?.type ?? 'part']: '(not shown)' };

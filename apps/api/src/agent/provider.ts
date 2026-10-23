@@ -76,11 +76,18 @@ export function toChat(req: any, o: Pick<CompatOptions, 'model' | 'fastModel'>) 
       messages.push({ role: 'assistant', content: text(m.content) || null, ...(calls.length ? { tool_calls: calls } : {}) });
       continue;
     }
+    const toolPics: Block[] = [];
     for (const b of m.content.filter((x) => x.type === 'tool_result')) {
       messages.push({ role: 'tool', tool_call_id: b.tool_use_id, content: `${b.is_error ? 'ERROR: ' : ''}${text(b.content ?? '')}` });
+      // Tool messages can't hold images in Chat Completions: the image follows as a user message.
+      if (Array.isArray(b.content)) toolPics.push(...b.content.filter((x: Block) => x.type === 'image' && x.source?.type === 'base64'));
     }
+    if (toolPics.length) messages.push({ role: 'user', content: [{ type: 'text', text: 'The image from the tool result above:' }, ...toolPics.map((x) => ({ type: 'image_url', image_url: { url: `data:${x.source.media_type};base64,${x.source.data}` } }))] });
     const t = text(m.content);
-    if (t) messages.push({ role: 'user', content: t });
+    // Images: Chat Completions takes them as data URLs in a content list next to the text.
+    const pics = m.content.filter((b) => b.type === 'image' && b.source?.type === 'base64');
+    if (pics.length) messages.push({ role: 'user', content: [...(t ? [{ type: 'text', text: t }] : []), ...pics.map((b) => ({ type: 'image_url', image_url: { url: `data:${b.source.media_type};base64,${b.source.data}` } }))] });
+    else if (t) messages.push({ role: 'user', content: t });
   }
   const fast = /haiku/i.test(String(req.model ?? ''));
   const schema = req.output_config?.format?.schema;

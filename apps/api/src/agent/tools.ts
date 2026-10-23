@@ -2,7 +2,8 @@ import type Anthropic from '@anthropic-ai/sdk';
 import type { DescribeField, SalesforceClient } from '../salesforce/client.js';
 import { recordsToTable } from '../salesforce/table.js';
 import { bookMeeting, findOwners, freeTimes } from '../salesforce/meetings.js';
-import { fileText } from '../salesforce/files.js';
+import { IMAGE_EXT, fileImage, fileText } from '../salesforce/files.js';
+import { IMAGE_RESULT } from './images.js';
 import { hitsToText, searchKnowledge } from '../knowledge/store.js';
 import { actionContext, actionKey, listOrgActions, parseActionKey, rankActions } from '../salesforce/actions.js';
 
@@ -142,11 +143,14 @@ export const TOOLS: Record<string, Tool> = {
     write: false,
     def: {
       name: 'read_file',
-      description: 'Read the text of a file from list_files (PDF, Word, text, CSV, HTML). Long files are cut.',
+      description: 'Read a file from list_files: the text of PDF, Word, text, CSV and HTML files (long files are cut), or look at an image (JPG, PNG, GIF, WebP).',
       input_schema: { type: 'object', properties: { versionId: { type: 'string', description: 'versionId from list_files' }, title: { type: 'string' }, extension: { type: 'string', description: 'e.g. pdf' } }, required: ['versionId'] },
     },
     async run(sf, { versionId, title, extension }) {
-      return fileText(sf, { versionId: String(versionId), title: String(title ?? 'file'), extension: String(extension ?? 'pdf').toLowerCase().replace(/^\./, ''), size: 0 });
+      const f = { versionId: String(versionId), title: String(title ?? 'file'), extension: String(extension ?? 'pdf').toLowerCase().replace(/^\./, ''), size: 0 };
+      // An image is handed to the AI to look at (the agent loop sends it as an image, not text).
+      if (IMAGE_EXT.has(f.extension)) return { [IMAGE_RESULT]: await fileImage(sf, f) };
+      return fileText(sf, f);
     },
   },
   send_code: {

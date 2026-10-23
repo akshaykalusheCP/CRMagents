@@ -1,4 +1,5 @@
 import { BarChart3, BookOpen, Bot, TrendingUp, ChevronRight, PanelLeft, PanelTop, ChevronDown, Check, ChevronsUpDown, History, House, Inbox, LayoutDashboard, LogOut, Moon, Plus, Search, Settings as SettingsIcon, Sun, Users, Radar, ShieldCheck, Bookmark, LayoutGrid, Compass } from 'lucide-react';
+import { parseVoiceCommand, VoiceCommand } from './components/Voice';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, isDemo, type Alert, type Draft, type Me, type Tenant, type WorkflowRow } from './api';
 import { CommandPalette, Menu, Toaster, toast, type Command } from './components/ui';
@@ -120,6 +121,8 @@ export function App() {
   const [layout, setLayout] = useState<'top' | 'side'>(() => { try { return localStorage.getItem('layout') === 'side' ? 'side' : 'top'; } catch { return 'top'; } });
   const switchLayout = () => { const next = layout === 'top' ? 'side' : 'top'; setLayout(next); try { localStorage.setItem('layout', next); } catch { /* ignore */ } };
   const [cmdk, setCmdk] = useState(false);
+  const [cmdkQuery, setCmdkQuery] = useState('');
+  const [voiceAsk, setVoiceAsk] = useState<{ q: string; n: number }>();
   const [settingsAt, setSettingsAt] = useState<{ section: SettingsSection; connect?: boolean; n: number }>({ section: new URLSearchParams(location.search).has('billing') ? 'plan' : (SETTINGS_SECTIONS.find((x) => x === new URLSearchParams(location.search).get('section')) ?? 'orgs'), n: 0 }); // back from Stripe: the Plan page
   const openSettings = (section: SettingsSection = 'orgs', connect = false) => { setSettingsAt((s) => ({ section, connect, n: s.n + 1 })); setTab('settings'); };
   // Guided tours: visitors get the demo tour (?demo&tour=visitor); a new workspace (no org yet) gets a short welcome once.
@@ -215,6 +218,16 @@ export function App() {
     { id: 'theme', label: theme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode', group: 'Actions', run: toggleTheme },
     ...agentList.map((w) => ({ id: `a-${w.id}`, label: w.name, hint: w.live ? 'On' : 'Off', group: 'Agents', run: () => setTab('agents') })),
   ];
+  // The top-bar microphone: navigate, start an agent, ask Insights, or search with what was said.
+  const onVoice = (said: string) => {
+    const v = parseVoiceCommand(said);
+    if (v.kind === 'go') { if (v.section) openSettings(v.section); else setTab(v.tab); toast(`"${said}"`, 'info'); }
+    else if (v.kind === 'new-agent') { newAgent(v.request ? said.replace(/^(hey |ok |okay )?nimbus[, ]*/i, '') : ''); toast(v.request ? 'Building that agent: answer its questions in the chat.' : 'New agent: describe what it should do.', 'info'); }
+    else if (v.kind === 'ask') { if (!has('insights')) { setCmdkQuery(said); setCmdk(true); return; } setVoiceAsk((p) => ({ q: v.question, n: (p?.n ?? 0) + 1 })); setTab('insights'); }
+    else if (v.kind === 'theme') { if (v.dark !== (theme === 'dark')) toggleTheme(); }
+    else if (v.kind === 'tour') startTour(isDemo() ? 'visitor' : 'welcome');
+    else { setCmdkQuery(v.text); setCmdk(true); }
+  };
   const statusDot = tenant?.setup_status === 'ready' ? 'dot-ok' : tenant?.setup_status === 'error' ? 'dot-bad' : 'dot-warn';
 
   // The staff console has its own full-screen layout.
@@ -254,6 +267,7 @@ export function App() {
             </nav>
             <div className="tnav-right">
               <button className="ghost icon" onClick={() => setCmdk(true)} aria-label="Search (⌘K)" title="Search (⌘K)"><Search size={16} /></button>
+              <VoiceCommand onCommand={onVoice} />
               <AlertsBell onOpen={openAlert} />
             {tenants.length > 0 ? (
                 <Menu align="right" trigger={() => (
@@ -311,7 +325,7 @@ export function App() {
           {pane('discover', <DiscoverPage tenant={tenant} openAgents={() => setTab('agents')} />)}
           {pane('trust', <TrustPage me={me} />)}
           {pane('memory', <MemoryPage me={me} tenants={tenants} />)}
-          {pane('insights', !has('insights') ? <LockedPage feature="insights" title="Insights" /> : <InsightsPage key="ins" fixedView="overview" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
+          {pane('insights', !has('insights') ? <LockedPage feature="insights" title="Insights" /> : <InsightsPage key="ins" fixedView="overview" ask={voiceAsk} tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
           {pane('dashboards', !has('insights') ? <LockedPage feature="insights" title="Dashboards" /> : <InsightsPage key="dash" fixedView="dashboards" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
           {pane('agents', <WorkflowsPage tenant={tenant} goConnections={() => setTab('settings')} incoming={incoming} onIncomingOpened={() => setIncoming(null)} prefill={prefill} onPrefillUsed={() => setPrefill(null)} />)}
           {pane('approvals', <ApprovalsPage tenant={tenant} onChange={refreshWaiting} me={me.email} />)}
@@ -319,7 +333,7 @@ export function App() {
           {pane('activity', <RunsPage tenant={tenant} goSettings={() => setTab('settings')} />)}
           {pane('settings', <SettingsHub key={settingsAt.n} section={settingsAt.section} focusConnect={settingsAt.connect} tenants={tenants} tenant={tenant} onChange={reload} me={me} openAdmin={me.platformAdmin ? () => setTab('admin') : undefined} />)}
         </main>
-        <CommandPalette open={cmdk} onClose={() => setCmdk(false)} commands={commands} />
+        <CommandPalette open={cmdk} initial={cmdkQuery} onClose={() => { setCmdk(false); setCmdkQuery(''); }} commands={commands} />
         <UpgradePrompt me={me} />
         <LinkPrompt tenants={tenants} />
         <Tour tours={tours} go={tourGo} />
@@ -373,6 +387,7 @@ export function App() {
       <div className="app-main">
         <header className="topbar">
           <button className="search-btn" onClick={() => setCmdk(true)} aria-label="Search"><Search size={15} /><span>Search</span><kbd>⌘K</kbd></button>
+          <VoiceCommand onCommand={onVoice} />
           <div className="top-right">
             <AlertsBell onOpen={openAlert} />
             {tenants.length > 0 ? (
@@ -409,7 +424,7 @@ export function App() {
           {pane('discover', <DiscoverPage tenant={tenant} openAgents={() => setTab('agents')} />)}
           {pane('trust', <TrustPage me={me} />)}
           {pane('memory', <MemoryPage me={me} tenants={tenants} />)}
-          {pane('insights', !has('insights') ? <LockedPage feature="insights" title="Insights" /> : <InsightsPage key="ins" fixedView="overview" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
+          {pane('insights', !has('insights') ? <LockedPage feature="insights" title="Insights" /> : <InsightsPage key="ins" fixedView="overview" ask={voiceAsk} tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
           {pane('dashboards', !has('insights') ? <LockedPage feature="insights" title="Dashboards" /> : <InsightsPage key="dash" fixedView="dashboards" tenant={tenant} goSettings={() => setTab('settings')} onAutomate={(r) => { setPrefill(r); setTab('agents'); }} />)}
           {pane('agents', <WorkflowsPage tenant={tenant} goConnections={() => setTab('settings')} incoming={incoming} onIncomingOpened={() => setIncoming(null)} prefill={prefill} onPrefillUsed={() => setPrefill(null)} />)}
           {pane('approvals', <ApprovalsPage tenant={tenant} onChange={refreshWaiting} me={me.email} />)}
@@ -418,7 +433,7 @@ export function App() {
           {pane('settings', <SettingsHub key={settingsAt.n} section={settingsAt.section} focusConnect={settingsAt.connect} tenants={tenants} tenant={tenant} onChange={reload} me={me} openAdmin={me.platformAdmin ? () => setTab('admin') : undefined} />)}
         </main>
       </div>
-      <CommandPalette open={cmdk} onClose={() => setCmdk(false)} commands={commands} />
+      <CommandPalette open={cmdk} initial={cmdkQuery} onClose={() => { setCmdk(false); setCmdkQuery(''); }} commands={commands} />
       <UpgradePrompt me={me} />
       <LinkPrompt tenants={tenants} />
       <Tour tours={tours} go={tourGo} />

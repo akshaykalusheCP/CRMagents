@@ -100,14 +100,21 @@ public with sharing class CRMAgentsController {
      */
     @AuraEnabled
     public static String startAsk(String assistantId, String question, String recordId, String objectApiName, String historyJson) {
-        return startChat(assistantId, question, recordId, objectApiName, historyJson, null);
+        return startChat(assistantId, question, recordId, objectApiName, historyJson, null, null);
     }
 
     /** Like startAsk, continuing a saved conversation (null = a new one). The reply carries the conversation id. */
     @AuraEnabled
-    public static String startChat(String assistantId, String question, String recordId, String objectApiName, String historyJson, String conversationId) {
+    public static String startChat(String assistantId, String question, String recordId, String objectApiName, String historyJson, String conversationId, String imagesJson) {
         try {
             Map<String, Object> body = askBody(assistantId, null, question, recordId, objectApiName, historyJson, true);
+            if (String.isNotBlank(imagesJson)) {
+                // Images go up in their own call (sent as they are, checked by Nimbus) so this request stays small.
+                Map<String, Object> up = (Map<String, Object>) System.JSON.deserializeUntyped(
+                    CRMClient.okBody(CRMClient.call('POST', '/sf/v1/images', imagesJson, 60000))
+                );
+                body.put('imageUploadId', (String) up.get('id'));
+            }
             if (String.isNotBlank(conversationId)) {
                 body.put('conversationId', conversationId);
             }

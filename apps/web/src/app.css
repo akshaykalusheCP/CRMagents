@@ -1324,3 +1324,21 @@ select.sm { height: 30px; padding: 0 28px 0 8px; font-size: 13px; width: auto; }
 :root:root .aik-result.ok svg { color: var(--ok); flex: none; margin-top: 1px; }
 :root:root .aik-result.bad { background: color-mix(in srgb, var(--danger) 10%, transparent); }
 :root:root .aik-result.bad svg { color: var(--danger); flex: none; margin-top: 1px; }
+
+/* Voice and images */
+:root:root .listening { color: var(--danger); position: relative; }
+:root:root .listening::after { content: ''; position: absolute; inset: -3px; border-radius: 999px; border: 2px solid color-mix(in srgb, var(--danger) 55%, transparent); animation: nimbus-pulse 1.2s ease-out infinite; pointer-events: none; }
+@keyframes nimbus-pulse { from { opacity: 1; transform: scale(.9); } to { opacity: 0; transform: scale(1.35); } }
+:root:root .voice-pill { position: fixed; top: 74px; left: 50%; transform: translateX(-50%); z-index: 60; display: flex; align-items: center; gap: 10px; max-width: min(640px, calc(100vw - 32px)); padding: 10px 12px 10px 16px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); box-shadow: 0 12px 32px rgba(15, 23, 51, .16); font-size: 14px; }
+:root:root .voice-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--danger); flex: none; animation: nimbus-blink 1s ease-in-out infinite; }
+@keyframes nimbus-blink { 50% { opacity: .35; } }
+:root:root .voice-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text); }
+:root:root .img-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 6px 0; }
+:root:root .img-chip { position: relative; width: 56px; height: 56px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); background: var(--surface-2); }
+:root:root .img-chip img { width: 100%; height: 100%; object-fit: cover; display: block; }
+:root:root .img-chip button { position: absolute; top: 3px; right: 3px; width: 18px; height: 18px; padding: 0; border-radius: 50%; border: 0; background: rgba(15, 23, 51, .7); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+:root:root .bubble-imgs { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 6px; }
+:root:root .bubble-imgs img { max-width: 160px; max-height: 120px; border-radius: 8px; display: block; border: 1px solid rgba(255, 255, 255, .35); }
+:root:root .speak-btn { font-size: 12px; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; }
+:root:root .read-aloud { font-size: 12.5px; color: var(--text-2); margin-top: 6px; display: inline-flex; gap: 6px; align-items: center; }
+@media (prefers-reduced-motion: reduce) { :root:root .listening::after, :root:root .voice-dot { animation: none; } }

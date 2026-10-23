@@ -9,7 +9,7 @@ const MAX_CHARS = 2_000_000; // per document, after extraction
 const CHUNK_CHARS = 1400;
 const MAX_QUERY_WORDS = 60;
 
-export type DocKind = 'pdf' | 'docx' | 'text';
+export type DocKind = 'pdf' | 'docx' | 'text' | 'image';
 
 export interface Hit { docId: string; title: string; heading: string; body: string; rank: number }
 

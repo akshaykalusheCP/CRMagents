@@ -1,4 +1,5 @@
 import { FileText, Loader2, Search, ThumbsDown, ThumbsUp, Trash2, Upload, X } from 'lucide-react';
+import { addImages } from '../components/ImageAttach';
 import { useEffect, useRef, useState } from 'react';
 import { api, type KnowledgeDoc, type KnowledgeHit, type RecordSuggestion, type Tenant } from '../api';
 import { Markdown } from '../components/Markdown';
@@ -8,7 +9,7 @@ import { Empty, PageHeader, Panel, SkeletonRows, Status, Table, toast, useConfir
 // Knowledge: the company's own guides. Assistants search them automatically; agents use them to write
 // suggestions that show up on the record in Salesforce.
 
-const ACCEPT = '.pdf,.docx,.md,.txt,.html,.htm,.csv';
+const ACCEPT = '.pdf,.docx,.md,.txt,.html,.htm,.csv,.png,.jpg,.jpeg,.gif,.webp';
 const MAX_MB = 15;
 const CASE_AGENT = 'When a new Case is created, look up our support guides using the case subject and description, write short troubleshooting steps for the support agent, and show them as a suggestion on the case.';
 
@@ -54,7 +55,10 @@ export function KnowledgePage({ tenant, onAutomate }: { tenant?: Tenant; onAutom
       if (f.size > MAX_MB * 1024 * 1024) { toast(`${f.name} is over ${MAX_MB} MB`, 'bad'); continue; }
       setUploading((u) => [...u, f.name]);
       try {
-        const r = await api.addKnowledge({ fileName: f.name, data: await toBase64(f) });
+        // Images are shrunk to what the AI needs first; the AI then writes down what they show and their text.
+        const data = f.type.startsWith('image/') ? (await addImages([], [f]))[0]?.data : await toBase64(f);
+        if (!data) continue;
+        const r = await api.addKnowledge({ fileName: f.name, data });
         toast(`${f.name}: ${r.chunks} section${r.chunks === 1 ? '' : 's'} ready`);
       } catch (e) {
         toast(`${f.name}: ${(e as Error).message}`, 'bad');
@@ -137,7 +141,7 @@ export function KnowledgePage({ tenant, onAutomate }: { tenant?: Tenant; onAutom
         <Upload size={20} />
         <div>
           <b>{busy ? `Reading ${uploading[0]}${uploading.length > 1 ? ` and ${uploading.length - 1} more` : ''}…` : 'Drop support guides here'}</b>
-          <span>PDF (scans too), Word, Markdown or text · up to {MAX_MB} MB each</span>
+          <span>PDF (scans too), Word, Markdown, text, or images (diagrams, photos of printed procedures; images up to 5 MB) · up to {MAX_MB} MB each</span>
         </div>
         <div className="row" style={{ gap: 8, marginLeft: 'auto' }}>
           <button className="ghost" onClick={() => setPaste((p) => !p)} disabled={busy}>Paste text</button>

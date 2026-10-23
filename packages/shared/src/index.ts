@@ -255,7 +255,7 @@ export const NODE_DEFS: NodeDef[] = [
     type: 'sf.readFiles',
     label: 'Read files',
     category: 'Salesforce',
-    description: "The text of a record's attached files (PDF, Word, text, CSV, HTML), newest first, for an AI step to use.",
+    description: "The text of a record's attached files (PDF, Word, text, CSV, HTML), newest first, for an AI step to use. Images (photos, screenshots, scans) are looked at by the AI: what they show and the text in them.",
     fields: [
       { key: 'recordId', label: 'Record Id', kind: 'text', placeholder: '{{trigger.recordId}}' },
       { key: 'maxFiles', label: 'At most this many files', kind: 'number', default: 5 },

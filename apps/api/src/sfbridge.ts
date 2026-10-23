@@ -1,4 +1,5 @@
 import { requireFeature } from './plans.js';
+import { checkImages, IMAGE_BODY_LIMIT, imageSchema, imagesSchema, MAX_IMAGES } from './agent/images.js';
 import { pkgNs, pn, pnFields } from './salesforce/pkg.js';
 import { ensureConversation, getConversation, listConversations } from './memory/conversations.js';
 import { recordNotes } from './memory/store.js';
@@ -230,10 +231,28 @@ export function registerSfBridge(app: FastifyInstance) {
     userEmail: z.string().max(200).optional(),
     /** Continue this saved conversation (package 0.10+). */
     conversationId: z.string().uuid().nullish(),
+    /** Images attached in the panel (package with image support). */
+    images: imagesSchema,
+    /** Or: images uploaded just before with POST /sf/v1/images (what the panel does, to keep Apex memory low). */
+    imageUploadId: z.string().uuid().optional(),
   });
   const SYSTEM_FIELDS = /^(SystemModstamp|LastViewedDate|LastReferencedDate|IsDeleted|PhotoUrl|attributes)$/;
-  app.post('/sf/v1/ask', { bodyLimit: 5_000_000 }, async (req) => {
+  // Images for a question asked in the Salesforce panel: checked now, used once by the question that follows.
+  app.post('/sf/v1/images', { bodyLimit: IMAGE_BODY_LIMIT }, async (req) => {
+    const images = checkImages(z.array(imageSchema).min(1).max(MAX_IMAGES).parse(req.body));
+    await pool.query("delete from image_uploads where created_at < now() - interval '15 minutes'");
+    const { rows } = await pool.query('insert into image_uploads (tenant_id, images) values ($1,$2) returning id', [req.sfTenant!.tenantId, JSON.stringify(images)]);
+    return { id: rows[0].id };
+  });
+
+  app.post('/sf/v1/ask', { bodyLimit: IMAGE_BODY_LIMIT }, async (req) => {
     const b = askBody.parse(req.body);
+    let images = checkImages(b.images);
+    if (b.imageUploadId) {
+      const up = await pool.query("delete from image_uploads where id=$1 and tenant_id=$2 and created_at > now() - interval '15 minutes' returning images", [b.imageUploadId, req.sfTenant!.tenantId]);
+      if (!up.rows[0]) throw Object.assign(new Error('The attached images expired. Attach them again.'), { statusCode: 400 });
+      images = [...images, ...checkImages(up.rows[0].images)].slice(0, MAX_IMAGES);
+    }
     const tenantId = req.sfTenant!.tenantId;
     const { rows } = await pool.query(
       b.assistantId ? 'select id, system_prompt, tools from agents where tenant_id=$1 and id=$2' : 'select id, system_prompt, tools from agents where tenant_id=$1 and lower(name)=lower($2) limit 1',
@@ -269,11 +288,11 @@ FORMAT (mandatory, overrides any other style instruction): you are answering in 
     if (b.async) {
       // Answer in the background; the panel checks GET /sf/v1/ask/:id (short calls, nothing held open in Salesforce).
       const runId = await new Promise<string>((resolve, reject) => {
-        runAgent(tenantId, spec, b.question, context, b.history, { onStarted: resolve, inOrg: b.inOrg, startedBy: email, memory }).catch(reject);
+        runAgent(tenantId, spec, b.question, context, b.history, { onStarted: resolve, inOrg: b.inOrg, startedBy: email, memory, images }).catch(reject);
       });
       return { runId, status: 'running', conversationId };
     }
-    const r = await runAgent(tenantId, spec, b.question, context, b.history, { startedBy: email, memory });
+    const r = await runAgent(tenantId, spec, b.question, context, b.history, { startedBy: email, memory, images });
     return { answer: r.output, runId: r.runId, conversationId, remembered: r.remembered };
   });
 

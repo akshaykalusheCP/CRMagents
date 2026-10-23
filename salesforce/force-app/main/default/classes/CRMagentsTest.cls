@@ -150,7 +150,7 @@ private class CRMagentsTest {
         Mock m = new Mock(200, '{"runId":"r9","status":"running","conversationId":"c1"}');
         System.Test.setMock(System.HttpCalloutMock.class, m);
         System.Test.startTest();
-        String started = CRMAgentsController.startChat('a1', 'And the oldest?', null, null, null, 'c1');
+        String started = CRMAgentsController.startChat('a1', 'And the oldest?', null, null, null, 'c1', null);
         System.assert(started.contains('c1'));
         System.assert(m.last.getBody().contains('"conversationId":"c1"'), m.last.getBody());
         m.body = '{"conversations":[],"latest":null,"notes":[]}';
@@ -158,6 +158,21 @@ private class CRMagentsTest {
         System.Test.stopTest();
         System.assert(m.last.getEndpoint().contains('/sf/v1/conversations?userEmail='));
         System.assert(m.last.getEndpoint().contains('recordId=500000000000001'));
+    }
+
+    @IsTest
+    static void imagesGoUpFirstThenTheQuestionRefersToThem() {
+        configure();
+        Mock m = new Mock(200, '{"id":"up1","runId":"r9","status":"running","conversationId":"c1"}');
+        System.Test.setMock(System.HttpCalloutMock.class, m);
+        System.Test.startTest();
+        String started = CRMAgentsController.startChat('a1', 'What does this error mean?', null, null, null, null,
+            '[{"mediaType":"image/png","data":"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk","name":"error.png"}]');
+        System.Test.stopTest();
+        System.assert(started.contains('r9'));
+        System.assert(m.last.getEndpoint().contains('/sf/v1/ask'), m.last.getEndpoint());
+        System.assert(m.last.getBody().contains('"imageUploadId":"up1"'), m.last.getBody());
+        System.assert(!m.last.getBody().contains('iVBOR'), 'the question itself carries no image data');
     }
 
     @IsTest

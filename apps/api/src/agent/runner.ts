@@ -1,4 +1,5 @@
 import { hasFeature, requireActive } from '../plans.js';
+import { imageNote, type ImageInput } from './images.js';
 import { aiClient } from './provider.js';
 import { pool } from '../db.js';
 import { SalesforceClient } from '../salesforce/client.js';
@@ -37,6 +38,8 @@ export async function runAgent(
     exec?: (name: string, input: unknown) => Promise<unknown> | undefined;
     /** A person's conversation: saved, and with memory (theirs, the team's, the record's). */
     memory?: { userKey: string; canWriteTeam: boolean; channel: 'app' | 'salesforce'; conversationId?: string | null; recordId?: string | null };
+    /** Images attached to the question (checked by checkImages). */
+    images?: ImageInput[];
   } = {},
 ) {
   const accountId = await accountOf(tenantId);
@@ -111,6 +114,7 @@ export async function runAgent(
       // Once guides are uploaded, every assistant can look things up in them (read-only, no AI cost).
       tools: knowledge && !tools.includes('search_knowledge') && (await hasKnowledge(accountId)) ? [...tools, 'search_knowledge'] : knowledge ? tools : tools.filter((t) => t !== 'search_knowledge'),
       history,
+      images: opts.images,
     }))]);
     await pool.query(
       `update runs set status='done', output=$2, trace=$3, input_tokens=$4, output_tokens=$5,
@@ -118,7 +122,7 @@ export async function runAgent(
       [runId, masker ? masker.unmaskText(r.text) : r.text, JSON.stringify(r.trace), r.usage.input, r.usage.output, r.usage.cacheRead, r.usage.cacheWrite, r.usage.costUsd],
     );
     const output = masker ? masker.unmaskText(r.text) : r.text;
-    if (conversationId) await addMessages(conversationId, [{ role: 'user', text: userInput }, { role: 'assistant', text: output, runId }]);
+    if (conversationId) await addMessages(conversationId, [{ role: 'user', text: userInput + imageNote(opts.images) }, { role: 'assistant', text: output, runId }]);
     return { runId, output, conversationId, remembered };
   } catch (e) {
     await pool.query(`update runs set status='error', output=$2 where id=$1`, [runId, e instanceof Error ? e.message : String(e)]);

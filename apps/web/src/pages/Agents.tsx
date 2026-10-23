@@ -2,6 +2,8 @@ import { PublicChatSettings } from '../components/PublicChat';
 import { AssistantTests, type TestDraft } from '../components/AssistantTests';
 import { Loader2, Plus, Send, History, Trash2, Bookmark } from 'lucide-react';
 import { Markdown } from '../components/Markdown';
+import { AttachButton, ImageChips, addImages, forUpload, pastedFiles, type PickedImage } from '../components/ImageAttach';
+import { MicButton, SpeakButton, speak } from '../components/Voice';
 import { useEffect, useState } from 'react';
 import { api, type Agent, type Tenant, type ToolInfo, type Remembered, type Conversation } from '../api';
 import { Empty, Panel, Status, toast, useConfirm } from '../components/ui';
@@ -23,7 +25,9 @@ export function AgentsPage({ tenant, goConnections }: { tenant?: Tenant; goConne
   const [confirmUI, ask] = useConfirm();
   const [err, setErr] = useState('');
   const [input, setInput] = useState('');
-  const [thread, setThread] = useState<{ role: 'user' | 'assistant'; text: string; remembered?: Remembered[] }[]>([]);
+  const [thread, setThread] = useState<{ role: 'user' | 'assistant'; text: string; remembered?: Remembered[]; images?: string[] }[]>([]);
+  const [images, setImages] = useState<PickedImage[]>([]);
+  const [readAloud, setReadAloud] = useState(() => { try { return localStorage.getItem('nimbus-read-aloud') === '1'; } catch { return false; } });
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [past, setPast] = useState<Conversation[] | null>(null);
   const [testDraft, setTestDraft] = useState<TestDraft | null>(null);
@@ -72,15 +76,17 @@ export function AgentsPage({ tenant, goConnections }: { tenant?: Tenant; goConne
     if (!sel?.id || !(await ask({ title: `Delete "${sel.name}"?`, body: 'It is removed for everyone in the workspace.', confirm: 'Delete', danger: true }))) return;
     await api.deleteAgent(tenant.id, sel.id); setSel(null); toast('Assistant deleted', 'info'); load();
   };
-  const run = async () => {
-    if (!sel?.id || !input.trim()) return;
-    const q = input.trim();
+  const run = async (spoken?: string) => {
+    const q = (spoken ?? input).trim() || (images.length ? 'What does this show?' : '');
+    if (!sel?.id || !q) return;
     const before = thread;
-    setThread([...before, { role: 'user', text: q }]); setInput(''); setBusy(true);
+    const sent = images;
+    setThread([...before, { role: 'user', text: q, images: sent.map((i) => i.preview) }]); setInput(''); setImages([]); setBusy(true);
     try {
-      const r = await api.run(tenant.id, sel.id, q, before.slice(-20).map(({ role, text }) => ({ role, text })), conversationId);
+      const r = await api.run(tenant.id, sel.id, q, before.slice(-20).map(({ role, text }) => ({ role, text })), conversationId, forUpload(sent));
       setConversationId(r.conversationId);
       setThread((t) => [...t, { role: 'assistant', text: r.output, remembered: r.remembered }]);
+      if (readAloud) speak(r.output);
     }
     catch (e) { setThread((t) => [...t, { role: 'assistant', text: 'Error: ' + (e as Error).message }]); }
     setBusy(false);
@@ -149,8 +155,9 @@ export function AgentsPage({ tenant, goConnections }: { tenant?: Tenant; goConne
                     </ul>
                   )}
                   {thread.length > 0 && (
-                    <div className="thread">{thread.map((m, i) => <div key={i} className={'msg ' + (m.role === 'user' ? 'me' : 'ai')}>{m.role === 'user' ? <div className="bubble">{m.text}</div> : <>
+                    <div className="thread">{thread.map((m, i) => <div key={i} className={'msg ' + (m.role === 'user' ? 'me' : 'ai')}>{m.role === 'user' ? <div className="bubble">{!!m.images?.length && <span className="bubble-imgs">{m.images.map((src) => <img key={src} src={src} alt="" />)}</span>}{m.text}</div> : <>
                       <Markdown className="bubble" text={m.text} />
+                      {!m.text.startsWith('Error:') && <SpeakButton text={m.text} />}
                       {(m.remembered ?? []).map((r, j) => (
                         <span key={j} className="mem-saved">
                           <Bookmark size={12} /> {r.kind === 'record' ? 'Noted on the record' : r.kind === 'team' ? 'Saved to team memory' : 'Saved to memory'}: {r.text}
@@ -163,10 +170,18 @@ export function AgentsPage({ tenant, goConnections }: { tenant?: Tenant; goConne
                     </>}</div>)}
                       {busy && <div className="msg ai"><div className="bubble typing"><Loader2 size={14} className="spin" /> Looking it up…</div></div>}</div>
                   )}
-                  <div className="agent-start">
-                    <input id="as-q" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void run(); }} placeholder={thread.length ? 'Ask a follow-up…' : 'e.g. How many open cases do we have by priority?'} />
-                    <button className="primary" disabled={busy || !input.trim()} onClick={() => void run()} aria-label="Ask">{busy ? <Loader2 size={15} className="spin" /> : <Send size={15} />}</button>
+                  <ImageChips images={images} onChange={setImages} />
+                  <div className="agent-start"
+                    onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) e.preventDefault(); }}
+                    onDrop={async (e) => { if (e.dataTransfer.files.length) { e.preventDefault(); setImages(await addImages(images, e.dataTransfer.files)); } }}>
+                    <input id="as-q" value={input} onChange={(e) => setInput(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') void run(); }}
+                      onPaste={async (e) => { const f = pastedFiles(e); if (f.length) { e.preventDefault(); setImages(await addImages(images, f)); } }}
+                      placeholder={images.length ? 'Ask about the image…' : thread.length ? 'Ask a follow-up…' : 'e.g. How many open cases do we have by priority? (or attach a screenshot)'} />
+                    <AttachButton images={images} onChange={setImages} />
+                    <MicButton value={input} onChange={setInput} onDone={(v) => void run(v)} label="Ask by voice" />
+                    <button className="primary" disabled={busy || (!input.trim() && !images.length)} onClick={() => void run()} aria-label="Ask">{busy ? <Loader2 size={15} className="spin" /> : <Send size={15} />}</button>
                   </div>
+                  <label className="check read-aloud"><input type="checkbox" checked={readAloud} onChange={(e) => { setReadAloud(e.target.checked); try { localStorage.setItem('nimbus-read-aloud', e.target.checked ? '1' : '0'); } catch { /* private window */ } }} /> Read answers aloud</label>
 
                 </div>
               )}

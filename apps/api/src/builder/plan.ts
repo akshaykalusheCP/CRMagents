@@ -180,7 +180,7 @@ Steps run in order. Actions:
 - send_text: SMS or WhatsApp from the company's Twilio number. subject = the phone number (usually {record.MobilePhone} or {record.Phone}), message = the text (often {stepN.text} of an ai_write), object = "whatsapp" for WhatsApp, else SMS. Keep texts short.
 - meeting_times: free times on the record owner's Salesforce calendar (or the people in message, emails separated by commas), to offer in an email written by a later ai_write (it gets the list automatically). Output: text (a list of times).
 - reply_email: answer the customer by email in the case's thread (message = the reply, usually {stepN.text} of an ai_write). send_now false (default) = a person checks, edits and sends it from the case; true only when the admin clearly wants replies sent automatically.
-- read_files: the text of the files attached to the triggering record (PDF, Word, text). No AI. A later ai_write automatically gets it.
+- read_files: the text of the files attached to the triggering record (PDF, Word, text), and what attached images show (photos of damage, screenshots, scanned forms: the AI reads them, small cost). A later ai_write automatically gets it.
 - attach_file: save text as a file on the triggering record (subject = file name, message = content, usually {stepN.text}).
 - delete_record: delete the triggering record (or the current record inside a per_record query). It goes to the Recycle Bin.
 - run_action: run one of the org's own automations listed under "Org actions" (org_action = its key; fields = its inputs as field=input name, value; fill every input marked *). Outputs: the action's listed outputs. Prefer an existing org action over rebuilding the same logic from steps.

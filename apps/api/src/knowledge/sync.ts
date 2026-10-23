@@ -1,9 +1,10 @@
 import { pool } from '../db.js';
 import { SalesforceClient } from '../salesforce/client.js';
 import { allowed, apiLevel } from '../salesforce/limits.js';
-import { READABLE } from '../salesforce/files.js';
-import { addDocument, extractText, looksScanned } from './store.js';
-import { ocrPdf } from './ocr.js';
+import { IMAGE_EXT, READABLE } from '../salesforce/files.js';
+import { checkImages, imageFromExtension, MAX_IMAGE_BYTES } from '../agent/images.js';
+import { addDocument, extractText, looksScanned, type DocKind } from './store.js';
+import { ocrPdf, readImage } from './ocr.js';
 
 // Knowledge that already lives in Salesforce: published Knowledge articles and the files of a Files library.
 // Synced into the knowledge base on request and then once a day, so assistants and agents search them like
@@ -77,7 +78,7 @@ export async function syncArticles(accountId: string, tenantId: string): Promise
   return `${added} article${added === 1 ? '' : 's'} updated${same ? `, ${same} unchanged` : ''}${gone.length ? `, ${gone.length} removed` : ''}`;
 }
 
-/** Every readable file in a Salesforce Files library (PDF, Word, text, CSV, HTML; scans are read by Claude). */
+/** Every readable file in a Salesforce Files library (PDF, Word, text, CSV, HTML; scans are read by Claude; images are described by the AI). */
 export async function syncLibrary(accountId: string, tenantId: string, library: string): Promise<string> {
   const sf = await SalesforceClient.forTenant(tenantId);
   const ws = await sf.query(`SELECT Id, Name FROM ContentWorkspace WHERE Name = '${library.replace(/'/g, "\\'")}' LIMIT 1`);
@@ -98,11 +99,20 @@ export async function syncLibrary(accountId: string, tenantId: string, library: 
     const d = byRef.get(k)!;
     const ext = String(d.ContentDocument?.FileExtension ?? '').toLowerCase();
     const title = String(d.ContentDocument?.Title ?? 'File');
-    if (!READABLE.has(ext) || Number(d.ContentDocument?.ContentSize ?? 0) > MAX_FILE_BYTES) { skipped.push(title); continue; }
+    const image = IMAGE_EXT.has(ext);
+    if ((!READABLE.has(ext) && !image) || Number(d.ContentDocument?.ContentSize ?? 0) > (image ? MAX_IMAGE_BYTES : MAX_FILE_BYTES)) { skipped.push(title); continue; }
     try {
       const data = await sf.downloadFile(d.ContentDocument.LatestPublishedVersionId);
-      let { kind, text, pages } = await extractText(`${title}.${ext}`, data);
-      if (kind === 'pdf' && looksScanned(text)) text = await ocrPdf(accountId, data, pages ?? 1, title);
+      let kind: DocKind, text: string, pages: number | undefined;
+      if (image) {
+        // Diagrams, photographed procedures, screenshots: the AI writes down what they show and their text.
+        const [img] = checkImages([{ mediaType: imageFromExtension(ext)!, data: data.toString('base64'), name: `${title}.${ext}` }]);
+        kind = 'image';
+        text = (await readImage(accountId, img, title, 'Reading a library image for the knowledge base')).text;
+      } else {
+        ({ kind, text, pages } = await extractText(`${title}.${ext}`, data));
+        if (kind === 'pdf' && looksScanned(text)) text = await ocrPdf(accountId, data, pages ?? 1, title);
+      }
       await addDocument(accountId, { title, fileName: `${title}.${ext}`, kind, text, source: 'sf_library', sourceRef: k, sourceVersion: String(d.ContentDocument.LatestPublishedVersionId), tenantId, createdBy: `Library: ${lib.Name}` });
       await removeDocs(have.get(k)?.ids ?? []);
       added++;

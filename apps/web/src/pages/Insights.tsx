@@ -1,4 +1,5 @@
 import { AlertTriangle, ArrowDownRight, ArrowUpRight, Bot, CheckCircle2, Eye, Loader2, Minus, Pin, PinOff, RefreshCw, Search, X } from 'lucide-react';
+import { MicButton } from '../components/Voice';
 import { useEffect, useState } from 'react';
 import { api, type Answer, type Briefing, type Insights, type Kpi, type Tenant, type Tile, type VizFormat } from '../api';
 import { BarChart, ChartCard, DataTable, LineChart } from '../components/viz/Charts';
@@ -55,7 +56,7 @@ function AnswerView({ a, currency }: { a: Answer; currency: string }) {
   return a.chart === 'line' ? <LineChart data={data} format={valueFormat} currency={currency} /> : <BarChart data={data} format={valueFormat} currency={currency} />;
 }
 
-export function InsightsPage({ tenant, goSettings, onAutomate, fixedView }: { tenant?: Tenant; goSettings: () => void; onAutomate: (request: string) => void; fixedView?: 'overview' | 'dashboards' }) {
+export function InsightsPage({ tenant, goSettings, onAutomate, fixedView, ask }: { tenant?: Tenant; goSettings: () => void; onAutomate: (request: string) => void; fixedView?: 'overview' | 'dashboards'; ask?: { q: string; n: number } }) {
   const [period, setPeriod] = useState(30);
   const [ins, setIns] = useState<Insights>();
   const [loading, setLoading] = useState(false);
@@ -92,6 +93,8 @@ export function InsightsPage({ tenant, goSettings, onAutomate, fixedView }: { te
     catch (e) { setErr((e as Error).message); }
     finally { setAsking(false); }
   };
+  // A question asked by voice from the top bar.
+  useEffect(() => { if (ask?.q && tenant) { setQuestion(ask.q); void doAsk(ask.q); } }, [ask?.n, tenant?.id]); // eslint-disable-line react-hooks/exhaustive-deps
   const pin = async () => {
     if (!tenant || !answer) return;
     await api.pinTile(tenant.id, answer);
@@ -192,6 +195,7 @@ export function InsightsPage({ tenant, goSettings, onAutomate, fixedView }: { te
             value={question} onChange={(e) => setQuestion(e.target.value)} disabled={asking}
             onKeyDown={(e) => { if (e.key === 'Enter') void doAsk(); }}
           />
+          <MicButton value={question} onChange={setQuestion} onDone={(v) => void doAsk(v)} label="Ask by voice" />
           <button className="primary" onClick={() => void doAsk()} disabled={asking || question.trim().length < 5}>
             {asking ? <Loader2 size={14} className="spin" /> : 'Ask'}
           </button>

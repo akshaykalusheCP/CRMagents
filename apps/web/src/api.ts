@@ -344,8 +344,8 @@ export const api = {
   createAgent: (t: string, a: Omit<Agent, 'id'>) => req<{ id: string }>('POST', `/api/tenants/${t}/agents`, a),
   updateAgent: (t: string, a: Agent) => req('PUT', `/api/tenants/${t}/agents/${a.id}`, a),
   deleteAgent: (t: string, id: string) => req('DELETE', `/api/tenants/${t}/agents/${id}`),
-  run: (t: string, id: string, input: string, history?: { role: 'user' | 'assistant'; text: string }[], conversationId?: string | null) =>
-    req<{ runId: string; output: string; conversationId: string | null; remembered: Remembered[] }>('POST', `/api/tenants/${t}/agents/${id}/run`, { input, history, conversationId }),
+  run: (t: string, id: string, input: string, history?: { role: 'user' | 'assistant'; text: string }[], conversationId?: string | null, images?: { mediaType: string; data: string; name: string }[]) =>
+    req<{ runId: string; output: string; conversationId: string | null; remembered: Remembered[] }>('POST', `/api/tenants/${t}/agents/${id}/run`, { input, history, conversationId, ...(images?.length ? { images } : {}) }),
   publicChat: (t: string, agentId: string) => req<PublicChat>('GET', `/api/tenants/${t}/agents/${agentId}/public`),
   setPublicChat: (t: string, agentId: string, b: Omit<PublicChat, 'snippet' | 'sms'> & { sms?: boolean }) => req<PublicChat>('PUT', `/api/tenants/${t}/agents/${agentId}/public`, b),
   sfPages: (t: string, object?: string) => req<{ utilityBars: SfPage[]; recordPages: SfPage[] }>('GET', `/api/tenants/${t}/salesforce/pages${object ? `?object=${encodeURIComponent(object)}` : ''}`),

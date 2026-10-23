@@ -1,8 +1,10 @@
 import { findOwners, freeTimes } from '../salesforce/meetings.js';
+import { IMAGE_PROMPT } from '../knowledge/ocr.js';
+import type { ImageInput } from '../agent/images.js';
 import { sendText } from '../channels/twilio.js';
 import { accountOf } from '../tenants.js';
 import { parseJsonLoose, type CallOptions, type Effort, type Llm } from '../agent/llm.js';
-import { addUsage, type Usage } from '../agent/pricing.js';
+import { addUsage, emptyUsage, type Usage } from '../agent/pricing.js';
 import type { Example } from './learn.js';
 import type { SalesforceClient, SaveOp } from '../salesforce/client.js';
 import type { WFNode } from '@crmagents/shared';
@@ -297,7 +299,15 @@ export const EXECUTORS: Record<string, Executor> = {
   async 'sf.readFiles'(node, scope, env) {
     const recordId = cfg(node, 'recordId', scope) || String(scope.trigger?.recordId ?? '');
     if (!recordId) throw new Error('Which record\'s files?');
-    return { output: await recordFilesText(env.sf, recordId, Number(node.config.maxFiles) || 5, Number(node.config.maxChars) || 30_000) };
+    // Images on the record are looked at by the AI (what they show and the text in them); that part costs AI.
+    let usage = emptyUsage();
+    const describe = async (img: ImageInput) => {
+      const r = await env.llm.complete({ system: 'You read images attached to business records.', prompt: IMAGE_PROMPT, images: [img], ...aiOptions(node) });
+      usage = addUsage(usage, r.usage);
+      return r.text;
+    };
+    const output = await recordFilesText(env.sf, recordId, Number(node.config.maxFiles) || 5, Number(node.config.maxChars) || 30_000, describe);
+    return { output, usage };
   },
 
   async 'sf.attachFile'(node, scope, env) {

@@ -1,4 +1,5 @@
 import { requireRoom } from './plans.js';
+import { checkImages, IMAGE_BODY_LIMIT, imageFromExtension, imagesSchema } from './agent/images.js';
 import cookie from '@fastify/cookie';
 import Fastify, { type FastifyRequest } from 'fastify';
 import { z } from 'zod';
@@ -31,8 +32,8 @@ import { compileRule, listRules } from './smart/policies.js';
 import { regression } from './smart/regress.js';
 import { builderChat } from './builder/chat.js';
 import { listOrgActions } from './salesforce/actions.js';
-import { addDocument, deleteDocument, extractText, listDocuments, looksScanned, MAX_UPLOAD_BYTES, searchKnowledge } from './knowledge/store.js';
-import { ocrPdf } from './knowledge/ocr.js';
+import { addDocument, deleteDocument, extractText, listDocuments, looksScanned, MAX_UPLOAD_BYTES, searchKnowledge, type DocKind } from './knowledge/store.js';
+import { ocrPdf, readImage } from './knowledge/ocr.js';
 import { addSource, listSources, removeSource, syncSource } from './knowledge/sync.js';
 import { listSuggestions, markSuggestion } from './knowledge/suggestions.js';
 import { registerWebhooks, webhookSecret, webhookUrl } from './engine/webhook.js';
@@ -607,12 +608,18 @@ app.post('/api/knowledge', { bodyLimit: Math.ceil(MAX_UPLOAD_BYTES * 1.4) }, asy
     data: z.string().optional(), // base64 file contents
     text: z.string().max(2_000_000).optional(), // or pasted text
   }).refine((v) => v.data || v.text, 'Upload a file or paste some text').parse(req.body);
-  let kind: 'pdf' | 'docx' | 'text' = 'text';
+  let kind: DocKind = 'text';
   let text = b.text ?? '';
   if (b.data) {
     const buf = Buffer.from(b.data, 'base64');
     if (buf.length > MAX_UPLOAD_BYTES) throw Object.assign(new Error('Files up to 15 MB'), { statusCode: 400 });
-    try {
+    const imageType = imageFromExtension((b.fileName ?? '').split('.').pop() ?? '');
+    if (imageType) {
+      // A diagram, a photo of a printed procedure, a screenshot: the AI writes down what it shows and its text.
+      const [img] = checkImages([{ mediaType: imageType, data: b.data, name: b.fileName }]);
+      kind = 'image';
+      text = (await readImage(req.user!.accountId, img, b.fileName ?? 'image', 'Reading an image for the knowledge base')).text;
+    } else try {
       let pages: number | undefined;
       ({ kind, text, pages } = await extractText(b.fileName ?? 'file.txt', buf));
       // A scan (pages that are only images): Claude reads the pages.
@@ -891,11 +898,12 @@ app.post('/api/tenants/:tenantId/undo', async (req) => {
   return undoChanges(tenantId, await SalesforceClient.forTenant(tenantId), ids, req.user!.email);
 });
 
-const runBody = z.object({ input: z.string().min(1), context: z.unknown().optional(), history: z.array(z.object({ role: z.enum(['user', 'assistant']), text: z.string().max(20000) })).max(40).optional(), conversationId: z.string().uuid().nullish() });
+const runBody = z.object({ input: z.string().min(1), context: z.unknown().optional(), history: z.array(z.object({ role: z.enum(['user', 'assistant']), text: z.string().max(20000) })).max(40).optional(), conversationId: z.string().uuid().nullish(), images: imagesSchema });
 
-app.post('/api/tenants/:tenantId/agents/:agentId/run', async (req, reply) => {
+app.post('/api/tenants/:tenantId/agents/:agentId/run', { bodyLimit: IMAGE_BODY_LIMIT }, async (req, reply) => {
   const { tenantId, agentId } = req.params as { tenantId: string; agentId: string };
   const b = runBody.parse(req.body);
+  const images = checkImages(b.images);
   const { rows } = await pool.query(
     'select id, system_prompt, tools from agents where id = $1 and tenant_id = $2',
     [agentId, tenantId],
@@ -907,7 +915,7 @@ app.post('/api/tenants/:tenantId/agents/:agentId/run', async (req, reply) => {
     b.input,
     b.context,
     b.history,
-    { startedBy: req.user!.email, asPerson: (await actsAsPerson(req.user!.accountId)) ? req.user!.id : undefined, memory: { userKey: req.user!.email, canWriteTeam: roleAtLeast(req.user!.role, 'builder'), channel: 'app', conversationId: b.conversationId } },
+    { startedBy: req.user!.email, asPerson: (await actsAsPerson(req.user!.accountId)) ? req.user!.id : undefined, memory: { userKey: req.user!.email, canWriteTeam: roleAtLeast(req.user!.role, 'builder'), channel: 'app', conversationId: b.conversationId }, images },
   );
 });
 
