@@ -3,8 +3,8 @@ import { SalesforceClient } from '../salesforce/client.js';
 import { allowed, apiLevel } from '../salesforce/limits.js';
 import { IMAGE_EXT, READABLE } from '../salesforce/files.js';
 import { checkImages, imageFromExtension, MAX_IMAGE_BYTES } from '../agent/images.js';
-import { addDocument, extractText, looksScanned, type DocKind } from './store.js';
-import { ocrPdf, readImage } from './ocr.js';
+import { addDocument, addSummarySection, extractText, looksScanned, type DocKind } from './store.js';
+import { ocrPdf, readImage, summarizeForSearch } from './ocr.js';
 
 // Knowledge that already lives in Salesforce: published Knowledge articles and the files of a Files library.
 // Synced into the knowledge base on request and then once a day, so assistants and agents search them like
@@ -113,7 +113,9 @@ export async function syncLibrary(accountId: string, tenantId: string, library: 
         ({ kind, text, pages } = await extractText(`${title}.${ext}`, data));
         if (kind === 'pdf' && looksScanned(text)) text = await ocrPdf(accountId, data, pages ?? 1, title);
       }
-      await addDocument(accountId, { title, fileName: `${title}.${ext}`, kind, text, source: 'sf_library', sourceRef: k, sourceVersion: String(d.ContentDocument.LatestPublishedVersionId), tenantId, createdBy: `Library: ${lib.Name}` });
+      const doc = await addDocument(accountId, { title, fileName: `${title}.${ext}`, kind, text, source: 'sf_library', sourceRef: k, sourceVersion: String(d.ContentDocument.LatestPublishedVersionId), tenantId, createdBy: `Library: ${lib.Name}` });
+      // Only new or changed files get here, so each file is summarised once per version.
+      await summarizeForSearch(accountId, title, text).then((r) => r && addSummarySection(doc.id, accountId, r.body)).catch(() => undefined);
       await removeDocs(have.get(k)?.ids ?? []);
       added++;
     } catch {

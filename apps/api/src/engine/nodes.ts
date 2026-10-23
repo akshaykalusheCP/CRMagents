@@ -419,8 +419,19 @@ export const EXECUTORS: Record<string, Executor> = {
     const query = cfg(node, 'query', scope);
     if (!query) throw new Error('Say what to look up');
     const docs = lines(cfg(node, 'docs', scope));
-    const hits = await searchKnowledge(env.sf.accountId, query, Number(node.config.limit) || 4, docs);
-    return { output: { text: hitsToText(hits), sources: hitSources(hits), count: hits.length } };
+    const limit = Number(node.config.limit) || 4;
+    let hits = await searchKnowledge(env.sf.accountId, query, limit, docs);
+    let usage: Usage | undefined;
+    if (!hits.length && env.llm) {
+      // Nothing matched the words used: the AI suggests the words a guide would use instead, then one more search.
+      const r = await env.llm.complete({
+        system: 'You help search a company knowledge base. Reply with search words only.',
+        prompt: `Nothing matched this search: "${query.slice(0, 500)}". Give 8 to 15 other words or short phrases a support guide or policy would use for the same thing (synonyms, technical terms, product names), separated by spaces. No other text.`,
+        model: 'claude-haiku-5-5',
+      }).catch(() => null);
+      if (r) { usage = r.usage; hits = await searchKnowledge(env.sf.accountId, r.text, limit, docs); }
+    }
+    return { output: { text: hitsToText(hits), sources: hitSources(hits), count: hits.length }, ...(usage ? { usage } : {}) };
   },
 
   // Saves advice against a record, shown on that record's page in Salesforce. Not a Salesforce write.

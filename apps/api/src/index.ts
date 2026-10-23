@@ -33,8 +33,8 @@ import { compileRule, listRules } from './smart/policies.js';
 import { regression } from './smart/regress.js';
 import { builderChat } from './builder/chat.js';
 import { listOrgActions } from './salesforce/actions.js';
-import { addDocument, deleteDocument, extractText, listDocuments, looksScanned, MAX_UPLOAD_BYTES, searchKnowledge, type DocKind } from './knowledge/store.js';
-import { ocrPdf, readImage } from './knowledge/ocr.js';
+import { addDocument, addSummarySection, deleteDocument, extractText, listDocuments, looksScanned, MAX_UPLOAD_BYTES, searchKnowledge, type DocKind } from './knowledge/store.js';
+import { ocrPdf, readImage, summarizeForSearch } from './knowledge/ocr.js';
 import { addSource, listSources, removeSource, syncSource } from './knowledge/sync.js';
 import { listSuggestions, markSuggestion } from './knowledge/suggestions.js';
 import { registerWebhooks, webhookSecret, webhookUrl } from './engine/webhook.js';
@@ -642,7 +642,11 @@ app.post('/api/knowledge', { bodyLimit: Math.ceil(MAX_UPLOAD_BYTES * 1.4) }, asy
     }
   }
   const title = b.title?.trim() || (b.fileName ?? 'Untitled').replace(/\.[a-z0-9]+$/i, '').replace(/[_-]+/g, ' ').trim();
-  return addDocument(req.user!.accountId, { title, fileName: b.fileName, kind, text, createdBy: req.user!.email });
+  const doc = await addDocument(req.user!.accountId, { title, fileName: b.fileName, kind, text, createdBy: req.user!.email });
+  // A searchable summary with the other words people use (in the background; the guide is usable right away).
+  const accountId = req.user!.accountId;
+  void summarizeForSearch(accountId, title, text).then((r) => r && addSummarySection(doc.id, accountId, r.body)).catch(() => undefined);
+  return doc;
 });
 
 app.delete('/api/knowledge/:id', async (req) => {

@@ -37,7 +37,7 @@ export const TOOLS: Record<string, Tool> = {
     def: {
       name: 'search_knowledge',
       description:
-        "Search the company's own documents (support guides, policies, product manuals) uploaded to the knowledge base. Returns the best-matching numbered sections with their document title. Use it before giving troubleshooting steps or policy answers, and cite sections as [1], [2]. Search with the key words of the problem (e.g. \"wifi not connecting windows 11\"), not a full sentence.",
+        "Search the company's own documents (support guides, policies, product manuals) uploaded to the knowledge base. Returns the best-matching numbered sections with their document title. Use it before giving troubleshooting steps or policy answers, and cite sections as [1], [2]. Search with the key words of the problem (e.g. \"wifi not connecting windows 11\"), not a full sentence. If nothing useful comes back, search again with other words (synonyms, the product name, the exact error message) before saying there is no guide.",
       input_schema: {
         type: 'object',
         properties: {

@@ -141,9 +141,29 @@ export async function searchKnowledge(accountId: string, query: string, limit = 
      where c.account_id = $1 and q.tq is not null and c.tsv @@ q.tq
        and (cardinality($4::text[]) = 0 or d.id::text = any($4) or lower(d.title) = any($4))
      order by rank desc limit $3`,
-    [accountId, q, Math.min(Math.max(limit, 1), 10), docs.map((d) => d.toLowerCase())],
+    [accountId, q, Math.min(Math.max(limit, 1), 10) * 3, docs.map((d) => d.toLowerCase())],
   );
-  return rows;
+  return capPerDoc(rows, Math.min(Math.max(limit, 1), 10));
+}
+
+/** Best hits first, but at most `perDoc` from one document, so an answer can draw on several guides. Pure; tested. */
+export function capPerDoc<T extends { docId: string }>(hits: T[], limit: number, perDoc = 3): T[] {
+  const n = new Map<string, number>();
+  const out: T[] = [];
+  for (const h of hits) {
+    const c = n.get(h.docId) ?? 0;
+    if (c >= perDoc) continue;
+    n.set(h.docId, c + 1);
+    out.push(h);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
+/** Adds a searchable "Summary" section (what the document covers, and the other words people use for it). */
+export async function addSummarySection(docId: string, accountId: string, body: string): Promise<void> {
+  await pool.query("delete from knowledge_chunks where doc_id=$1 and seq = -1", [docId]);
+  await pool.query("insert into knowledge_chunks (doc_id, account_id, seq, heading, body) values ($1,$2,-1,'Summary',$3)", [docId, accountId, body]);
 }
 
 /** Search results as the AI sees them: numbered so the answer can cite [1], [2]. */

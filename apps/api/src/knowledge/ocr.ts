@@ -66,3 +66,21 @@ export async function readImage(accountId: string, img: ImageInput, title: strin
   if (!text) throw new Error('The AI returned nothing for this image.');
   return { text, costUsd: usage.costUsd };
 }
+
+/** What a document covers and the other words people would search for it with, as one searchable section. */
+export async function summarizeForSearch(accountId: string, title: string, text: string): Promise<{ body: string; costUsd: number } | null> {
+  if (text.trim().length < 300) return null; // short texts are already easy to find
+  await spendGuard(accountId)(0);
+  const client = await aiClient(accountId, { purpose: 'Summarising a guide for search' });
+  const res: any = await client.messages.create({
+    model: OCR_MODEL, max_tokens: 800,
+    messages: [{ role: 'user', content: `Document "${title}":\n"""\n${text.slice(0, 24000)}\n"""\n\nWrite two parts:\n1. Summary: 2 to 4 sentences on what this document covers and when someone would need it.\n2. Also searched as: 10 to 25 other words or short phrases people might use when looking for this (synonyms, everyday words for technical terms, typical problem descriptions, product names), comma-separated.\nUse exactly the labels "Summary:" and "Also searched as:". No other text.` }],
+  } as never);
+  const usage = usageFrom(OCR_MODEL, res.usage ?? {});
+  await pool.query(
+    `insert into runs (tenant_id, input, status, output, input_tokens, output_tokens, cost_usd)
+     select t.id, $2, 'done', $3, $4, $5, $6 from tenants t where t.account_id=$1 order by t.created_at limit 1`,
+    [accountId, JSON.stringify({ knowledge: 'summary', title }), `Summarised "${title}" for search`, usage.input, usage.output, usage.costUsd]);
+  const out = (res.content ?? []).map((b: any) => (b.type === 'text' ? b.text : '')).join('').trim();
+  return out ? { body: out.slice(0, 4000), costUsd: usage.costUsd } : null;
+}
