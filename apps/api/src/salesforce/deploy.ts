@@ -29,8 +29,11 @@ async function removeFlow(sf: SalesforceClient, flowName: string) {
   for (const v of versions.records) await sf.tooling('DELETE', `/sobjects/Flow/${v.Id}`);
 }
 
-/** Start conditions for the Flow: our own edits never start it, and "only when these fields change". Pure; tested. */
-export function flowStart(object: string, event: string, changed: string[], ownUserId: string | null) {
+/**
+ * Start conditions for the Flow: our own edits never start it, and "only when these fields change". `immediate`: the
+ * action runs in the save itself (publishing an event needs no callout); otherwise on the async path. Pure; tested.
+ */
+export function flowStart(object: string, event: string, changed: string[], ownUserId: string | null, immediate = false) {
   const recordTriggerType = event === 'created' ? 'Create' : event === 'updated' ? 'Update' : 'CreateAndUpdate';
   const filters: { field: string; operator: string; value: Record<string, unknown> }[] = [];
   // Salesforce only knows "is changed" for updates: with "created or updated", new records still start it.
@@ -45,7 +48,9 @@ export function flowStart(object: string, event: string, changed: string[], ownU
   return {
     locationX: 50, locationY: 0, object, recordTriggerType, triggerType: 'RecordAfterSave',
     ...(n ? { filterLogic, filters } : {}),
-    scheduledPaths: [{ connector: { targetReference: 'Run_CRMagents' }, pathType: 'AsyncAfterCommit' }],
+    ...(immediate
+      ? { connector: { targetReference: 'Publish_Change' } }
+      : { scheduledPaths: [{ connector: { targetReference: 'Run_CRMagents' }, pathType: 'AsyncAfterCommit' }] }),
   };
 }
 
@@ -61,6 +66,9 @@ export async function deployWorkflow(tenantId: string, workflowId: string) {
   if (!installed.records.length) throw new Error('The Nimbus package is not installed in this org. Re-run setup on the Connections page.');
   const { rows } = await pool.query('select sf_user_id from tenants where id=$1', [tenantId]);
   const ownUserId: string | null = rows[0]?.sf_user_id ?? null;
+  // Newer packages publish a Nimbus Record Change event (no callout, nothing lost while Nimbus is away); older
+  // packages call Nimbus from the Flow's async path.
+  const events = (await sf.query(`SELECT Id FROM ApexClass WHERE Name = 'CRMPublishChange' AND ${nsFilter(ns)} LIMIT 1`)).records.length > 0;
 
   // Redeploy = replace: remove the previous Flows first.
   for (const old of (wf.sf_flow_name ?? '').split(',').filter(Boolean)) await removeFlow(sf, old);
@@ -73,7 +81,7 @@ export async function deployWorkflow(tenantId: string, workflowId: string) {
       FullName: flowName,
       Metadata: {
         label,
-        description: `Sends each ${t.object} ${t.event === 'created' ? 'created' : t.event === 'updated' ? 'updated' : 'created or updated'} to the Nimbus agent "${wf.name}". Managed by Nimbus.`,
+        description: `Tells Nimbus about each ${t.object} ${t.event === 'created' ? 'created' : t.event === 'updated' ? 'updated' : 'created or updated'}, for the Nimbus agent "${wf.name}". Managed by Nimbus.`,
         processType: 'AutoLaunchedFlow',
         status: 'Active',
         apiVersion: 67,
@@ -82,8 +90,17 @@ export async function deployWorkflow(tenantId: string, workflowId: string) {
           { name: 'BuilderType', value: { stringValue: 'LightningFlowBuilder' } },
           { name: 'CanvasMode', value: { stringValue: 'AUTO_LAYOUT_CANVAS' } },
         ],
-        start: flowStart(t.object, t.event, t.changed, ownUserId),
-        actionCalls: [{
+        start: flowStart(t.object, t.event, t.changed, ownUserId, events),
+        actionCalls: [events ? {
+          name: 'Publish_Change', label: 'Tell Nimbus', locationX: 176, locationY: 200,
+          actionName: pn(ns, 'CRMPublishChange'), actionType: 'apex',
+          inputParameters: [
+            { name: 'workflowId', value: { stringValue: workflowId } },
+            { name: 'recordId', value: { elementReference: '$Record.Id' } },
+            { name: 'objectApiName', value: { stringValue: t.object } },
+            { name: 'eventType', value: { stringValue: t.event } },
+          ],
+        } : {
           name: 'Run_CRMagents', label: 'Run Nimbus workflow', locationX: 176, locationY: 323,
           actionName: pn(ns, 'CRMRunWorkflowAction'), actionType: 'apex',
           inputParameters: [
@@ -96,7 +113,7 @@ export async function deployWorkflow(tenantId: string, workflowId: string) {
     });
     names.push(flowName);
   }
-  await pool.query('update workflows set sf_flow_name=$2, sf_deployed_at=now() where id=$1', [workflowId, names.join(',')]);
+  await pool.query('update workflows set sf_flow_name=$2, sf_deployed_at=now(), push_mode=$3 where id=$1', [workflowId, names.join(','), events ? 'events' : 'callout']);
   return { flowName: names.join(', '), object: trigs.map((t) => t.object).join(', '), trigger: trigs[0].event };
 }
 
@@ -106,6 +123,6 @@ export async function undeployWorkflow(tenantId: string, workflowId: string) {
     const sf = await SalesforceClient.forTenant(tenantId);
     for (const name of wf.sf_flow_name.split(',').filter(Boolean)) await removeFlow(sf, name);
   }
-  await pool.query('update workflows set sf_flow_name=null, sf_deployed_at=null where id=$1', [workflowId]);
+  await pool.query('update workflows set sf_flow_name=null, sf_deployed_at=null, push_mode=null where id=$1', [workflowId]);
   return { ok: true };
 }

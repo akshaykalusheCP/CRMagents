@@ -33,7 +33,7 @@ export function StartMode({ tenant, row, onChanged }: { tenant: Tenant; row: Wor
   const opts: { id: Mode; title: string; body: string }[] = [
     { id: 'realtime', title: 'Real-time', body: 'Salesforce announces each change (Change Data Capture). Within seconds, no API calls. Uses one of the org\'s 5 change-event objects.' },
     { id: 'checks', title: 'Regular checks', body: 'Nimbus asks Salesforce for new records every minute when busy, every 5 when quiet. One API call per check.' },
-    { id: 'push', title: 'Push from Salesforce', body: 'A Flow in Salesforce sends each record the moment it is saved. No API calls and no change-event slots. Needs the Nimbus package.' },
+    { id: 'push', title: 'Push from Salesforce', body: 'A small Flow tells Nimbus the moment a matching record is saved. No API calls to find changes, no change-event slots, and Salesforce keeps the notices for 3 days, so nothing is missed if Nimbus is briefly away (regular checks take over if the connection drops). Needs the Nimbus package.' },
   ];
   return (
     <Panel title="How it starts">

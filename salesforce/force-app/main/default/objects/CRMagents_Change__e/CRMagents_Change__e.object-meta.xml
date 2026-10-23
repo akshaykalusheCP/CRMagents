@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <deploymentStatus>Deployed</deploymentStatus>
+    <description>Published by the Flows Nimbus adds for agents (when a matching record is saved). Nimbus listens for these events and starts the agent; Salesforce keeps them for 3 days, so nothing is lost if Nimbus is briefly away.</description>
+    <eventType>HighVolume</eventType>
+    <label>Nimbus Record Change</label>
+    <pluralLabel>Nimbus Record Changes</pluralLabel>
+    <publishBehavior>PublishAfterCommit</publishBehavior>
+</CustomObject>

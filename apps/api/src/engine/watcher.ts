@@ -7,7 +7,7 @@ import { tzOffset } from '../tz.js';
 export { tzOffset };
 import { NODE_DEF_BY_TYPE, type Workflow } from '@crmagents/shared';
 import { pool } from '../db.js';
-import { autoEnableCdc, enableCdc, LOCK_ID as STREAM_LOCK, streamHealthy, syncStreams } from '../smart/stream.js';
+import { autoEnableCdc, enableCdc, LOCK_ID as STREAM_LOCK, pushHealthy, streamHealthy, syncStreams } from '../smart/stream.js';
 import { SalesforceClient } from '../salesforce/client.js';
 import { purgeOldRuns, recoverRuns } from '../trust/recovery.js';
 import { allowed, apiLevel, pollMinutes } from '../salesforce/limits.js';
@@ -140,7 +140,7 @@ export function pickNew(records: WatchRecord[], field: string, cursor: Date, see
 
 interface LiveRow {
   id: string; tenant_id: string; graph: Workflow; watch_cursor: Date; watch_seen: string[]; sf_user_id: string | null;
-  realtime?: boolean; sf_flow_name?: string | null; poll_idle: number; poll_next_at: Date | null;
+  realtime?: boolean; sf_flow_name?: string | null; push_mode?: string | null; poll_idle: number; poll_next_at: Date | null;
   watch_state: Record<string, { cursor: string; seen: string[] }>;
 }
 
@@ -267,14 +267,16 @@ async function tickLive(rows: LiveRow[]) {
     const sched = w.graph.nodes.find((n) => n.type === 'trigger.schedule');
     if (sched) { await tickSchedule(w, sched).catch((e) => fail(w.id, e)); continue; }
     // Webhook agents start when called; agents with a deployed Flow are pushed by Salesforce: nothing to check.
-    if (w.graph.nodes.some((n) => n.type === 'trigger.webhook') || w.sf_flow_name) continue;
+    if (w.graph.nodes.some((n) => n.type === 'trigger.webhook')) continue;
+    // Older push agents: their Flow calls Nimbus directly. Event push agents fall back to checks if the listener is down.
+    if (w.sf_flow_name && w.push_mode !== 'events') continue;
     const trigs = triggersOf(w.graph);
     if (!trigs.length) { await fail(w.id, 'Needs a Salesforce record trigger with an object'); continue; }
     if (w.poll_next_at && new Date(w.poll_next_at).getTime() > now) continue;
     for (const trig of trigs) {
       // Real-time agents: the change stream starts their runs. Keep the cursor current so polling takes over
       // cleanly (no backlog, no duplicates) if the stream goes down.
-      if (w.realtime && await streamHealthy(w.tenant_id, trig.object)) {
+      if ((w.realtime && await streamHealthy(w.tenant_id, trig.object)) || (w.push_mode === 'events' && await pushHealthy(w.tenant_id))) {
         await saveState(w.id, `${trig.object}|${trig.event}`, new Date(), []);
         continue;
       }
@@ -308,7 +310,7 @@ async function tick() {
     if (!lock[0].ok) return; // another instance is polling
     try {
       const { rows } = await db.query(
-        `select w.id, w.tenant_id, w.graph, w.watch_cursor, w.watch_seen, w.watch_state, w.realtime, w.sf_flow_name, w.poll_idle, w.poll_next_at, t.sf_user_id
+        `select w.id, w.tenant_id, w.graph, w.watch_cursor, w.watch_seen, w.watch_state, w.realtime, w.sf_flow_name, w.push_mode, w.poll_idle, w.poll_next_at, t.sf_user_id
          from workflows w join tenants t on t.id = w.tenant_id
          where w.live and t.setup_status = 'ready'`,
       );

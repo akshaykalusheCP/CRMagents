@@ -80,7 +80,7 @@ export async function autoEnableCdc(sf: SalesforceClient, object: string): Promi
 
 interface Live { id: string; tenant_id: string; graph: Workflow; sf_user_id: string | null }
 
-class OrgStream {
+export class OrgStream {
   private stopped = false;
   private clientId = '';
   private cookies = '';
@@ -131,6 +131,7 @@ class OrgStream {
               continue;
             }
             if (m.data?.payload?.ChangeEventHeader) await this.handle(m.channel, m.data.payload.ChangeEventHeader, m.data.event?.replayId, m.data.payload);
+            else if (PUSH_CHANNEL.test(m.channel) && m.data?.payload) await this.handlePush(m.channel, m.data.payload, m.data.event?.replayId);
           }
           await this.mark(channels, null);
         }
@@ -164,6 +165,24 @@ class OrgStream {
     }
   }
 
+  /** A Nimbus Record Change event from an agent's Flow: start that agent on the record (once). */
+  private async handlePush(channel: string, payload: Record<string, unknown>, replayId?: number) {
+    const job = pushJob(payload);
+    if (job) {
+      const { rows } = await pool.query('select 1 from workflows where id=$1 and tenant_id=$2 and live', [job.workflowId, this.tenantId]);
+      // While the listener was down, the regular checks may already have started this run: don't start it twice.
+      const dup = rows[0] && job.at ? await pool.query("select 1 from runs where workflow_id=$1 and input->>'recordId'=$2 and created_at >= $3 limit 1", [job.workflowId, job.recordId, job.at]) : null;
+      if (rows[0] && !dup?.rowCount) {
+        await startRunAsync(this.tenantId, job.workflowId, { recordId: job.recordId, ...(job.object ? { objectApiName: job.object } : {}) }).catch(() => undefined);
+      }
+    }
+    if (replayId !== undefined) {
+      await pool.query(
+        `insert into stream_state (tenant_id, channel, replay_id, error, updated_at) values ($1,$2,$3,null,now())
+         on conflict (tenant_id, channel) do update set replay_id=excluded.replay_id, error=null, updated_at=now()`, [this.tenantId, channel, replayId]);
+    }
+  }
+
   private async mark(channels: string[], error: string | null) {
     for (const c of channels) {
       await pool.query(
@@ -180,11 +199,14 @@ const streams = new Map<string, { key: string; s: OrgStream }>();
 /** Start, restart or stop org streams so they match the live real-time agents. Called every watcher tick. */
 export async function syncStreams(log: { error: (o: unknown, m: string) => void }) {
   const { rows } = await pool.query(
-    `select w.id, w.tenant_id, w.graph, t.sf_user_id from workflows w join tenants t on t.id = w.tenant_id
-     where w.live and w.realtime and t.setup_status = 'ready'`);
+    `select w.id, w.tenant_id, w.graph, w.realtime, w.push_mode, t.sf_user_id, t.pkg_ns from workflows w join tenants t on t.id = w.tenant_id
+     where w.live and (w.realtime or w.push_mode = 'events') and t.setup_status = 'ready'`);
   const want = new Map<string, Set<string>>();
-  for (const w of rows as Live[]) {
-    for (const t of triggersOf(w.graph)) (want.get(w.tenant_id) ?? want.set(w.tenant_id, new Set()).get(w.tenant_id)!).add(`/data/${changeEventFor(t.object)}`);
+  for (const w of rows as (Live & { realtime: boolean; push_mode: string | null; pkg_ns: string })[]) {
+    const set = want.get(w.tenant_id) ?? want.set(w.tenant_id, new Set()).get(w.tenant_id)!;
+    // Agents with a Flow that publishes Nimbus Record Change events: one channel per org for all of them.
+    if (w.push_mode === 'events') set.add(pushChannel(w.pkg_ns ?? ''));
+    if (w.realtime) for (const t of triggersOf(w.graph)) set.add(`/data/${changeEventFor(t.object)}`);
   }
   for (const [tenant, cur] of streams) {
     const chans = want.get(tenant);
@@ -197,6 +219,25 @@ export async function syncStreams(log: { error: (o: unknown, m: string) => void 
     streams.set(tenant, { key, s });
     void s.run([...chans]);
   }
+}
+
+/** The org's channel for Nimbus Record Change events (with the package namespace when there is one). Pure; tested. */
+export const pushChannel = (ns: string) => `/event/${ns ? `${ns}__` : ''}CRMagents_Change__e`;
+const PUSH_CHANNEL = /\/event\/(\w+__)?CRMagents_Change__e$/;
+
+/** Which agent and record a Nimbus Record Change event is for (prefixed field names in a namespaced package). Pure; tested. */
+export function pushJob(p: Record<string, unknown>): { workflowId: string; recordId: string; object: string; at: string | null } | null {
+  const get = (k: string) => String(p[k] ?? p[Object.keys(p).find((x) => x.endsWith(`__${k}`)) ?? ''] ?? '');
+  const workflowId = get('Workflow_Id__c');
+  const recordId = get('Record_Id__c');
+  if (!/^[0-9a-f-]{36}$/i.test(workflowId) || !/^[a-zA-Z0-9]{15,18}$/.test(recordId)) return null;
+  return { workflowId, recordId, object: get('Object__c').replace(/[^\w]/g, ''), at: typeof p.CreatedDate === 'string' ? p.CreatedDate : null };
+}
+
+/** Is the org's Nimbus Record Change listener up and recently heard from? The watcher checks for records when not. */
+export async function pushHealthy(tenantId: string): Promise<boolean> {
+  const { rows } = await pool.query("select error, updated_at from stream_state where tenant_id=$1 and channel like '/event/%CRMagents_Change__e'", [tenantId]);
+  return !!rows[0] && !rows[0].error && Date.now() - new Date(rows[0].updated_at).getTime() < HEALTHY_MS;
 }
 
 /** Is this org's stream for the object up and recently heard from? The watcher polls when not. */
