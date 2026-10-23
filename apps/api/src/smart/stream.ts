@@ -112,7 +112,13 @@ class OrgStream {
         const { rows } = await pool.query('select channel, replay_id from stream_state where tenant_id=$1', [this.tenantId]);
         const replay = Object.fromEntries(channels.map((c) => [c, Number(rows.find((r) => r.channel === c)?.replay_id ?? -1)]));
         for (const c of channels) {
-          const [sub] = await this.post(sf, [{ channel: '/meta/subscribe', clientId: this.clientId, subscription: c, ext: { replay: { [c]: replay[c] } } }]);
+          let [sub] = await this.post(sf, [{ channel: '/meta/subscribe', clientId: this.clientId, subscription: c, ext: { replay: { [c]: replay[c] } } }]);
+          // Salesforce keeps change events for 3 days: after a longer outage the saved position is gone. Start from new
+          // events; the regular checks covered this object while the stream was down, so nothing is missed.
+          if (!sub?.successful && replay[c] !== -1 && /replayId/i.test(String(sub?.error ?? ''))) {
+            await pool.query('update stream_state set replay_id=-1 where tenant_id=$1 and channel=$2', [this.tenantId, c]);
+            [sub] = await this.post(sf, [{ channel: '/meta/subscribe', clientId: this.clientId, subscription: c, ext: { replay: { [c]: -1 } } }]);
+          }
           if (!sub?.successful) throw new Error(`Subscribe to ${c} failed: ${sub?.error ?? 'unknown'}`);
           this.channels.add(c);
         }
