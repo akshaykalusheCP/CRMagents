@@ -65,6 +65,10 @@ export async function recoverRuns(log: { error: (o: unknown, m: string) => void 
   }
 }
 
+export const AI_LOG_DETAIL_DAYS = 7;
+const TRIMMED_REQUEST = { trimmed: true, system: '', messages: [{ role: 'user', content: '(Details cleared after 7 days to keep the log small. Model, tokens and cost are kept.)' }], tools: [] };
+const TRIMMED_RESPONSE = { content: '(cleared)' };
+
 /** Clear inputs, AI replies and tool results from runs older than each workspace's retention (default 30 days). */
 export async function purgeOldRuns(): Promise<number> {
   // Text conversations are only remembered for a day; keep a month for support, then let them go.
@@ -82,6 +86,14 @@ export async function purgeOldRuns(): Promise<number> {
     await pool.query("delete from conversation_messages m using conversations c where c.id = m.conversation_id and c.account_id=$1 and m.created_at < now() - ($2 || ' days')::interval", [account, String(days)]).catch(() => undefined);
     await pool.query('delete from conversations c where c.account_id=$1 and not exists (select 1 from conversation_messages m where m.conversation_id = c.id) and c.updated_at < now() - interval \'1 day\'', [account]).catch(() => undefined);
     await pool.query("delete from ai_calls where account_id=$1 and created_at < now() - ($2 || ' days')::interval", [account, String(days)]).catch(() => undefined);
+    // The full text sent to and returned by the AI is the bulk of the log: kept for a week, then cleared. Model,
+    // tokens, cost and masking counts stay for the whole retention period.
+    if (days > AI_LOG_DETAIL_DAYS) {
+      await pool.query(
+        `update ai_calls set request = $3::jsonb, response = case when response is null then null else $4::jsonb end
+         where account_id=$1 and created_at < now() - ($2 || ' days')::interval and not (request ? 'trimmed')`,
+        [account, String(AI_LOG_DETAIL_DAYS), JSON.stringify(TRIMMED_REQUEST), JSON.stringify(TRIMMED_RESPONSE)]).catch(() => undefined);
+    }
     const res = await pool.query(
       `update runs set input = null, state = null, trace = '[]',
          output = case when output is null then null else '(Details cleared after ' || $2 || ' days)' end,

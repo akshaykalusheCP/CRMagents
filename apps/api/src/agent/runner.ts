@@ -1,9 +1,9 @@
-import { hasFeature, requireActive } from '../plans.js';
+import { accountPlan, hasFeature, requireActive } from '../plans.js';
 import { imageNote, type ImageInput } from './images.js';
 import { aiClient } from './provider.js';
 import { pool } from '../db.js';
 import { SalesforceClient } from '../salesforce/client.js';
-import { checkRunRate, spendGuard } from '../spend.js';
+import { ASKS_PER_MINUTE, spendGuard, waitForAskSlot } from '../spend.js';
 import { accountOf } from '../tenants.js';
 import { createLlm } from './llm.js';
 import { dbResultCache } from './resultCache.js';
@@ -43,7 +43,8 @@ export async function runAgent(
   } = {},
 ) {
   const accountId = await accountOf(tenantId);
-  checkRunRate(accountId);
+  // People are waiting on answers: a separate, plan-based limit that waits briefly for a slot rather than failing.
+  await waitForAskSlot(accountId, ASKS_PER_MINUTE[(await accountPlan(accountId)).plan] ?? ASKS_PER_MINUTE.basic);
   await requireActive(accountId);
   const meetings = await hasFeature(accountId, 'meetings');
   const knowledge = await hasFeature(accountId, 'knowledge');

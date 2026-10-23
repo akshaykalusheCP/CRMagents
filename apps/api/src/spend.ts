@@ -38,6 +38,32 @@ export function spendGuard(accountId: string): SpendGuard {
 
 const recent = new Map<string, number[]>();
 
+/** Assistant answers people are waiting for, per minute, by plan. Agent runs keep their own limit (above). */
+export const ASKS_PER_MINUTE: Record<string, number> = { basic: 20, plus: 60, pro: 120, promax: 240 };
+const asks = new Map<string, number[]>();
+
+/** How long to wait for a free slot (0 = go now). Pure; tested. */
+export function slotWait(times: number[], now: number, perMinute: number): number {
+  const recent = times.filter((t) => now - t < 60_000);
+  if (recent.length < perMinute) return 0;
+  return 60_000 - (now - recent[recent.length - perMinute]) + 5;
+}
+
+/** Waits (up to maxWaitMs) for a free slot when many people ask at once, instead of failing straight away. */
+export async function waitForAskSlot(accountId: string, perMinute: number, maxWaitMs = 20_000): Promise<void> {
+  const t0 = Date.now();
+  for (;;) {
+    const now = Date.now();
+    const list = (asks.get(accountId) ?? []).filter((t) => now - t < 60_000);
+    const wait = slotWait(list, now, perMinute);
+    if (wait === 0) { list.push(now); asks.set(accountId, list); return; }
+    if (now + wait - t0 > maxWaitMs) {
+      throw Object.assign(new Error(`Lots of questions right now (more than ${perMinute} a minute for this workspace). Ask again in a few seconds, or upgrade for a higher limit.`), { statusCode: 429 });
+    }
+    await new Promise((r) => setTimeout(r, Math.min(wait, 2_000)));
+  }
+}
+
 /** Throws (HTTP 429) when a workspace starts too many runs in a minute. In-memory: per API instance. */
 export function checkRunRate(accountId: string): void {
   const now = Date.now();
