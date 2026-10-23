@@ -107,3 +107,16 @@ test('case suggestion workflow: search guides, AI writes from them, suggestion s
   await deleteDocument(ids.account!, d.id);
   assert.equal((await pool.query('select count(*)::int n from knowledge_chunks where doc_id=$1', [d.id])).rows[0].n, 0);
 });
+
+test('knowledge sync reads only new or changed Salesforce items and removes what is gone', async () => {
+  const { plan } = await import('./sync.js');
+  const have = new Map([
+    ['t:a', { ids: ['d1'], version: 'v1' }],   // unchanged
+    ['t:b', { ids: ['d2'], version: 'v1' }],   // new version in Salesforce
+    ['t:c', { ids: ['d3'], version: 'v1' }],   // removed in Salesforce
+    ['t:d', { ids: ['d4'], version: null }],   // synced before versions were kept
+  ]);
+  const r = plan(have, [{ ref: 't:a', version: 'v1' }, { ref: 't:b', version: 'v2' }, { ref: 't:d', version: 'v1' }, { ref: 't:e', version: 'v1' }]);
+  assert.deepEqual(r.read.map((x) => x.ref).sort(), ['t:b', 't:d', 't:e']);
+  assert.deepEqual(r.gone, ['d3']);
+});

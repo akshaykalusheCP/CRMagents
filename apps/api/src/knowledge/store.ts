@@ -78,7 +78,7 @@ export function chunkText(text: string): { heading: string; body: string }[] {
   return out;
 }
 
-export async function addDocument(accountId: string, d: { title: string; fileName?: string; kind: DocKind; text: string; createdBy?: string; source?: string; sourceRef?: string; tenantId?: string }) {
+export async function addDocument(accountId: string, d: { title: string; fileName?: string; kind: DocKind; text: string; createdBy?: string; source?: string; sourceRef?: string; sourceVersion?: string; tenantId?: string }) {
   const text = d.text.slice(0, MAX_CHARS);
   const chunks = chunkText(text);
   if (!chunks.length) throw new Error('No readable text found in this file.');
@@ -86,8 +86,8 @@ export async function addDocument(accountId: string, d: { title: string; fileNam
   try {
     await client.query('begin');
     const { rows } = await client.query(
-      'insert into knowledge_docs (account_id, title, file_name, kind, chars, chunks, created_by, source, source_ref, tenant_id) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) returning id',
-      [accountId, d.title.slice(0, 200), d.fileName ?? null, d.kind, text.length, chunks.length, d.createdBy ?? null, d.source ?? 'upload', d.sourceRef ?? null, d.tenantId ?? null],
+      'insert into knowledge_docs (account_id, title, file_name, kind, chars, chunks, created_by, source, source_ref, tenant_id, source_version) values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) returning id',
+      [accountId, d.title.slice(0, 200), d.fileName ?? null, d.kind, text.length, chunks.length, d.createdBy ?? null, d.source ?? 'upload', d.sourceRef ?? null, d.tenantId ?? null, d.sourceVersion ?? null],
     );
     const id = rows[0].id as string;
     // One insert per 200 sections keeps big guides fast.
