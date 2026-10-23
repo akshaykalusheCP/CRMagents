@@ -20,5 +20,6 @@ export async function clearLimit(key: string) {
 }
 
 export async function purgeLimits() {
+  await pool.query("delete from api_calls_hourly where hour < now() - interval '2 days'").catch(() => undefined);
   await pool.query('delete from rate_limits where reset_at < now()');
 }

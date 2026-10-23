@@ -1,4 +1,5 @@
 import { requireRoom } from './plans.js';
+import { setOwnCap, startOwnUsage } from './salesforce/limits.js';
 import { checkImages, IMAGE_BODY_LIMIT, imageFromExtension, imagesSchema } from './agent/images.js';
 import cookie from '@fastify/cookie';
 import Fastify, { type FastifyRequest } from 'fastify';
@@ -553,7 +554,9 @@ app.get('/api/usage', async (req) => {
 // ---- Tenants (connected orgs) ----
 app.get('/api/tenants', async (req) => {
   const { rows } = await pool.query(
-    'select id, sf_org_id, sf_instance_url, sf_username, setup_status, setup_message, use_package, created_at, api_used, api_max, api_checked_at from tenants where account_id = $1 order by created_at desc',
+    `select id, sf_org_id, sf_instance_url, sf_username, setup_status, setup_message, use_package, created_at, api_used, api_max, api_checked_at, api_cap,
+       coalesce((select sum(calls) from api_calls_hourly h where h.tenant_id = tenants.id and h.hour > now() - interval '24 hours'), 0)::int as api_own_24h
+     from tenants where account_id = $1 order by created_at desc`,
     [req.user!.accountId],
   );
   return rows;
@@ -562,6 +565,16 @@ app.get('/api/tenants', async (req) => {
 app.delete('/api/tenants/:tenantId', async (req) => {
   await pool.query('delete from tenants where id = $1', [(req.params as { tenantId: string }).tenantId]);
   return { ok: true };
+});
+
+// The most Salesforce API calls a day Nimbus may use in this org (null = no own cap; the org-wide protection still applies).
+app.put('/api/tenants/:tenantId/api-cap', async (req) => {
+  const { tenantId } = req.params as { tenantId: string };
+  const { cap } = z.object({ cap: z.number().int().min(500, 'At least 500 calls a day').max(10_000_000).nullable() }).parse(req.body);
+  await pool.query('update tenants set api_cap=$2 where id=$1', [tenantId, cap]);
+  setOwnCap(tenantId, cap);
+  await audit(req.user!.accountId, req.user!.email, cap ? `Limited Nimbus to ${cap.toLocaleString()} Salesforce API calls a day` : 'Removed the Nimbus API call limit', { tenantId, ip: req.ip });
+  return { ok: true, cap };
 });
 
 // Writes our URL and this org's signing secret into the package's settings inside Salesforce.
@@ -1153,4 +1166,5 @@ app.get('/api/tenants/:tenantId/runs', async (req) => {
 
 await migrate();
 startWatcher(app.log);
+startOwnUsage();
 await app.listen({ port: config.port, host: '0.0.0.0' });

@@ -12,7 +12,8 @@ function route(method: string, url: URL, body: any): Response {
   if (p === '/api/auth/me') return json({ id: 'demo', email: 'owner@demo-company.com', accountName: 'Demo Company', role: 'owner', platformAdmin: new URLSearchParams(location.search).has('staff') });
   // Anything that would leave the demo (payments, Slack, linking a Salesforce login) says so instead.
   if (p === '/api/billing/checkout' || p === '/api/billing/portal' || p === '/api/chat-approvals/slack/install' || p === '/t/my-salesforce/link') return json({ error: DEMO_ONLY }, 400);
-  if (p === '/api/tenants') return json([fx.tenant]);
+  if (p === '/api/tenants') return json([{ ...fx.tenant, api_used: 18240, api_max: 115000, api_checked_at: new Date().toISOString(), api_own_24h: 4310, api_cap: null }]);
+  if (/^\/t\/api-cap$/.test(p)) return json({ error: DEMO_ONLY }, 400);
   if (p === '/api/plan') {
     // ?demo&plan=basic shows a Basic trial (locked pages, trial banner); otherwise everything is included.
     const basic = new URLSearchParams(location.search).get('plan') === 'basic';

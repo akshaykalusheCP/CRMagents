@@ -32,6 +32,8 @@ export interface Tenant {
   setup_status?: string; setup_message?: string | null; use_package?: boolean;
   /** Salesforce API calls used in the last 24 hours, as last reported by the org. */
   api_used?: number | null; api_max?: number | null; api_checked_at?: string | null;
+  /** Nimbus's own calls in the last 24 hours, and the daily cap an admin set for them. */
+  api_own_24h?: number | null; api_cap?: number | null;
 }
 export interface KnowledgeDoc { id: string; title: string; fileName: string | null; kind: 'pdf' | 'docx' | 'text'; chars: number; chunks: number; createdBy: string | null; createdAt: string; source?: string }
 export interface KnowledgeSource { id: string; kind: 'articles' | 'library'; library: string | null; lastSyncedAt: string | null; lastResult: string | null; org: string | null; tenantId: string }
@@ -427,6 +429,7 @@ export const api = {
   makePrimaryAiKey: (id: string) => req<{ ok: true }>('POST', `/api/ai-keys/${id}/primary`),
   testAiKey: (id: string) => req<{ ok: boolean; ms: number; model: string; reply?: string; error?: string }>('POST', `/api/ai-keys/${id}/test`),
   testNewAiKey: (b: Omit<AiKeyInput, 'label'>) => req<{ ok: boolean; ms: number; model: string; reply?: string; error?: string }>('POST', '/api/ai-keys/test', b),
+  setApiCap: (t: string, cap: number | null) => req<{ ok: true; cap: number | null }>('PUT', `/api/tenants/${t}/api-cap`, { cap }),
   grantAccess: (t: string) => req<{ granted: number; total: number }>('POST', `/api/tenants/${t}/grant-access`),
   workflows: (t: string) => req<WorkflowRow[]>('GET', `/api/tenants/${t}/workflows`),
   createWorkflow: (t: string, b: { name: string; graph: Workflow }) => req<{ id: string }>('POST', `/api/tenants/${t}/workflows`, b),

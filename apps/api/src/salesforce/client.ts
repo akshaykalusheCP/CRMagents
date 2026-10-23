@@ -2,7 +2,7 @@ import { config } from '../config.js';
 import { decrypt, encrypt } from '../crypto.js';
 import { pool } from '../db.js';
 import { getSfConfig } from '../settings.js';
-import { markExhausted, recordUsage, seedUsage } from './limits.js';
+import { markExhausted, recordUsage, seedUsage, countCall } from './limits.js';
 import { parseCsv } from './csv.js';
 
 export const RECONNECT_MESSAGE =
@@ -217,6 +217,7 @@ export class SalesforceClient {
       body: o.body,
     });
     recordUsage(this.tenantId, res.headers.get('sforce-limit-info'));
+    countCall(this.tenantId);
     if (res.status === 401 && !retried) {
       // Access token expired or was revoked early: drop it and retry once with a fresh one.
       accessCache.delete(this.key);

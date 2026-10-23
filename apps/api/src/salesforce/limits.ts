@@ -70,7 +70,66 @@ export function apiUsage(tenantId: string): ApiUsage | undefined {
 }
 
 export function apiLevel(tenantId: string): 0 | 1 | 2 | 3 {
-  return levelOf(usage.get(tenantId));
+  return Math.max(levelOf(usage.get(tenantId)), ownLevel(tenantId)) as 0 | 1 | 2 | 3;
+}
+
+// ---- Nimbus's own share ----
+// The org total includes every integration. An admin can also cap Nimbus's own calls per day; Nimbus then gives way
+// against that cap the same way (50 / 80 / 95%). Calls are counted here and saved once a minute.
+
+const pendingCalls = new Map<string, number>();
+const own = new Map<string, { used24h: number; cap: number | null; at: number }>();
+
+/** One Salesforce API call made by Nimbus for this org. */
+export function countCall(tenantId: string): void {
+  pendingCalls.set(tenantId, (pendingCalls.get(tenantId) ?? 0) + 1);
+  const o = own.get(tenantId);
+  if (o) o.used24h++;
+  else if (!loading.has(tenantId)) void loadOwn(tenantId);
+}
+
+const loading = new Set<string>();
+async function loadOwn(tenantId: string) {
+  loading.add(tenantId);
+  try {
+    const { rows } = await pool.query(
+      `select t.api_cap, coalesce((select sum(calls) from api_calls_hourly h where h.tenant_id = t.id and h.hour > now() - interval '24 hours'), 0)::int as used
+       from tenants t where t.id = $1`, [tenantId]);
+    if (rows[0]) own.set(tenantId, { used24h: rows[0].used + (pendingCalls.get(tenantId) ?? 0), cap: rows[0].api_cap, at: Date.now() });
+  } catch { /* counted next time */ } finally { loading.delete(tenantId); }
+}
+
+/** Saves the counts (every minute, on every API instance) and refreshes the 24-hour totals. */
+export async function flushOwnUsage(): Promise<void> {
+  const batch = [...pendingCalls];
+  pendingCalls.clear();
+  for (const [tenantId, n] of batch) {
+    await pool.query(
+      `insert into api_calls_hourly (tenant_id, hour, calls) values ($1, date_trunc('hour', now()), $2)
+       on conflict (tenant_id, hour) do update set calls = api_calls_hourly.calls + excluded.calls`, [tenantId, n]).catch(() => {
+      pendingCalls.set(tenantId, (pendingCalls.get(tenantId) ?? 0) + n);
+    });
+  }
+  for (const tenantId of [...own.keys()]) await loadOwn(tenantId);
+}
+
+export function startOwnUsage(): NodeJS.Timeout {
+  return setInterval(() => { void flushOwnUsage(); }, 60_000);
+}
+
+export function ownUsage(tenantId: string): { used24h: number; cap: number | null } | undefined {
+  return own.get(tenantId);
+}
+
+export function setOwnCap(tenantId: string, cap: number | null): void {
+  const o = own.get(tenantId);
+  if (o) o.cap = cap; else void loadOwn(tenantId);
+}
+
+/** Level against Nimbus's own cap (0 when there is none). Pure-ish; tested via levelOf. */
+export function ownLevel(tenantId: string): 0 | 1 | 2 | 3 {
+  const o = own.get(tenantId);
+  return o?.cap ? levelOf({ used: o.used24h, max: o.cap, at: o.at }) : 0;
 }
 
 export class ApiBudgetError extends Error {
@@ -87,7 +146,14 @@ export function allowed(level: number, work: Work): boolean {
 /** Throws before optional work when the org is running low, with a message people can act on. */
 export function assertBudget(tenantId: string, work: Work): void {
   const u = usage.get(tenantId);
-  if (allowed(levelOf(u), work)) return;
+  const o = own.get(tenantId);
+  if (allowed(Math.max(levelOf(u), ownLevel(tenantId)), work)) return;
+  if (o?.cap && ownLevel(tenantId) >= levelOf(u)) {
+    throw new ApiBudgetError(
+      `Paused to stay within the limit set for Nimbus in this org: ${o.used24h.toLocaleString()} of ${o.cap.toLocaleString()} API calls a day used. ` +
+      (work === 'background' ? 'Agents and approvals keep working; this view refreshes when usage drops.' : 'Only work people are waiting on continues until usage drops.'),
+    );
+  }
   const pct = u ? Math.round((u.used / u.max) * 100) : 100;
   throw new ApiBudgetError(
     `Paused to protect this Salesforce org: ${pct}% of its daily API allowance is used (${u?.used.toLocaleString()} of ${u?.max.toLocaleString()}). ` +

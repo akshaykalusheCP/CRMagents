@@ -1342,3 +1342,6 @@ select.sm { height: 30px; padding: 0 28px 0 8px; font-size: 13px; width: auto; }
 :root:root .speak-btn { font-size: 12px; display: inline-flex; align-items: center; gap: 4px; margin-top: 4px; }
 :root:root .read-aloud { font-size: 12.5px; color: var(--text-2); margin-top: 6px; display: inline-flex; gap: 6px; align-items: center; }
 @media (prefers-reduced-motion: reduce) { :root:root .listening::after, :root:root .voice-dot { animation: none; } }
+:root:root .api-cap-edit { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; max-width: 360px; }
+:root:root .api-cap-edit input { width: 110px; }
+:root:root .api-cap-edit .cell-sub { flex-basis: 100%; }

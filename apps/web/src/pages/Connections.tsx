@@ -56,7 +56,7 @@ export function ConnectionsPage({ tenants, onChange, goSettings, focusConnect }:
         {t.setup_message && st !== 'ready' && <span className="cell-sub">{t.setup_message}</span>}
       </div>;
     } },
-    { key: 'api', header: 'API use (24h)', hideSm: true, render: (t) => <ApiUse t={t} /> },
+    { key: 'api', header: 'API use (24h)', hideSm: true, render: (t) => <ApiUse t={t} onChange={onChange} /> },
     { key: 'panel', header: 'In Salesforce', render: (t) => {
       const st = t.setup_status ?? 'pending';
       if (t.use_package && BUSY.has(st)) return <span className="row muted small" style={{ gap: 6 }}><Loader2 size={14} className="spin" /> Installing…</span>;
@@ -157,18 +157,47 @@ export function ConnectionsPage({ tenants, onChange, goSettings, focusConnect }:
  * The org's daily API allowance as Salesforce last reported it. It is shared with the customer's other
  * integrations, so Nimbus slows down at 50%, pauses optional work at 80% and keeps only essentials at 95%.
  */
-function ApiUse({ t }: { t: Tenant }) {
-  if (!t.api_max || t.api_used == null) return <span className="cell-sub">Not measured yet</span>;
+function ApiUse({ t, onChange }: { t: Tenant; onChange: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [cap, setCap] = useState(t.api_cap ? String(t.api_cap) : '');
+  const [busy, setBusy] = useState(false);
+  const own = t.api_own_24h ?? 0;
+  const save = async (value: number | null) => {
+    setBusy(true);
+    try { await api.setApiCap(t.id, value); toast(value ? `Nimbus limited to ${value.toLocaleString()} calls a day in this org` : 'Limit removed'); setEditing(false); onChange(); }
+    catch (e) { toast((e as Error).message, 'bad'); }
+    setBusy(false);
+  };
+  const capPct = t.api_cap ? Math.round((own / t.api_cap) * 100) : null;
+  const ownLine = (
+    <span className="cell-sub">
+      Nimbus: <b>{own.toLocaleString()}</b>{t.api_cap ? ` of its ${t.api_cap.toLocaleString()} limit (${capPct}%)` : ''}
+      {t.api_used != null && t.api_used > own ? ` · other tools: ${(t.api_used - own).toLocaleString()}` : ''}
+      {' · '}<button className="link-btn" onClick={() => setEditing(!editing)}>{t.api_cap ? 'Change limit' : 'Set a limit'}</button>
+    </span>
+  );
+  const editor = editing && (
+    <span className="api-cap-edit">
+      <input inputMode="numeric" value={cap} onChange={(e) => setCap(e.target.value.replace(/[^0-9]/g, ''))} placeholder="e.g. 20000" aria-label="Most API calls a day for Nimbus" />
+      <button className="sm primary" disabled={busy || Number(cap) < 500} onClick={() => void save(Number(cap))}>Save</button>
+      {t.api_cap ? <button className="sm" disabled={busy} onClick={() => void save(null)}>Remove</button> : null}
+      <span className="cell-sub">Calls a day Nimbus may use, to leave room for your other integrations. It slows down at 50%, pauses optional work at 80%, and keeps only approvals and changes at 95%.</span>
+    </span>
+  );
+  if (!t.api_max || t.api_used == null) return <div className="cell-main api-use"><span className="cell-sub">Not measured yet</span>{ownLine}{editor}</div>;
   const pct = Math.round((t.api_used / t.api_max) * 100);
-  const note = pct >= 95 ? 'Only approvals and changes continue'
-    : pct >= 80 ? 'Dashboards and insights paused'
-    : pct >= 50 ? 'Checking for records less often'
+  const worst = Math.max(pct, capPct ?? 0);
+  const note = worst >= 95 ? 'Only approvals and changes continue'
+    : worst >= 80 ? 'Dashboards and insights paused'
+    : worst >= 50 ? 'Checking for records less often'
     : 'Plenty left';
   return (
-    <div className="cell-main api-use" title={`Nimbus gives way as usage rises: slower record checks at 50%, optional work paused at 80%, only approvals and changes at 95%. Reported ${t.api_checked_at ? new Date(t.api_checked_at).toLocaleTimeString() : ''}.`}>
-      <span><b>{pct}%</b> <span className="cell-sub">{t.api_used.toLocaleString()} of {t.api_max.toLocaleString()}</span></span>
+    <div className="cell-main api-use" title={`Nimbus gives way as usage rises, for the org as a whole and against its own limit: slower record checks at 50%, optional work paused at 80%, only approvals and changes at 95%. Reported ${t.api_checked_at ? new Date(t.api_checked_at).toLocaleTimeString() : ''}.`}>
+      <span><b>{pct}%</b> <span className="cell-sub">{t.api_used.toLocaleString()} of {t.api_max.toLocaleString()} (whole org)</span></span>
       <Meter value={t.api_used} max={t.api_max} label="API use" />
-      <span className={'cell-sub' + (pct >= 80 ? ' api-warn' : '')}>{note}</span>
+      {ownLine}
+      <span className={'cell-sub' + (worst >= 80 ? ' api-warn' : '')}>{note}</span>
+      {editor}
     </div>
   );
 }
