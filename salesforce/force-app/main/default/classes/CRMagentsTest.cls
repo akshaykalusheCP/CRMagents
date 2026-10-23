@@ -249,12 +249,19 @@ private class CRMagentsTest {
             }
         }
         insert add;
-        List<CRMagents_Agent_Activity__c> rows;
+        List<CRMAgentsController.ActivityRow> rows;
         System.runAs(u) {
             insert new CRMagents_Agent_Activity__c(Agent__c = 'Triage', Record_Id__c = a.Id, Changes__c = 'Update Account: Rating = Hot', Status__c = 'done');
             rows = CRMAgentsController.activity(a.Id);
         }
         System.assertEquals(1, rows.size());
-        System.assertEquals('Triage', rows[0].Agent__c);
+        System.assertEquals('Triage', rows[0].agent);
+        System.assertEquals('done', rows[0].status);
+    }
+
+    @IsTest
+    static void namespaceIsThePackagePrefixOrEmpty() {
+        String ns = CRMAgentsController.namespace();
+        System.assert(ns == '' || System.Pattern.matches('[A-Za-z0-9_]+', ns), ns);
     }
 }

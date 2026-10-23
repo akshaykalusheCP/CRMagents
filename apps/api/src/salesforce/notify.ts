@@ -1,4 +1,5 @@
 import { allowed, apiLevel } from './limits.js';
+import { pkgNs, pn, pnFields } from './pkg.js';
 import { config } from '../config.js';
 import { pool } from '../db.js';
 import { SalesforceClient } from './client.js';
@@ -70,10 +71,11 @@ export async function notifySalesforce(tenantId: string, runId: string): Promise
     // and not at all for optional updates while the org's API allowance is running low.
     const watched = !!recordId || !!r.started_by || r.status === 'waiting';
     if (r.use_package && watched && (r.status === 'waiting' || allowed(apiLevel(tenantId), 'background'))) {
-      await sf.createRecord('CRMagents_Run_Event__e', {
+      const ns = await pkgNs(tenantId);
+      await sf.createRecord(pn(ns, 'CRMagents_Run_Event__e'), pnFields(ns, {
         Run_Id__c: runId, Status__c: r.status, Record_Id__c: recordId ?? null,
         Agent_Name__c: String(r.name ?? 'Agent').slice(0, 255), Summary__c: String(r.output ?? '').slice(0, 255),
-      }).catch(() => undefined);
+      })).catch(() => undefined);
     }
     if (r.status === 'waiting') {
       const typeId = await ensureNotificationType(tenantId, sf);

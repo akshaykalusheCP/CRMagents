@@ -165,8 +165,8 @@ app.get('/oauth/callback', async (req, reply) => {
 });
 
 app.get('/api/config', async () => ({
-  installUrl: `https://login.salesforce.com/packaging/installPackage.apexp?p0=${config.packageVersionId}`,
-  sandboxInstallUrl: `https://test.salesforce.com/packaging/installPackage.apexp?p0=${config.packageVersionId}`,
+  installUrl: `https://login.salesforce.com/packaging/installPackage.apexp?p0=${config.nsPackage.packageVersionId || config.packageVersionId}`,
+  sandboxInstallUrl: `https://test.salesforce.com/packaging/installPackage.apexp?p0=${config.nsPackage.packageVersionId || config.packageVersionId}`,
 }));
 
 // ---- Settings (values are write-only; GET only reports whether they are set) ----

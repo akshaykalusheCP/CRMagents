@@ -1,4 +1,5 @@
 import type { SalesforceClient } from './client.js';
+import { pkgNs, pn } from './pkg.js';
 
 // Case emails (Email-to-Case): reading the conversation for the AI, and replying in the same thread through the
 // package's Apex action (Salesforce doesn't allow its Send Email action over the API).
@@ -69,7 +70,7 @@ export function emailHtml(text: string): string {
 }
 
 export async function sendCaseReply(sf: SalesforceClient, o: { caseId: string; to?: string; subject?: string; body: string; inReplyToId?: string }) {
-  const out = await sf.runAction('apex', 'CRMCaseEmail', {
+  const out = await sf.runAction('apex', pn(await pkgNs(sf.tenantId), 'CRMCaseEmail'), {
     caseId: o.caseId, toAddress: o.to || null, subject: o.subject || null, htmlBody: emailHtml(o.body), inReplyToId: o.inReplyToId || null,
   });
   if ((out as { sent?: boolean }).sent === false) throw new Error(String((out as { error?: string }).error ?? 'The email could not be sent'));

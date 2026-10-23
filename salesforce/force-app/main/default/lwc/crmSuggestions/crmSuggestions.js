@@ -1,4 +1,5 @@
 import { LightningElement, api } from 'lwc';
+import namespace from '@salesforce/apex/CRMAgentsController.namespace';
 import { subscribe, unsubscribe, onError } from 'lightning/empApi';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
 import suggestions from '@salesforce/apex/CRMAgentsController.suggestions';
@@ -12,7 +13,9 @@ import LightningConfirm from 'lightning/confirm';
 import { notifyRecordUpdateAvailable } from 'lightning/uiRecordApi';
 import { markdownToHtml } from 'c/crmMarkdown';
 
-const CHANNEL = '/event/CRMagents_Run_Event__e';
+// The event channel and payload fields carry the package namespace when there is one (e.g. nimbus__Run_Id__c).
+const channelFor = (ns) => '/event/' + (ns ? ns + '__' : '') + 'CRMagents_Run_Event__e';
+const field = (p, k) => (p ? (p[k] !== undefined ? p[k] : p[Object.keys(p).find((x) => x.endsWith('__' + k))]) : undefined);
 
 function ago(iso) {
     const m = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
@@ -36,10 +39,11 @@ export default class CrmSuggestions extends LightningElement {
     connectedCallback() {
         this.load();
         // An agent that finishes for this record usually just saved a suggestion.
-        subscribe(CHANNEL, -1, (msg) => {
+        namespace().then((ns) => subscribe(channelFor(ns), -1, (msg) => {
             const p = msg && msg.data && msg.data.payload;
-            if (p && p.Record_Id__c && this.recordId && p.Record_Id__c.substring(0, 15) === this.recordId.substring(0, 15) && p.Status__c === 'done') this.load();
-        }).then((s) => { this.subscription = s; }).catch(() => {});
+            const rid = field(p, 'Record_Id__c');
+            if (rid && this.recordId && rid.substring(0, 15) === this.recordId.substring(0, 15) && field(p, 'Status__c') === 'done') this.load();
+        })).then((s) => { this.subscription = s; }).catch(() => {});
         onError(() => {});
     }
 
@@ -75,11 +79,11 @@ export default class CrmSuggestions extends LightningElement {
         activity({ recordId: this.recordId })
             .then((rows) => {
                 this.changes = (rows || []).map((r) => ({
-                    id: r.Name, agent: r.Agent__c, when: ago(r.CreatedDate),
-                    who: r.On_Behalf_Of__r ? 'for ' + r.On_Behalf_Of__r.Name : (r.Started_By__c ? 'started by ' + r.Started_By__c : 'automatic'),
-                    approved: r.Approved_By__c ? 'approved by ' + r.Approved_By__c : '',
-                    lines: (r.Changes__c || '').split('\n').filter((x) => x).slice(0, 8).map((t, i) => ({ k: i, t })),
-                    failed: r.Status__c === 'error'
+                    id: r.id, agent: r.agent, when: ago(r.createdDate),
+                    who: r.onBehalfOf ? 'for ' + r.onBehalfOf : (r.startedBy ? 'started by ' + r.startedBy : 'automatic'),
+                    approved: r.approvedBy ? 'approved by ' + r.approvedBy : '',
+                    lines: (r.changes || '').split('\n').filter((x) => x).slice(0, 8).map((t, i) => ({ k: i, t })),
+                    failed: r.status === 'error'
                 }));
             })
             .catch(() => { this.changes = []; });

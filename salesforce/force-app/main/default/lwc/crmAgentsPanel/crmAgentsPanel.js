@@ -1,4 +1,5 @@
 import { LightningElement, api } from 'lwc';
+import namespace from '@salesforce/apex/CRMAgentsController.namespace';
 import { subscribe, unsubscribe, onError } from 'lightning/empApi';
 import home from '@salesforce/apex/CRMAgentsController.home';
 import startRun from '@salesforce/apex/CRMAgentsController.startRun';
@@ -11,7 +12,9 @@ import execTools from '@salesforce/apex/CRMAgentsController.execTools';
 import postToolResults from '@salesforce/apex/CRMAgentsController.postToolResults';
 import { markdownToHtml } from 'c/crmMarkdown';
 
-const CHANNEL = '/event/CRMagents_Run_Event__e';
+// The event channel and payload fields carry the package namespace when there is one (e.g. nimbus__Run_Id__c).
+const channelFor = (ns) => '/event/' + (ns ? ns + '__' : '') + 'CRMagents_Run_Event__e';
+const field = (p, k) => (p ? (p[k] !== undefined ? p[k] : p[Object.keys(p).find((x) => x.endsWith('__' + k))]) : undefined);
 const POLL_MS = 3000;
 const STATUS = { running: 'Running…', waiting: 'Waiting for approval', sleeping: 'Waiting on a timer', done: 'Done', error: 'Failed', stopped: 'Stopped', cancelled: 'Cancelled' };
 const TONE = { done: 'slds-theme_success', error: 'slds-theme_error', waiting: 'slds-theme_warning', stopped: 'slds-theme_warning' };
@@ -47,7 +50,7 @@ export default class CrmAgentsPanel extends LightningElement {
         this.onVisible = () => { if (document.visibilityState === 'visible') this.load(); };
         document.addEventListener('visibilitychange', this.onVisible);
         // Live updates: Nimbus publishes an event whenever a run changes state.
-        subscribe(CHANNEL, -1, (msg) => this.onEvent(msg && msg.data && msg.data.payload))
+        namespace().then((ns) => subscribe(channelFor(ns), -1, (msg) => this.onEvent(msg && msg.data && msg.data.payload)))
             .then((s) => { this.subscription = s; })
             .catch(() => { /* polling covers it */ });
         onError(() => { /* polling covers it */ });
@@ -74,8 +77,9 @@ export default class CrmAgentsPanel extends LightningElement {
 
     onEvent(p) {
         if (!p) return;
-        if (this.run && p.Run_Id__c === this.run.runId) this.refreshRun();
-        if (!p.Record_Id__c || p.Record_Id__c === this.recordId || p.Status__c === 'waiting') this.load();
+        if (this.run && field(p, 'Run_Id__c') === this.run.runId) this.refreshRun();
+        const rid = field(p, 'Record_Id__c');
+        if (!rid || rid === this.recordId || field(p, 'Status__c') === 'waiting') this.load();
     }
 
     // ---------- getters ----------

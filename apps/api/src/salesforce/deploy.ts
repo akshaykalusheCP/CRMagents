@@ -1,4 +1,5 @@
 import type { Workflow } from '@crmagents/shared';
+import { nsFilter, pkgNs, pn } from './pkg.js';
 import { pool } from '../db.js';
 import { SalesforceClient } from './client.js';
 import { triggersOf } from '../engine/watcher.js';
@@ -55,7 +56,8 @@ export async function deployWorkflow(tenantId: string, workflowId: string) {
   if (trigs[0].event === 'deleted') throw new Error('Salesforce Flows can\'t send deleted records to Nimbus. Keep this agent on real-time changes or regular checks.');
   const sf = await SalesforceClient.forTenant(tenantId);
 
-  const installed = await sf.query("SELECT Id FROM ApexClass WHERE Name = 'CRMRunWorkflowAction' LIMIT 1");
+  const ns = await pkgNs(tenantId);
+  const installed = await sf.query(`SELECT Id FROM ApexClass WHERE Name = 'CRMRunWorkflowAction' AND ${nsFilter(ns)} LIMIT 1`);
   if (!installed.records.length) throw new Error('The Nimbus package is not installed in this org. Re-run setup on the Connections page.');
   const { rows } = await pool.query('select sf_user_id from tenants where id=$1', [tenantId]);
   const ownUserId: string | null = rows[0]?.sf_user_id ?? null;
@@ -83,7 +85,7 @@ export async function deployWorkflow(tenantId: string, workflowId: string) {
         start: flowStart(t.object, t.event, t.changed, ownUserId),
         actionCalls: [{
           name: 'Run_CRMagents', label: 'Run Nimbus workflow', locationX: 176, locationY: 323,
-          actionName: 'CRMRunWorkflowAction', actionType: 'apex',
+          actionName: pn(ns, 'CRMRunWorkflowAction'), actionType: 'apex',
           inputParameters: [
             { name: 'workflowId', value: { stringValue: workflowId } },
             { name: 'recordId', value: { elementReference: '$Record.Id' } },

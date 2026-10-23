@@ -2,24 +2,24 @@
  * Flow action: ask a Nimbus assistant a question, optionally about a record, and get the answer back
  * (for example to summarise a case into a field). Makes a callout: use it in an asynchronous path.
  */
-public with sharing class CRMAskAssistantAction {
-    public class Request {
+global with sharing class CRMAskAssistantAction {
+    global class Request {
         @InvocableVariable(label='Assistant name' required=true description='The assistant\'s name in Nimbus')
-        public String assistantName;
+        global String assistantName;
         @InvocableVariable(label='Question' required=true)
-        public String question;
+        global String question;
         @InvocableVariable(label='Record Id' description='The assistant can read this record')
-        public String recordId;
+        global String recordId;
         @InvocableVariable(label='Object API Name')
-        public String objectApiName;
+        global String objectApiName;
     }
-    public class Result {
-        @InvocableVariable(label='Answer') public String answer;
-        @InvocableVariable(label='Error') public String error;
+    global class Result {
+        @InvocableVariable(label='Answer') global String answer;
+        @InvocableVariable(label='Error') global String error;
     }
 
     @InvocableMethod(label='Ask Nimbus assistant' description='Asks a Nimbus assistant and returns its answer' category='Nimbus')
-    public static List<Result> ask(List<Request> requests) {
+    global static List<Result> ask(List<Request> requests) {
         List<Result> out = new List<Result>();
         for (Request r : requests) {
             Result res = new Result();

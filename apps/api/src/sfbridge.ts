@@ -1,4 +1,5 @@
 import { requireFeature } from './plans.js';
+import { pkgNs, pn, pnFields } from './salesforce/pkg.js';
 import { ensureConversation, getConversation, listConversations } from './memory/conversations.js';
 import { recordNotes } from './memory/store.js';
 import { recordChanges, undoChanges } from './trust/undo.js';
@@ -48,11 +49,13 @@ export async function provisionOrg(tenantId: string): Promise<{ ok: true }> {
   // Salesforce only calls addresses listed in Remote Site Settings: when our address changes (new tunnel, new
   // host), the setting must change with it, or every panel shows "Unauthorized endpoint".
   await ensureRemoteSite(sf);
-  const fields = { Base_Url__c: config.bridgeUrl, Signing_Secret__c: secret };
+  const ns = await pkgNs(tenantId);
+  const obj = pn(ns, 'CRMagents_Config__c');
+  const fields = pnFields(ns, { Base_Url__c: config.bridgeUrl, Signing_Secret__c: secret });
   try {
-    const existing = await sf.query(`SELECT Id FROM CRMagents_Config__c WHERE SetupOwnerId = '${orgId}' LIMIT 1`);
-    if (existing.records.length) await sf.updateRecord('CRMagents_Config__c', (existing.records[0] as { Id: string }).Id, fields);
-    else await sf.createRecord('CRMagents_Config__c', { SetupOwnerId: orgId, ...fields });
+    const existing = await sf.query(`SELECT Id FROM ${obj} WHERE SetupOwnerId = '${orgId}' LIMIT 1`);
+    if (existing.records.length) await sf.updateRecord(obj, (existing.records[0] as { Id: string }).Id, fields);
+    else await sf.createRecord(obj, { SetupOwnerId: orgId, ...fields });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (/INVALID_TYPE|sObject type|NOT_FOUND/i.test(msg)) throw new Error('The Nimbus package is not installed in this org yet.');

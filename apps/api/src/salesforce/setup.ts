@@ -3,6 +3,7 @@ import { pool } from '../db.js';
 import { provisionOrg } from '../sfbridge.js';
 import { RECONNECT_MESSAGE, SalesforceClient } from './client.js';
 import { ensureNotificationType } from './notify.js';
+import { nsFilter, pkgNs, setPkgNs } from './pkg.js';
 
 // After a user connects an org we finish everything ourselves, so the customer only clicks "Connect":
 // 1. install/upgrade the Nimbus package, 2. allow callouts to us, 3. write the signed-connection
@@ -34,10 +35,19 @@ async function ensurePackage(tenantId: string, sf: SalesforceClient) {
     if (!has.records.length) throw new Error('This is the org the Nimbus package is built in, so it cannot be installed here. Deploy the package source to it (sf project deploy start --source-dir force-app), then click Retry setup.');
     return;
   }
-  const installed = await sf.toolingQuery<{ SubscriberPackageVersion?: { Id: string } }>(
-    `SELECT SubscriberPackageVersion.Id FROM InstalledSubscriberPackage WHERE SubscriberPackageId = '${config.subscriberPackageId}'`,
+  // Which package: orgs that already have the original (no-namespace) package keep it and get its upgrades; every
+  // other org gets the namespaced package once it is released (it also installs in orgs with their own namespace).
+  const nsp = config.nsPackage;
+  const ids = [config.subscriberPackageId, nsp.subscriberPackageId].filter(Boolean);
+  const installed = await sf.toolingQuery<{ SubscriberPackageId: string; SubscriberPackageVersion?: { Id: string } }>(
+    `SELECT SubscriberPackageId, SubscriberPackageVersion.Id FROM InstalledSubscriberPackage WHERE SubscriberPackageId IN ('${ids.join("','")}')`,
   );
-  if (installed.records[0]?.SubscriberPackageVersion?.Id === config.packageVersionId) return;
+  const hasLegacy = installed.records.find((r) => r.SubscriberPackageId === config.subscriberPackageId);
+  const hasNs = nsp.subscriberPackageId ? installed.records.find((r) => r.SubscriberPackageId === nsp.subscriberPackageId) : undefined;
+  const useNs = !!(nsp.ns && nsp.packageVersionId) && (!!hasNs || !hasLegacy);
+  const target = useNs ? nsp.packageVersionId : config.packageVersionId;
+  await setPkgNs(tenantId, useNs ? nsp.ns : '');
+  if ((useNs ? hasNs : hasLegacy)?.SubscriberPackageVersion?.Id === target) return;
 
   await status(tenantId, 'installing', 'Installing the Nimbus package in your org (usually 1–3 minutes)…');
   // A freshly released package version can take a few minutes to become installable everywhere;
@@ -46,7 +56,7 @@ async function ensurePackage(tenantId: string, sf: SalesforceClient) {
   for (let attempt = 0; !req; attempt++) {
     try {
       req = await sf.tooling<{ id: string }>('POST', '/sobjects/PackageInstallRequest', {
-        SubscriberPackageVersionKey: config.packageVersionId,
+        SubscriberPackageVersionKey: target,
         NameConflictResolution: 'Block',
         SecurityType: 'None', // admins only; users get access through the permission set below
         // Compile only our classes: the default ('all') recompiles every class in the org, so one broken class of
@@ -95,7 +105,7 @@ async function ensurePermission(tenantId: string, sf: SalesforceClient) {
   const userId: string | null = rows[0]?.sf_user_id;
   if (!userId) return;
   // The connected user uses the panel like everyone else, and records agent activity (Integration).
-  const ps = await sf.query("SELECT Id, Name FROM PermissionSet WHERE Name IN ('CRMagents_User', 'CRMagents_Integration')");
+  const ps = await sf.query(`SELECT Id, Name FROM PermissionSet WHERE Name IN ('CRMagents_User', 'CRMagents_Integration') AND ${nsFilter(await pkgNs(tenantId))}`);
   const ids = (ps.records as { Id: string }[]).map((r) => r.Id);
   if (!ids.length) return;
   const has = new Set(((await sf.query(`SELECT PermissionSetId FROM PermissionSetAssignment WHERE AssigneeId = '${userId}' AND PermissionSetId IN ('${ids.join("','")}')`)).records as { PermissionSetId: string }[]).map((r) => r.PermissionSetId));
@@ -145,7 +155,7 @@ export async function setupOrg(tenantId: string): Promise<void> {
 /** Give every active Salesforce user the Nimbus User permission set (explicit admin action). */
 export async function grantAccessToAll(tenantId: string): Promise<{ granted: number; total: number }> {
   const sf = await SalesforceClient.forTenant(tenantId);
-  const ps = await sf.query("SELECT Id FROM PermissionSet WHERE Name = 'CRMagents_User' LIMIT 1");
+  const ps = await sf.query(`SELECT Id FROM PermissionSet WHERE Name = 'CRMagents_User' AND ${nsFilter(await pkgNs(tenantId))} LIMIT 1`);
   const psId = (ps.records[0] as { Id?: string } | undefined)?.Id;
   if (!psId) throw new Error('Install Nimbus in Salesforce first.');
   const users = (await sf.query("SELECT Id FROM User WHERE IsActive = true AND UserType = 'Standard' LIMIT 2000")).records as { Id: string }[];

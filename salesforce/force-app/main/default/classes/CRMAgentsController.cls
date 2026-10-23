@@ -293,16 +293,48 @@ public with sharing class CRMAgentsController {
         }
     }
 
+    /** This package's namespace ('' for the original package), so components can name our event channel. */
+    @AuraEnabled(cacheable=true)
+    public static String namespace() {
+        String n = CRMAgentsController.class.getName();
+        return n.contains('.') ? n.substringBefore('.') : '';
+    }
+
+    /** One activity row with plain keys (in a namespaced package, record field names would carry the prefix). */
+    public class ActivityRow {
+        @AuraEnabled public String id;
+        @AuraEnabled public String agent;
+        @AuraEnabled public String changes;
+        @AuraEnabled public String onBehalfOf;
+        @AuraEnabled public String startedBy;
+        @AuraEnabled public String approvedBy;
+        @AuraEnabled public String status;
+        @AuraEnabled public Datetime createdDate;
+    }
+
     /** What agents changed on this record (read inside Salesforce: no callout, no API use). */
     @AuraEnabled
-    public static List<CRMagents_Agent_Activity__c> activity(String recordId) {
+    public static List<ActivityRow> activity(String recordId) {
         try {
             String id15 = String.isBlank(recordId) ? '' : recordId.left(15);
-            return [
+            List<ActivityRow> out = new List<ActivityRow>();
+            for (CRMagents_Agent_Activity__c r : [
                 SELECT Name, Agent__c, Changes__c, On_Behalf_Of__r.Name, Started_By__c, Approved_By__c, Status__c, CreatedDate
                 FROM CRMagents_Agent_Activity__c WHERE Record_Id__c IN (:recordId, :id15)
                 WITH USER_MODE ORDER BY CreatedDate DESC LIMIT 10
-            ];
+            ]) {
+                ActivityRow a = new ActivityRow();
+                a.id = r.Name;
+                a.agent = r.Agent__c;
+                a.changes = r.Changes__c;
+                a.onBehalfOf = r.On_Behalf_Of__r != null ? r.On_Behalf_Of__r.Name : null;
+                a.startedBy = r.Started_By__c;
+                a.approvedBy = r.Approved_By__c;
+                a.status = r.Status__c;
+                a.createdDate = r.CreatedDate;
+                out.add(a);
+            }
+            return out;
         } catch (Exception e) {
             throw fail(e);
         }

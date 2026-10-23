@@ -3,21 +3,21 @@
  * message), from the support address they wrote to when there is an org-wide address for it, and logged on the
  * case. Agents call it as a Flow/REST action; the Suggestions card calls it when a person clicks Send.
  */
-public with sharing class CRMCaseEmail {
-    public class Request {
-        @InvocableVariable(label='Case Id' required=true) public String caseId;
-        @InvocableVariable(label='To') public String toAddress;
-        @InvocableVariable(label='Subject') public String subject;
+global with sharing class CRMCaseEmail {
+    global class Request {
+        @InvocableVariable(label='Case Id' required=true) global String caseId;
+        @InvocableVariable(label='To') global String toAddress;
+        @InvocableVariable(label='Subject') global String subject;
         @InvocableVariable(label='Body (HTML)' required=true) public String htmlBody;
-        @InvocableVariable(label='Replying to EmailMessage Id') public String inReplyToId;
+        @InvocableVariable(label='Replying to EmailMessage Id') global String inReplyToId;
     }
-    public class Result {
-        @InvocableVariable(label='Sent') public Boolean sent;
-        @InvocableVariable(label='Error') public String error;
+    global class Result {
+        @InvocableVariable(label='Sent') global Boolean sent;
+        @InvocableVariable(label='Error') global String error;
     }
 
     @InvocableMethod(label='Reply to case email' description='Sends a threaded email reply on a case and logs it' category='Nimbus')
-    public static List<Result> sendReplies(List<Request> requests) {
+    global static List<Result> sendReplies(List<Request> requests) {
         List<Result> out = new List<Result>();
         for (Request r : requests) {
             Result res = new Result();

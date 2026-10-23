@@ -1,4 +1,5 @@
 import { NODE_DEF_BY_TYPE, WRITE_NODE_TYPES } from '@crmagents/shared';
+import { pkgNs, pn, pnFields } from './pkg.js';
 import { pool } from '../db.js';
 import { getSetting } from '../settings.js';
 import { SalesforceClient } from './client.js';
@@ -43,7 +44,8 @@ export async function auditRun(tenantId: string, runId: string): Promise<void> {
     const recordId = String(r.input?.recordId ?? '');
     const userId = String(r.input?.sfUserId ?? '');
     const sf = await SalesforceClient.forTenant(tenantId);
-    await sf.createRecord('CRMagents_Agent_Activity__c', {
+    const ns = await pkgNs(tenantId);
+    await sf.createRecord(pn(ns, 'CRMagents_Agent_Activity__c'), pnFields(ns, {
       Run_Id__c: runId,
       Agent__c: String(r.name ?? 'Agent').slice(0, 255),
       Record_Id__c: /^[a-zA-Z0-9]{15,18}$/.test(recordId) ? recordId : null,
@@ -53,6 +55,6 @@ export async function auditRun(tenantId: string, runId: string): Promise<void> {
       Approved_By__c: r.decided_by ? String(r.decided_by).slice(0, 255) : null,
       Status__c: r.status,
       Changes__c: lines.join('\n').slice(0, MAX_CHANGES),
-    });
+    }));
   } catch { /* a convenience: the run itself already finished */ }
 }
