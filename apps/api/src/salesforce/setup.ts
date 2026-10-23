@@ -117,7 +117,16 @@ export async function setupOrg(tenantId: string): Promise<void> {
     const { rows } = await pool.query('select use_package from tenants where id=$1', [tenantId]);
     if (rows[0]?.use_package) {
       // Optional add-on: the record-page panel and Flow action live in the package.
-      await ensurePackage(tenantId, sf);
+      try {
+        await ensurePackage(tenantId, sf);
+      } catch (e) {
+        // Orgs with their own namespace (ISV / partner dev orgs) can't take a package without one. Everything except
+        // the in-Salesforce extras works over the API, so carry on without it instead of failing the connection.
+        if (!/unlocked package without a namespace into an org with a namespace/i.test(String(e))) throw e;
+        await pool.query('update tenants set use_package=false where id=$1', [tenantId]);
+        await status(tenantId, 'ready', "Ready, without the Salesforce add-on: this org has its own namespace, and Salesforce doesn't allow our package in such orgs yet. Agents, assistants in Nimbus, triggers and approvals all work; the record-page panel, Ask Nimbus button and the \"Run Nimbus agent\" Flow action aren't available in this org.");
+        return;
+      }
       await status(tenantId, 'configuring', 'Connecting the Agent Panel to Nimbus…');
       await provisionOrg(tenantId); // also allows the address in Remote Site Settings
       await ensurePermission(tenantId, sf);
