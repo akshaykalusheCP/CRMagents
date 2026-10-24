@@ -32,7 +32,7 @@ export function SettingsHub({ tenants, onChange, tenant, section, focusConnect, 
           {SECTIONS.map((s) => <button key={s.id} className={tab === s.id ? 'on' : ''} onClick={() => setTab(s.id)} aria-current={tab === s.id ? 'page' : undefined}>{s.label}</button>)}
         </nav>
         <div>
-          <div className="ph-text" style={{ marginBottom: 16 }}><h2 style={{ margin: 0, fontSize: 18, fontWeight: 600 }}>{cur.label}</h2><p className="ph-desc">{cur.desc}</p></div>
+          <div className="set-head"><h2>{cur.label}</h2><p>{cur.desc}</p></div>
           {tab === 'orgs' ? <ConnectionsPage tenants={tenants} onChange={onChange} goSettings={() => setTab('ai')} focusConnect={focusConnect} /> : tab === 'ai' ? <SettingsPage me={me} /> : tab === 'team' ? <TeamPage me={me} tenant={tenant} /> : tab === 'plan' ? <PlanPage me={me} openAdmin={openAdmin} /> : tab === 'approvals' ? <ChatApprovalsPage me={me} /> : <RulesPage tenant={tenant} />}
         </div>
       </div>

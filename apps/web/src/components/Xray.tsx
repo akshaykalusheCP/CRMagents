@@ -2,7 +2,6 @@ import { AlertTriangle, ChevronDown, ChevronRight, Loader2, ScanSearch, FileText
 import { useEffect, useState } from 'react';
 import { api, type Tenant, type Xray } from '../api';
 import { Markdown } from './Markdown';
-import { Ribbon } from './Ribbon';
 import { Empty, Status, toast } from './ui';
 
 // Automation X-ray: everything that runs when records are saved, per object, with the problems found in code:
@@ -41,7 +40,6 @@ export function XrayPanel({ tenant, openAgents }: { tenant: Tenant; openAgents: 
   return (
     <div className="xr">
       <section className="dc-hero">
-        <Ribbon className="card-ribbon" strands={140} angle={0.62} width={0.42} palette="dusk" />
         <div className="dc-hero-main xr-hero">
           {x ? <>
             <div className={'xr-score ' + (x.score >= 85 ? 'good' : x.score >= 60 ? 'mid' : 'low')}><b>{x.score}</b><span>/ 100</span></div>

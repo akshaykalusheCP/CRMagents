@@ -108,7 +108,7 @@ export function HomePage({ me, tenant, go, newAgent, openSettings }: { me: Me; t
                 <h3>{s.title}</h3>
                 <p>{s.finding}</p>
                 <div className="sugg-actions">
-                  <button className="primary cta sm" onClick={() => newAgent(s.request)}>Build this agent</button>
+                  <button className="sm" onClick={() => newAgent(s.request)}>Build this agent</button>
                   <button className="ghost sm" onClick={() => void dismiss(s.key)} aria-label={`Dismiss ${s.title}`}><X size={14} /> Dismiss</button>
                 </div>
               </article>

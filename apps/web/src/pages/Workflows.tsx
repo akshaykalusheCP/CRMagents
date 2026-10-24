@@ -4,7 +4,6 @@ import { TEMPLATES, type Workflow } from '@crmagents/shared';
 import { AgentBuilder } from '../components/AgentBuilder';
 import { UseCaseLibrary } from '../components/UseCaseLibrary';
 import { Empty, FilterTabs, PageHeader, Panel, SkeletonRows, Status, Table, toast, type Column } from '../components/ui';
-import { Ribbon } from '../components/Ribbon';
 import { api, type AgentHealth, type Draft as AiDraft, type Tenant, type WorkflowRow } from '../api';
 import { NodeTile } from '../components/nodeIcons';
 import { WorkflowEditor } from '../components/WorkflowEditor';
@@ -149,10 +148,8 @@ export function WorkflowsPage({ tenant, goConnections, incoming, onIncomingOpene
   const open = (w: WorkflowRow) => setDetail(w);
   const columns: Column<WorkflowRow>[] = [
     { key: 'name', header: 'Agent', render: (w) => {
-      const types = [...new Set(w.graph.nodes.map((n) => n.type))].filter((t) => !t.startsWith('trigger.') && t !== 'util.output').slice(0, 4);
       return (
         <div className="agent-cell">
-          <div className="icon-strip">{types.map((t) => <NodeTile key={t} type={t} />)}</div>
           <div className="cell-main"><b>{w.name}</b><span className="cell-sub">{triggerLabel(w.graph)}</span></div>
         </div>
       );
@@ -209,7 +206,6 @@ export function WorkflowsPage({ tenant, goConnections, incoming, onIncomingOpene
           {err && <div className="card warn">{err}</div>}
           {loaded && rows.length === 0 ? (
             <form className="start-panel builder-hero" onSubmit={(e) => { e.preventDefault(); start(); }}>
-              <Ribbon className="card-ribbon" strands={180} angle={0.55} width={0.55} />
               <div className="start-copy">
                 <h2>Build your first agent</h2>
                 <p>Describe what it should do. I'll ask a quick question if something's missing, use your org's real fields, Flows and Apex, and nothing runs until you approve it.</p>

@@ -109,7 +109,7 @@
 
 /* ---- Meter + trend ---- */
 :root .meter { height: 6px; border-radius: 4px; background: var(--surface-3, var(--surface-2)); overflow: hidden; }
-:root .meter span { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--accent), #c45cf0 65%, #ff7a45); }
+:root .meter span { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
 :root .trend { position: relative; }
 :root .trend svg { display: block; width: 100%; height: 180px; }
 :root .trend-base { stroke: var(--border); stroke-width: 1; }
@@ -260,7 +260,6 @@
 /* ---- Suggestions ---- */
 :root .sugg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 :root .sugg { position: relative; overflow: hidden; display: flex; flex-direction: column; gap: 8px; padding: 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
-:root .sugg::after { content: ''; position: absolute; right: -30%; top: -60%; width: 70%; height: 140%; background: radial-gradient(closest-side, var(--accent-soft), transparent); pointer-events: none; }
 :root .sugg > * { position: relative; z-index: 1; }
 :root .sugg h3 { margin: 0; font-size: 15px; font-weight: 600; }
 :root .sugg p { margin: 0; color: var(--text-2); font-size: 14px; }
@@ -495,24 +494,22 @@
   background-repeat: no-repeat;
   background-attachment: local;
 }
-:root .app-top > main > .app-ribbon { position: absolute; top: 0; right: 0; width: min(62vw, 980px); height: 380px; pointer-events: none; z-index: 0; opacity: .9;
+:root .app-top > main > .app-ribbon { position: absolute; top: 0; right: 0; width: min(46vw, 720px); height: 230px; pointer-events: none; z-index: 0; opacity: .7;
   -webkit-mask-image: linear-gradient(to bottom, #000 35%, transparent 100%), linear-gradient(to left, #000 50%, transparent 100%);
   -webkit-mask-composite: source-in; mask-image: linear-gradient(to bottom, #000 35%, transparent 100%); }
 :root .app-top > main > :not(.app-ribbon) { position: relative; z-index: 1; }
 :root .app-top > main.full > :not(.app-ribbon) { height: 100%; }
-:root .app-top .pg { padding-top: 56px; }
+:root .app-top .pg { padding-top: 36px; }
 
-/* Two-tone headline: "Agents. Automations run by themselves…" */
-:root .app-top .ph-text { display: block; max-width: 760px; }
-:root .app-top .ph-title, :root .app-top .ph-desc { display: inline; font-size: clamp(26px, 3.1vw, 36px); line-height: 1.2; letter-spacing: -0.028em; font-weight: 500; margin: 0; }
-:root .app-top .ph-title { color: var(--text); font-weight: 600; }
-:root .app-top .ph-title::after { content: '. '; }
-:root .app-top .ph-desc, :root .app-top .ph-desc b, :root .app-top .ph-desc span { color: var(--slate, #64748d); }
-:root .app-top .ph-desc b { font-weight: 500 !important; color: var(--slate, #64748d) !important; }
+/* Two-tone header, sized for a working screen: dark title, one slate line under it. */
+:root .app-top .ph-text { max-width: 680px; gap: 4px; }
+:root .app-top .ph-title { font-size: 26px; line-height: 1.25; letter-spacing: -0.02em; font-weight: 600; color: var(--text); }
+:root .app-top .ph-desc { font-size: 15px; line-height: 1.5; color: var(--slate, #64748d); }
+:root .app-top .ph-desc b { font-weight: 500; color: var(--text-2); }
 :root .app-top .ph-row { align-items: flex-end; }
 
 /* Bento panels: crisp white cards with a soft lift. */
-:root .app-top .panel { background: var(--surface); border-radius: 10px; box-shadow: 0 1px 2px rgba(10, 37, 64, .04), 0 12px 32px -18px rgba(50, 50, 93, .18); }
+:root .app-top .panel { background: var(--surface); border-radius: 10px; box-shadow: 0 1px 2px rgba(10, 37, 64, .05); }
 :root .app-top .tnav { background: color-mix(in srgb, var(--surface) 82%, transparent); }
 :root .app-top .tnav-link { color: var(--text); font-weight: 500; font-size: 15px; }
 :root .app-top .tnav-link:not(.on) { color: color-mix(in srgb, var(--text) 78%, transparent); }
@@ -626,7 +623,7 @@
 :root .imp-hero { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
 :root .imp-kpi { display: flex; flex-direction: column; gap: 6px; padding: 18px 20px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; box-shadow: 0 1px 2px rgba(10, 37, 64, .04), 0 12px 32px -18px rgba(50, 50, 93, .18); }
 :root .imp-kpi b { font-size: 30px; font-weight: 600; letter-spacing: -0.02em; color: var(--text); line-height: 1.1; font-variant-numeric: tabular-nums; }
-:root .imp-kpi.accent { background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 9%, var(--surface)), var(--surface) 70%); border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); }
+:root .imp-kpi.accent { border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); }
 :root .imp-kpi.accent b { color: var(--accent); }
 :root .imp-delta { font-size: 12.5px; }
 :root .imp-delta.up { color: var(--ok, #0e7a43); }
@@ -883,15 +880,9 @@ select.sm { height: 30px; padding: 0 28px 0 8px; font-size: 13px; width: auto; }
 @media (max-width: 1600px) { :root:root .app .tnav-links { gap: 6px; } }
 @media (max-width: 1100px) and (min-width: 901px) { :root:root .app .tnav-links { overflow: visible; flex: 0 1 auto; } }
 
-/* ---- Soft ribbon inside a summary card: the same silk, fainter, fading out towards the text ---- */
+/* ---- Ribbon fade ---- */
 :root .ribbon { transition: opacity .45s ease; }
-:root .dc-hero, :root .imp-kpi-glow { position: relative; overflow: hidden; isolation: isolate; }
-:root .card-ribbon { position: absolute; inset: 0; width: 100%; height: 100%; z-index: -1; pointer-events: none; opacity: .5; animation: none;
-  -webkit-mask-image: linear-gradient(to left, #000 0%, rgba(0,0,0,.6) 30%, transparent 62%); mask-image: linear-gradient(to left, #000 0%, rgba(0,0,0,.6) 30%, transparent 62%); }
-:root .imp-kpi-glow .card-ribbon { opacity: .55; -webkit-mask-image: linear-gradient(to left, #000, transparent 80%); mask-image: linear-gradient(to left, #000, transparent 80%); }
-:root .dc-hero > :not(.card-ribbon) { position: relative; }
 @media (prefers-reduced-motion: reduce) { :root .ribbon { transition: none; } }
-:root[data-theme="dark"] .card-ribbon { opacity: .3; }
 @media (max-width: 900px) {
   :root:root .app-top .tnav-link { padding: 0 6px; font-size: 13px; }
   :root:root .app .tnav-links { gap: 0; justify-content: space-between; }
@@ -1384,3 +1375,8 @@ select.sm { height: 30px; padding: 0 28px 0 8px; font-size: 13px; width: auto; }
 :root:root .tools-block .tool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
 :root:root .tools-block label.tool-card { align-items: center; padding: 9px 12px; }
 :root:root .tools-block label.tool-card small { color: var(--text-2); font-size: 12px; line-height: 1.35; }
+
+/* Settings section heading */
+:root .set-head { margin-bottom: 16px; }
+:root .set-head h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.015em; }
+:root .set-head p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }

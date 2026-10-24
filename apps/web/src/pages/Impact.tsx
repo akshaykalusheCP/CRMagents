@@ -1,4 +1,3 @@
-import { Ribbon } from '../components/Ribbon';
 import { Loader2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { api, type Impact, type ImpactAssumptions, type Tenant } from '../api';
@@ -79,7 +78,6 @@ export function ImpactPage({ tenant }: { tenant?: Tenant }) {
             <span className="imp-delta muted">{usd(d.cost.perRun)} per agent run</span>
           </div>
           <div className="imp-kpi accent imp-kpi-glow">
-            <Ribbon className="card-ribbon" strands={110} angle={0.5} width={0.6} palette="mint" />
             <span className="metric-label">Return</span>
             <b>{d.roi == null ? '—' : `${d.roi >= 100 ? Math.round(d.roi) : d.roi.toFixed(1)}×`}</b>
             <span className="imp-delta muted">value for every $1 of AI</span>
