@@ -60,6 +60,8 @@ export function AgentBuilder({ tenantId, first, onBack, onOpen }: {
   }
 
   const lastAi = msgs[msgs.length - 1]?.role === 'assistant' ? msgs[msgs.length - 1] : undefined;
+  // Where the admin is: describe, answer a question, review the card, then test and turn on (in the editor).
+  const stage = draft ? 2 : msgs.length ? 1 : 0;
 
   return (
     <div className="ab">
@@ -69,6 +71,13 @@ export function AgentBuilder({ tenantId, first, onBack, onOpen }: {
           <h3>Build with AI</h3>
           {spent > 0 && <span className="muted small" title="AI cost of building so far">${spent.toFixed(4)}</span>}
         </div>
+        <ol className="ab-progress" aria-label="Steps">
+          {['Describe', 'Answer', 'Review', 'Test'].map((label, i) => (
+            <li key={label} className={i < stage ? 'done' : i === stage ? 'now' : ''} aria-current={i === stage ? 'step' : undefined}>
+              <span className="n">{i < stage ? '✓' : i + 1}</span>{label}
+            </li>
+          ))}
+        </ol>
         <div className="ab-msgs" aria-live="polite">
           {!msgs.length && (
             <div className="ab-welcome">

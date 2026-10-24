@@ -326,6 +326,8 @@ function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDe
   // Turn on = Nimbus checks Salesforce every minute for matching records. Nothing is installed in the org.
   // On-demand agents have nothing to "turn on": offer to run them on a schedule instead.
   const manualTrigger = nodes.find((n) => n.data.type === 'trigger.manual');
+  // The one thing to do next (that button is highlighted): save, then test on a real record, then turn on.
+  const nextStep: 'save' | 'test' | 'on' | null = live ? null : dirty || !id ? 'save' : !tested ? 'test' : 'on';
   const [sched, setSched] = useState<{ every: 'hour' | 'day' | 'week'; at: string } | null>(null);
   const scheduleAndTurnOn = async () => {
     if (!sched || !manualTrigger) return;
@@ -405,7 +407,6 @@ function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDe
         </button>
       </div>
       {aiErr && <div className="err">{aiErr}</div>}
-      <span className="muted small">Check the steps, press Test run (a real record is filled in), then Turn on.</span>
     </div>
   );
 
@@ -426,7 +427,7 @@ function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDe
           </div>
           <span className="ed-sep" />
           <Menu align="right" trigger={() => (
-            <button disabled={previewing || running || bt === 'loading'}>
+            <button className={nextStep === 'test' ? 'primary' : ''} disabled={previewing || running || bt === 'loading'}>
               {previewing || running || bt === 'loading' ? <Loader2 size={14} className="spin" /> : <FlaskConical size={14} />} Test <ChevronDown size={14} />
             </button>
           )}>
@@ -437,11 +438,11 @@ function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDe
             </>}
           </Menu>
           {id && dirty && <button onClick={() => void checkEdit()} title="Compare this edit with the agent's recent real runs"><GitCompare size={14} /> Check changes</button>}
-          <button className={dirty || !id ? 'primary' : ''} onClick={() => void save()} disabled={(!dirty && !!id) || saving}><Save size={14} /> Save</button>
+          <button className={nextStep === 'save' ? 'primary' : ''} onClick={() => void save()} disabled={(!dirty && !!id) || saving}><Save size={14} /> Save</button>
           {live ? (
             <button onClick={() => void turnOff()} disabled={deploying} title={`Runs ${whenText}${realtime ? ' (real-time)' : ''}. Click to turn off.`}><span className="dot ok" /> On</button>
           ) : (
-            <button onClick={() => void turnOn()} disabled={deploying || (!canTurnOn && !manualTrigger)} title={canTurnOn ? `Run automatically ${whenText}` : manualTrigger ? 'Runs when you ask. Turn on to run it on a schedule.' : 'Needs a trigger first'}>
+            <button className={nextStep === 'on' ? 'primary' : ''} onClick={() => void turnOn()} disabled={deploying || (!canTurnOn && !manualTrigger)} title={canTurnOn ? `Run automatically ${whenText}` : manualTrigger ? 'Runs when you ask. Turn on to run it on a schedule.' : 'Needs a trigger first'}>
               {deploying ? <Loader2 size={14} className="spin" /> : <Power size={14} />} Turn on
             </button>
           )}
@@ -452,6 +453,20 @@ function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDe
           )}
         </div>
       </div>
+      {!live && (
+        <div className="ed-next" role="status">
+          {(['save', 'test', 'on'] as const).map((k, i) => {
+            const done = k === 'save' ? !!id && !dirty : k === 'test' ? tested : live;
+            return (
+              <span key={k} className={'ed-next-step' + (done ? ' done' : nextStep === k ? ' now' : '')}>
+                <span className="n">{done ? <Check size={11} /> : i + 1}</span>
+                {k === 'save' ? 'Save' : k === 'test' ? 'Test it on a real record' : 'Turn it on'}
+              </span>
+            );
+          })}
+          <span className="ed-next-hint">{nextStep === 'save' ? 'Check the steps below, then save.' : nextStep === 'test' ? 'Use Test → Test run: it runs once on a real record (and asks for approval first if the agent does).' : 'Looks good: turn it on and it runs by itself.'}</span>
+        </div>
+      )}
       {confirmUI}
       {sched && (
         <div className="modal" onClick={() => setSched(null)}>
@@ -624,10 +639,14 @@ function Editor({ tenantId, id, initialName, initialGraph, onBack, onSaved, onDe
               />
             : (
               <div className="insp-empty">
-                <b style={{ color: 'var(--text)' }}>No block selected</b>
-                <span>Select a block on the canvas to edit its settings and see its last run output.</span>
-                <span className="small">Tips: drag from a block's right dot to connect it · Delete removes the selection · Ctrl/⌘+S saves.</span>
-                <span className="small">{nodes.length} blocks · {edges.length} connections</span>
+                {view === 'steps' ? <>
+                  <b style={{ color: 'var(--text)' }}>Click a step to see or change it</b>
+                  <span>Steps run from top to bottom. Add one with “Add a step” at the bottom, or ask for a change in plain words.</span>
+                  <span className="small">After a test run, each step shows what it actually did.</span>
+                </> : <>
+                  <b style={{ color: 'var(--text)' }}>Click a block to see or change it</b>
+                  <span>Drag from a block's right dot to connect it to the next one. Delete removes the selected block; Ctrl/⌘+S saves.</span>
+                </>}
               </div>
             )}
         </div>

@@ -1345,3 +1345,35 @@ select.sm { height: 30px; padding: 0 28px 0 8px; font-size: 13px; width: auto; }
 :root:root .api-cap-edit { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; max-width: 360px; }
 :root:root .api-cap-edit input { width: 110px; }
 :root:root .api-cap-edit .cell-sub { flex-basis: 100%; }
+
+/* Create chooser, builder progress, editor next-step strip */
+:root:root .tab-count { margin-left: 6px; font-size: 11px; padding: 1px 6px; border-radius: 999px; background: var(--surface-2); color: var(--text-2); }
+:root:root .create-card { max-width: 640px; width: calc(100vw - 32px); }
+:root:root .create-card h2 { margin: 0; }
+:root:root .create-options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 16px 0 12px; }
+@media (max-width: 600px) { :root:root .create-options { grid-template-columns: 1fr; } }
+:root:root .create-option { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; text-align: left; padding: 16px; height: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); white-space: normal; cursor: pointer; transition: border-color .15s, box-shadow .15s; }
+:root:root .create-option:hover, :root:root .create-option:focus-visible { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 18%, transparent); }
+:root:root .create-option b { font-size: 15px; color: var(--text); }
+:root:root .create-option span { font-size: 13px; color: var(--text-2); font-weight: 400; line-height: 1.45; }
+:root:root .create-option i { font-size: 12.5px; color: var(--text-3, var(--text-2)); line-height: 1.45; }
+:root:root .create-ico { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; }
+:root:root .create-ico.auto { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+:root:root .create-ico.assist { background: color-mix(in srgb, var(--ok) 14%, transparent); color: var(--ok); }
+:root:root .create-more { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding-top: 12px; border-top: 1px solid var(--border); }
+:root:root .create-more .link-btn { display: inline-flex; align-items: center; gap: 6px; }
+:root:root .ab-progress { list-style: none; display: flex; gap: 2px; margin: 0; padding: 8px 12px 10px; white-space: nowrap; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--text-2); flex-wrap: wrap; }
+:root:root .ab-progress li { display: inline-flex; align-items: center; gap: 6px; padding: 2px 8px 2px 2px; border-radius: 999px; }
+:root:root .ab-progress li + li::before { content: ''; width: 10px; height: 1px; background: var(--border-strong, var(--border)); margin-right: 4px; }
+:root:root .ab-progress .n { width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 10.5px; font-weight: 600; background: var(--surface-2); color: var(--text-2); }
+:root:root .ab-progress li.now { color: var(--text); font-weight: 600; }
+:root:root .ab-progress li.now .n { background: var(--accent); color: #fff; }
+:root:root .ab-progress li.done .n { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+:root:root .ed-next { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface); font-size: 13px; }
+:root:root .ed-next-step { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); }
+:root:root .ed-next-step .n { width: 18px; height: 18px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; font-size: 10.5px; font-weight: 600; background: var(--surface-2); }
+:root:root .ed-next-step.now { color: var(--text); font-weight: 600; }
+:root:root .ed-next-step.now .n { background: var(--accent); color: #fff; }
+:root:root .ed-next-step.done { color: var(--ok); }
+:root:root .ed-next-step.done .n { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+:root:root .ed-next-hint { margin-left: auto; color: var(--text-2); font-size: 12.5px; }

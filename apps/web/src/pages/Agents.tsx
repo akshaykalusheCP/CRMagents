@@ -17,7 +17,7 @@ const TOOL_NAME: Record<string, string> = {
 };
 const toolName = (n: string) => TOOL_NAME[n] ?? n.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
 
-export function AgentsPage({ tenant, goConnections }: { tenant?: Tenant; goConnections: () => void }) {
+export function AgentsPage({ tenant, goConnections, startNew }: { tenant?: Tenant; goConnections: () => void; startNew?: number }) {
   const [agents, setAgents] = useState<Agent[]>([]);
   const [tools, setTools] = useState<ToolInfo[]>([]);
   const [sel, setSel] = useState<Agent | null>(null); // id '' = new
@@ -36,6 +36,8 @@ export function AgentsPage({ tenant, goConnections }: { tenant?: Tenant; goConne
   const load = () => tenant && api.agents(tenant.id).then(setAgents).catch((e) => setErr(e.message));
   useEffect(() => { api.tools().then(setTools).catch(() => {}); }, []);
   useEffect(() => { setSel(null); load(); }, [tenant?.id]);
+  // "Create → Assistant" on the Agents page opens a blank assistant.
+  useEffect(() => { if (startNew) pick({ id: '', ...blank } as Agent); }, [startNew]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!tenant) return <Panel><Empty title="No org connected" body="Assistants work with a connected Salesforce org." action={<button className="sm" onClick={goConnections}>Connect Salesforce</button>} /></Panel>;
 
@@ -99,7 +101,7 @@ export function AgentsPage({ tenant, goConnections }: { tenant?: Tenant; goConne
       <Panel flush>
         <div className="inbox">
           <div className="inbox-list" role="listbox" aria-label="Assistants">
-            <div className="list-head"><b>Assistants</b><button className="sm" onClick={() => pick({ id: '', ...blank } as Agent)}><Plus size={14} /> New</button></div>
+            <div className="list-head"><b>Assistants</b><button className="sm" onClick={() => pick({ id: '', ...blank } as Agent)}><Plus size={14} /> New assistant</button></div>
             {agents.length === 0 && <Empty title="No assistants yet" body="An assistant answers questions about your Salesforce data, for example 'How many open cases by priority?'." />}
             {agents.map((a) => (
               <button key={a.id} role="option" aria-selected={sel?.id === a.id} className={'inbox-item' + (sel?.id === a.id ? ' on' : '')} onClick={() => pick(a)}>

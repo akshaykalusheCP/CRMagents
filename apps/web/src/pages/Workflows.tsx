@@ -1,4 +1,4 @@
-import { LayoutTemplate, Plus, Upload, Workflow as WorkflowIcon, X } from 'lucide-react';
+import { Bot, LayoutTemplate, MessageSquareText, Plus, Upload, Workflow as WorkflowIcon, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { TEMPLATES, type Workflow } from '@crmagents/shared';
 import { AgentBuilder } from '../components/AgentBuilder';
@@ -74,6 +74,8 @@ export function WorkflowsPage({ tenant, goConnections, incoming, onIncomingOpene
   const [detail, setDetail] = useState<WorkflowRow | null>(null);
   const [picker, setPicker] = useState(false);
   const [library, setLibrary] = useState(false);
+  const [choose, setChoose] = useState(false);
+  const [newAssistant, setNewAssistant] = useState(0);
   const [err, setErr] = useState('');
   const [request, setRequest] = useState('');
   const [builder, setBuilder] = useState<{ first?: string } | null>(null);
@@ -180,8 +182,6 @@ export function WorkflowsPage({ tenant, goConnections, incoming, onIncomingOpene
           title="Agents"
           description={<>Automations run by themselves in <b style={{ color: 'var(--text)', fontWeight: 500 }}>{tenant.sf_username ?? tenant.sf_org_id}</b>; assistants answer questions when you ask.</>}
           actions={<>
-            <button onClick={() => setLibrary(true)}><LayoutTemplate size={15} /> Use cases</button>
-            <button onClick={() => importRef.current?.click()} title="Add an agent from a .crmagents.json file (exported from another org)"><Upload size={15} /> Import</button>
               <input ref={importRef} type="file" accept=".json,application/json" hidden onChange={async (e) => {
                 const f = e.target.files?.[0];
                 e.target.value = '';
@@ -195,16 +195,16 @@ export function WorkflowsPage({ tenant, goConnections, incoming, onIncomingOpene
                 } catch (err) { toast((err as Error).message, 'bad'); }
               }} />
 
-            <button className="primary cta" onClick={() => setBuilder({})}><Plus size={15} /> New agent</button>
+            <button className="primary cta" onClick={() => setChoose(true)}><Plus size={15} /> Create</button>
           </>}
         >
           <div className="ptabs" role="tablist">
-            <button role="tab" aria-selected={section === 'automations'} className={section === 'automations' ? 'on' : ''} onClick={() => setSection('automations')}>Automations</button>
+            <button role="tab" aria-selected={section === 'automations'} className={section === 'automations' ? 'on' : ''} onClick={() => setSection('automations')}>Automations{rows.length ? <span className="tab-count">{rows.length}</span> : null}</button>
             <button role="tab" aria-selected={section === 'assistants'} className={section === 'assistants' ? 'on' : ''} onClick={() => setSection('assistants')}>Assistants</button>
           </div>
         </PageHeader>
 
-        {section === 'assistants' && <AgentsPage tenant={tenant} goConnections={goConnections} />}
+        {section === 'assistants' && <AgentsPage tenant={tenant} goConnections={goConnections} startNew={newAssistant} />}
         {section === 'automations' && <>
           {err && <div className="card warn">{err}</div>}
           {loaded && rows.length === 0 ? (
@@ -234,6 +234,31 @@ export function WorkflowsPage({ tenant, goConnections, incoming, onIncomingOpene
           )}
         </>}
       </div>
+      {choose && (
+        <div className="modal" onClick={() => setChoose(false)}>
+          <div className="confirm-card create-card" role="dialog" aria-labelledby="create-title" onClick={(e) => e.stopPropagation()}>
+            <div className="row between"><h2 id="create-title">What do you want to create?</h2><button className="ghost icon" aria-label="Close" onClick={() => setChoose(false)}><X size={16} /></button></div>
+            <div className="create-options">
+              <button className="create-option" autoFocus onClick={() => { setChoose(false); setSection('automations'); setBuilder({}); }}>
+                <span className="create-ico auto"><Bot size={20} /></span>
+                <b>Automation</b>
+                <span>Does a job by itself when something happens or on a schedule.</span>
+                <i>"When a new case comes in, sort it and create a task for the owner"</i>
+              </button>
+              <button className="create-option" onClick={() => { setChoose(false); setSection('assistants'); setNewAssistant((n) => n + 1); }}>
+                <span className="create-ico assist"><MessageSquareText size={20} /></span>
+                <b>Assistant</b>
+                <span>Answers questions about your Salesforce data, here or on a record page.</span>
+                <i>"How many open cases do we have by priority?"</i>
+              </button>
+            </div>
+            <div className="create-more">
+              <button className="link-btn" onClick={() => { setChoose(false); setLibrary(true); }}><LayoutTemplate size={14} /> Start from a ready-made use case</button>
+              <button className="link-btn" onClick={() => { setChoose(false); importRef.current?.click(); }} title="An agent exported from another org (.crmagents.json)"><Upload size={14} /> Import from a file</button>
+            </div>
+          </div>
+        </div>
+      )}
       {picker && <TemplatePicker onPick={create} onClose={() => setPicker(false)} />}
       {library && <UseCaseLibrary onClose={() => setLibrary(false)} onTemplates={() => { setLibrary(false); setPicker(true); }}
         onPick={(request) => { setLibrary(false); setSection('automations'); setBuilder({ first: request }); }} />}

@@ -91,10 +91,14 @@ function describe(n: WFRFNode, byId: Map<string, WFRFNode>, exitsElsewhere: bool
     }
     case 'sf.getRecord': return { title: <>Look up the <b>{c.sobject || 'record'}</b></>, detail: c.fields ? `Fields: ${c.fields}` : 'All fields' };
     case 'logic.branch': {
+      if (!String(c.left ?? '').trim()) return { title: <>Continue only if…</>, detail: 'No condition set yet: click to choose one' };
       const cond = <>{P(c.left)} <b>{OP[c.operator] ?? c.operator}</b> {c.operator === 'is_empty' || c.operator === 'not_empty' ? null : P(c.right)}</>;
       return exitsElsewhere ? { title: <>Only do the next step if {cond}</> } : { title: <>Continue only if {cond}</> };
     }
-    case 'ai.classify': return { title: <>AI decides: <b>{String(c.categories ?? '').split(/\n|,/).map((x) => x.trim()).filter(Boolean).join(', ')}</b></>, detail: <>Reads: {P(c.text)}</> };
+    case 'ai.classify': {
+      const cats = String(c.categories ?? '').split(/\n|,/).map((x) => x.trim()).filter(Boolean);
+      return { title: cats.length ? <>AI decides: <b>{cats.join(', ')}</b></> : <>AI sorts it into a category</>, detail: String(c.text ?? '').trim() ? <>Reads: {P(c.text)}</> : 'Categories not set yet: click to add them' };
+    }
     case 'ai.extract': return { title: <>AI pulls out: <b>{String(c.fields ?? '').split('\n').map((l) => l.split(':')[0].trim()).filter(Boolean).join(', ')}</b></>, detail: <>From: {P(c.text)}</> };
     case 'ai.agent': return (c.tools ?? []).length
       ? { title: 'AI researches in Salesforce', detail: P(c.prompt) }
