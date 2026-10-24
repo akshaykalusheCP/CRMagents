@@ -1377,3 +1377,10 @@ select.sm { height: 30px; padding: 0 28px 0 8px; font-size: 13px; width: auto; }
 :root:root .ed-next-step.done { color: var(--ok); }
 :root:root .ed-next-step.done .n { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
 :root:root .ed-next-hint { margin-left: auto; color: var(--text-2); font-size: 12.5px; }
+:root:root .tools-block { display: flex; flex-direction: column; gap: 14px; padding: 16px 0 4px; border-top: 1px solid var(--border); }
+:root:root .tool-group-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; }
+:root:root .tool-group-head b { font-size: 13.5px; }
+:root:root .tool-group-head .link-btn { margin-left: auto; }
+:root:root .tools-block .tool-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+:root:root .tools-block label.tool-card { align-items: center; padding: 9px 12px; }
+:root:root .tools-block label.tool-card small { color: var(--text-2); font-size: 12px; line-height: 1.35; }

@@ -11,11 +11,38 @@ import { Empty, Panel, Status, toast, useConfirm } from '../components/ui';
 // Assistants answer questions when asked (in the app, or from Salesforce). List on the left, the selected one on the right.
 
 const blank = { name: '', systemPrompt: '', tools: [] as string[] };
-const TOOL_NAME: Record<string, string> = {
-  soql_query: 'Query records (SOQL)', get_record: 'Read a record', describe_object: 'See an object\'s fields',
-  create_task: 'Create a task', update_record: 'Update a record', create_record: 'Create a record',
+// What each tool means for an admin (the descriptions the server sends are written for the AI).
+type ToolGroup = 'look' | 'change' | 'meet' | 'memory';
+const TOOL_UI: Record<string, { label: string; desc: string; group: ToolGroup }> = {
+  get_record: { label: 'Read a record', desc: 'Open one record and its fields', group: 'look' },
+  soql_query: { label: 'Search records', desc: 'Find and count records, e.g. open cases by priority', group: 'look' },
+  describe_object: { label: 'Understand your fields', desc: 'See which fields and picklist values an object has', group: 'look' },
+  search_knowledge: { label: 'Search your guides', desc: 'Answer from your uploaded guides and policies', group: 'look' },
+  list_files: { label: 'See attached files', desc: 'List the files on a record', group: 'look' },
+  read_file: { label: 'Read attached files', desc: 'Read PDFs and documents, and look at images', group: 'look' },
+  web_search: { label: 'Search the web', desc: 'Research companies, people and news (about $0.01 a search)', group: 'look' },
+  find_org_actions: { label: 'Find your Flows and Apex', desc: 'See which of your automations it could use', group: 'look' },
+  update_record: { label: 'Update records', desc: 'Change field values', group: 'change' },
+  create_record: { label: 'Create records', desc: 'Add new records, e.g. tasks or contacts', group: 'change' },
+  delete_record: { label: 'Delete records', desc: 'Move records to the Recycle Bin', group: 'change' },
+  run_org_action: { label: 'Run your Flows and Apex', desc: 'Start one of your own automations', group: 'change' },
+  run_agent: { label: 'Start an agent', desc: 'Hand a job to one of your agents', group: 'change' },
+  find_meeting_times: { label: 'Find meeting times', desc: 'Check calendars for free slots', group: 'meet' },
+  book_meeting: { label: 'Book meetings', desc: 'Put a meeting in the calendar', group: 'meet' },
+  remember: { label: 'Remember things', desc: 'Keep facts people ask it to remember', group: 'memory' },
+  remember_about_record: { label: 'Take notes on records', desc: 'Keep a short note on a record for next time', group: 'memory' },
 };
-const toolName = (n: string) => TOOL_NAME[n] ?? n.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase());
+const GROUPS: { id: ToolGroup; title: string; hint: string }[] = [
+  { id: 'look', title: 'Look things up', hint: 'Safe: only reads' },
+  { id: 'change', title: 'Make changes', hint: 'Changes go through your rules and can be undone' },
+  { id: 'meet', title: 'Meetings', hint: '' },
+  { id: 'memory', title: 'Memory', hint: '' },
+];
+const toolUi = (t: ToolInfo) => TOOL_UI[t.name] ?? {
+  label: t.name.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()),
+  desc: t.description.split(/(?<=\.)\s/)[0].slice(0, 90),
+  group: (t.write ? 'change' : 'look') as ToolGroup,
+};
 
 export function AgentsPage({ tenant, goConnections, startNew }: { tenant?: Tenant; goConnections: () => void; startNew?: number }) {
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -118,15 +145,33 @@ export function AgentsPage({ tenant, goConnections, startNew }: { tenant?: Tenan
                   <div className="ffield"><input id="as-name" value={sel.name} onChange={(e) => setSel({ ...sel, name: e.target.value })} placeholder="e.g. Support analyst" /></div></div>
                 <div className="frow"><div className="flabel"><b>Instructions</b><span>What it is for and how to answer. Plain English.</span></div>
                   <div className="ffield"><textarea id="as-prompt" rows={6} value={sel.systemPrompt} onChange={(e) => setSel({ ...sel, systemPrompt: e.target.value })} placeholder="You help the support team. Look up cases and accounts and answer briefly with numbers." /></div></div>
-                <div className="frow"><div className="flabel"><b>What it can use</b><span>Read tools are safe. Tools that change data are marked.</span></div>
-                  <div className="ffield tool-grid">
-                    {tools.map((t) => (
-                      <label key={t.name} className={'tool-card' + (sel.tools.includes(t.name) ? ' on' : '')}>
-                        <input type="checkbox" checked={sel.tools.includes(t.name)} onChange={() => toggle(t.name)} />
-                        <span><b>{toolName(t.name)}</b>{t.write && <Status tone="warn">Changes data</Status>}<small>{t.description}</small></span>
-                      </label>
-                    ))}
-                  </div></div>
+                <div className="tools-block">
+                  <div className="flabel"><b>What it can do</b><span>Tick what this assistant may use. It only sees and changes what you allow.</span></div>
+                  {GROUPS.map((g) => {
+                    const list = tools.filter((t) => toolUi(t).group === g.id);
+                    if (!list.length) return null;
+                    const all = list.every((t) => sel.tools.includes(t.name));
+                    return (
+                      <div key={g.id} className="tool-group">
+                        <div className="tool-group-head">
+                          <b>{g.title}</b>{g.hint && <span className="muted small">{g.hint}</span>}
+                          <button type="button" className="link-btn small" onClick={() => setSel({ ...sel, tools: all ? sel.tools.filter((n) => !list.some((t) => t.name === n)) : [...new Set([...sel.tools, ...list.map((t) => t.name)])] })}>{all ? 'Clear' : 'Select all'}</button>
+                        </div>
+                        <div className="tool-grid">
+                          {list.map((t) => {
+                            const u = toolUi(t);
+                            return (
+                              <label key={t.name} className={'tool-card' + (sel.tools.includes(t.name) ? ' on' : '')} title={t.description}>
+                                <input type="checkbox" checked={sel.tools.includes(t.name)} onChange={() => toggle(t.name)} />
+                                <span><b>{u.label}</b><small>{u.desc}</small></span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
               {err && <div className="err">{err}</div>}
               <div className="row" style={{ gap: 8 }}>
