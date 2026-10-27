@@ -53,7 +53,11 @@ export function explainError(e: unknown) {
   if (s === 401 || /invalid.*(api.?key|x-api-key)|incorrect api key|authentication/i.test(m)) return 'The provider rejected this key (wrong, revoked or expired).';
   if (s === 402 || /credit|insufficient|billing|quota/i.test(m)) return 'This key has no credit left (or its billing is not set up).';
   if (s === 403 || /permission/i.test(m)) return 'This key is not allowed to use this model or workspace.';
-  if (s === 404 || /model.*(not.?found|does not exist)|unknown model/i.test(m)) return 'The model name was not found for this key.';
+  if (s === 404 || /model.*(not.?found|does not exist)|unknown model|no longer available/i.test(m)) {
+    // Providers that retire a model often name its replacement ("…use models/gemini-3.8-flash…").
+    const next = /\buse (?:models\/)?([a-z0-9][\w.-]*[a-z0-9])\b/i.exec(m)?.[1];
+    return next ? `This model is no longer available for this key. Choose ${next} instead.` : 'The model name was not found for this key.';
+  }
   if (s === 429 || /rate.?limit/i.test(m)) return 'The provider is rate limiting this key right now.';
   if (s === 529 || /overloaded/i.test(m)) return 'The provider is overloaded right now; try again shortly.';
   if (/ENOTFOUND|ECONN|fetch failed|timed? ?out/i.test(m)) return 'Could not reach the provider (check the base URL).';

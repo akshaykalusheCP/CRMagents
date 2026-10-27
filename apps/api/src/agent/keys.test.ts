@@ -23,6 +23,8 @@ test('provider errors are explained in plain words', () => {
   assert.match(explainError({ status: 401, message: 'invalid x-api-key' }), /rejected this key/);
   assert.match(explainError(new Error('Your credit balance is too low to access the API')), /no credit/);
   assert.match(explainError({ status: 404, message: 'model: gpt-9 not found' }), /model name was not found/);
+  assert.equal(explainError({ status: 404, message: 'This model models/gemini-2.5-flash is no longer available to new users. Please update your code to use models/gemini-3.8-flash for the latest features.' }),
+    'This model is no longer available for this key. Choose gemini-3.8-flash instead.');
   assert.match(explainError({ status: 429 }), /rate limiting/);
 });
 

@@ -27,10 +27,12 @@ const MODELS: Partial<Record<AiKey['provider'], { id: string; name: string; pric
     { id: 'o3', name: 'o3', price: [2, 8] },
     { id: 'o4-mini', name: 'o4-mini', price: [1.1, 4.4] },
   ],
+  // Google's prices as of 2026-10-27; Gemini 2.5 models are closed to new keys. 3.8 Flash doubles on 2027-01-01, 4 Argon on 2026-12-01.
   gemini: [
-    { id: 'gemini-2.5-pro', name: 'Gemini 2.5 Pro', price: [1.25, 10] },
-    { id: 'gemini-2.5-flash', name: 'Gemini 2.5 Flash', price: [0.3, 2.5] },
-    { id: 'gemini-2.5-flash-lite', name: 'Gemini 2.5 Flash-Lite', price: [0.1, 0.4] },
+    { id: 'gemini-3.8-flash', name: 'Gemini 3.8 Flash', price: [0.75, 3.75] },
+    { id: 'gemini-3.5-flash-lite', name: 'Gemini 3.5 Flash-Lite', price: [0.3, 2.5] },
+    { id: 'gemini-3.1-flash-lite', name: 'Gemini 3.1 Flash-Lite', price: [0.25, 1.5] },
+    { id: 'gemini-4-argon', name: 'Gemini 4 Argon', price: [2, 10] },
   ],
   compatible: [
     { id: 'mistral-large-latest', name: 'Mistral Large' },
