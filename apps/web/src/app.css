@@ -1380,3 +1380,7 @@ select.sm { height: 30px; padding: 0 28px 0 8px; font-size: 13px; width: auto; }
 :root .set-head { margin-bottom: 16px; }
 :root .set-head h2 { margin: 0; font-size: 18px; font-weight: 600; letter-spacing: -0.015em; }
 :root .set-head p { margin: 4px 0 0; color: var(--muted); font-size: 14px; }
+
+/* AI key drawer: typed prices differ from the listed model price */
+:root .warn-text { color: var(--warn); }
+:root .warn-text .link-btn { margin-left: 4px; }

@@ -62,3 +62,18 @@ test('thinking tokens left out of completion_tokens still count as output', () =
   const r = fromChat({ choices: [{ message: { content: 'OK' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 1, total_tokens: 311 } }, { priceIn: 1, priceOut: 10 });
   assert.equal(r.usage.output_tokens, 301);
 });
+
+test('a thinking level the model rejects is dropped and the request sent again', async () => {
+  const sent: any[] = [];
+  const fetchImpl = (async (_u: string, init: any) => {
+    const b = JSON.parse(init.body); sent.push(b);
+    return b.reasoning_effort
+      ? new Response('{"error":{"code":400,"message":"Thinking level MINIMAL is not supported for this model."}}', { status: 400 })
+      : new Response(JSON.stringify({ choices: [{ message: { content: 'OK' }, finish_reason: 'stop' }], usage: { prompt_tokens: 5, completion_tokens: 1, total_tokens: 6 } }));
+  }) as typeof fetch;
+  const c = openAiCompatible({ baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai', key: 'k', model: 'gemini-3.8-flash', fastModel: 'gemini-3.8-flash', priceIn: 1, priceOut: 1, fetchImpl });
+  const r: any = await c.messages.create({ model: 'x', max_tokens: 50, messages: [{ role: 'user', content: 'hi' }] } as never);
+  assert.equal(r.content[0].text, 'OK');
+  assert.equal(sent.length, 2);
+  assert.equal(sent[1].reasoning_effort, undefined);
+});

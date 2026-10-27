@@ -147,12 +147,20 @@ export function openAiCompatible(o: CompatOptions): AiClient {
   return {
     messages: {
       create: (async (req: any) => {
-        const res = await f(`${o.baseUrl.replace(/\/$/, '')}/chat/completions`, {
+        const send = (b: unknown) => f(`${o.baseUrl.replace(/\/$/, '')}/chat/completions`, {
           method: 'POST',
           headers: { Authorization: `Bearer ${o.key}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify(toChat(req, o)),
+          body: JSON.stringify(b),
         });
-        const body = await res.text();
+        const chat: any = toChat(req, o);
+        let res = await send(chat);
+        let body = await res.text();
+        // A model that doesn't take this thinking level: once more with the model's own default.
+        if (res.status === 400 && chat.reasoning_effort && /thinking level|reasoning.?effort/i.test(body)) {
+          const { reasoning_effort: _e, ...plain } = chat;
+          res = await send(plain);
+          body = await res.text();
+        }
         if (!res.ok) throw Object.assign(new Error(`AI provider error ${res.status}: ${body.slice(0, 400)}`), { status: res.status });
         return fromChat(JSON.parse(body), o);
       }) as any,

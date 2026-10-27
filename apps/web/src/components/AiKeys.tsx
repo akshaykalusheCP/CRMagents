@@ -209,6 +209,13 @@ function KeyDrawer({ k, first, onClose, onSaved }: { k: AiKey | null; first: boo
             <label className="fl" style={{ flex: 1 }}>Input price <span className="muted small">USD per 1M tokens</span><input inputMode="decimal" value={f.priceIn ?? ''} onChange={(e) => { setAutoPrice(false); set({ priceIn: e.target.value === '' ? undefined : Number(e.target.value) }); }} placeholder="5" /></label>
             <label className="fl" style={{ flex: 1 }}>Output price <span className="muted small">USD per 1M tokens</span><input inputMode="decimal" value={f.priceOut ?? ''} onChange={(e) => { setAutoPrice(false); set({ priceOut: e.target.value === '' ? undefined : Number(e.target.value) }); }} placeholder="15" /></label>
           </div>
+          {(() => {
+            // A listed model whose prices differ from what's typed (e.g. left over from the previous model).
+            const known = MODELS[f.provider]?.find((x) => x.id === f.model?.trim())?.price;
+            return known && (known[0] !== f.priceIn || known[1] !== f.priceOut) ? (
+              <p className="small warn-text" style={{ margin: 0 }}>The listed price for {f.model} is ${known[0]} / ${known[1]}. <button type="button" className="link-btn" onClick={() => { set({ priceIn: known[0], priceOut: known[1] }); setAutoPrice(true); }}>Use these prices</button></p>
+            ) : null;
+          })()}
           <p className="muted small" style={{ margin: 0 }}>Prices fill in for listed models; check them against your provider's price page, since they change. They keep spending and the daily budget right. Reading scanned PDFs always uses a Claude key.</p>
         </>}
         {!k && !first && <label className="check"><input type="checkbox" checked={f.makePrimary} onChange={(e) => set({ makePrimary: e.target.checked })} /> Make this the primary key</label>}
