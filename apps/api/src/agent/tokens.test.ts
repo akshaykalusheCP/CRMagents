@@ -219,3 +219,23 @@ test('the low-cost estimate reprices Claude calls and leaves other providers out
   assert.equal(e.actualUsd, 6);
   assert.ok(Math.abs(e.onModelUsd - 0.15) < 1e-9); // 0.10 + 0.05
 });
+
+test('the business profile goes first on every call, in its own cached block, and is part of the reuse key', async () => {
+  const sf: any = { query: async () => ({ totalSize: 0, records: [] }) };
+  const a = fakeClient([text('hi')]);
+  await createLlm('k', sf, undefined, a.client, undefined, { profile: 'We sell solar panels to farms.' }).complete({ system: 'S', prompt: 'P' });
+  assert.match(a.calls[0].system[0].text, /solar panels to farms/);
+  assert.deepEqual(a.calls[0].system[0].cache_control, { type: 'ephemeral' });
+  assert.equal(a.calls[0].system[1].cache_control, undefined); // the task itself is not cached on a single call
+
+  const toolTurn = { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 't1', name: 'soql_query', input: { soql: 'SELECT Id FROM Case' } }], usage };
+  const b = fakeClient([toolTurn, text('done')]);
+  await createLlm('k', sf, undefined, b.client, undefined, { profile: 'We sell solar panels.' }).agent({ system: 'S', prompt: 'P', tools: ['soql_query'] });
+  assert.match(b.calls[0].system[0].text, /solar panels/);
+  assert.deepEqual(b.calls[0].system[1].cache_control, { type: 'ephemeral' });
+
+  const seen: string[] = [];
+  const cache = { get: async (k: string) => { seen.push(k); return null; }, set: async () => undefined };
+  for (const profile of ['A', 'B']) await createLlm('k', sf, undefined, fakeClient([text('x')]).client, cache as any, { profile }).complete({ system: 'S', prompt: 'P' });
+  assert.notEqual(seen[0], seen[1]);
+});

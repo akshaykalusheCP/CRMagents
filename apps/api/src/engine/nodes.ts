@@ -35,6 +35,8 @@ export interface Env {
   examples?: (nodeId: string, text: string) => Promise<Example[]>;
   /** Inside a loop: writes collected here and sent together when the loop ends (sObject Collections). */
   writes?: WriteBuffer;
+  /** What people said when approving or rejecting this agent's earlier proposals, closest to `text` first. */
+  lessons?: (text: string) => Promise<string>;
   /** Team memory and the notes agents kept on a record, for AI steps (empty when memory is off). */
   memory?: (question: string, recordId?: string) => Promise<string>;
   /** The run this step belongs to (absent in previews). */
@@ -95,9 +97,10 @@ export const EXECUTORS: Record<string, Executor> = {
     // Memory: the team's definitions and what agents noted on this record before; and it may leave a note for next time.
     const recordId = String(scope.trigger?.recordId ?? '');
     const remembered = (await env.memory?.(prompt, recordId || undefined)) ?? '';
+    const lessons = (await env.lessons?.(prompt)) ?? '';
     const baseTools = Array.isArray(node.config.tools) ? node.config.tools : [];
     const r = await env.llm.agent({
-      system: [render(node.config.instructions, scope) || 'You are a helpful Salesforce assistant.', remembered,
+      system: [render(node.config.instructions, scope) || 'You are a helpful Salesforce assistant.', lessons, remembered,
         remembered && recordId ? 'If you learn a lasting fact about this record that will matter next time, call remember_about_record. Never personal data.' : ''].filter(Boolean).join('\n\n'),
       prompt,
       tools: remembered && recordId ? [...new Set([...baseTools, 'remember_about_record'])] : baseTools,
@@ -456,11 +459,15 @@ export const EXECUTORS: Record<string, Executor> = {
     if (!hits.length) return none('No procedure in the knowledge base matches this record.');
     const fields = await env.sf.describe(object);
     const extra = cfg(node, 'instructions', scope);
+    const lessons = (await env.lessons?.(`${object} ${JSON.stringify(record).slice(0, 2000)}`)) ?? '';
+    // Planning changes from a procedure is the hard part: the strongest model, unless the block names one.
+    const opts = aiOptions(node);
     const r = await env.llm.complete({
-      system: PLAN_SYSTEM + (extra ? `\n\nThe admin's guidance: ${extra}` : ''),
+      system: PLAN_SYSTEM + (extra ? `\n\nThe admin's guidance: ${extra}` : '') + (lessons ? `\n\n${lessons}` : ''),
       prompt: `Record (${object} ${recordId}):\n${JSON.stringify(record).slice(0, 8000)}\n\nFields you may change on it:\n${fieldGuide(fields)}\n\nSections from the company's documents:\n${hitsToText(hits)}`,
       schema: PLAN_SCHEMA as unknown as Record<string, unknown>,
-      ...aiOptions(node),
+      ...opts,
+      ...(opts.model ? {} : { model: env.llm.strongModel }),
     });
     usage = addUsage(usage, r.usage);
     const raw = parseJsonLoose(r.text);

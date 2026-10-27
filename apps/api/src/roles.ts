@@ -8,7 +8,7 @@ const ADMIN: RegExp[] = [
   /^\/api\/knowledge\/sources(\/|$)/, /^\/api\/chat-approvals(\/|$)/, /^\/api\/ai-keys(\/|$)/,
   /^T$/, // disconnecting an org (DELETE /api/tenants/:id)
   /^T\/(grant-access|package|provision|setup|sample-data|api-cap)$/, /^T\/salesforce\/pages\//,
-  /^T\/agents\/[^/]+\/public$/, /^T\/rules(\/|$)/,
+  /^T\/agents\/[^/]+\/public$/, /^T\/rules(\/|$)/, /^T\/business-profile\//,
   /^T\/workflows\/[^/]+\/(autonomy|allowed-fields)$/,
 ];
 

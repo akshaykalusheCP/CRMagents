@@ -132,11 +132,13 @@ function route(method: string, url: URL, body: any): Response {
   if (/^\/t\/suggestions\/.+\/dismiss$/.test(p)) return json({ ok: true });
   if (p === '/t/agent-health') return json(DEMO_HEALTH);
   if (p === '/t/rules' && method === 'GET') return json(DEMO_RULES);
+  if (/^\/t\/workflows\/[^/]+\/lessons$/.test(p) && method === 'GET') return json(DEMO_LESSONS);
+  if (p === '/t/business-profile/draft') return json({ text: DEMO_PROFILE });
   if (/^\/t\/runs\/[^/]+\/diagnose$/.test(p)) return json({ explanation: 'Salesforce needs a Subject on every Task, and this step created the task without one because the case had no subject.', action: 'edit', fix: { nodeId: 'sf_task_1', label: 'Create task', summary: 'Use a fallback subject when the case has none', changes: { subject: 'Follow up: {{sf_get_1.record.CaseNumber}}' } }, costUsd: 0.0004 });
   if (/^\/t\/workflows\/[^/]+\/backtest$/.test(p)) return json(DEMO_BACKTEST);
   if (p === '/t/runs' && method === 'GET') return json(url.searchParams.get('status') === 'waiting' ? DEMO_RUNS.filter((r) => r.status === 'waiting') : DEMO_RUNS);
-  if (p === '/api/usage') return json({ runs: 23, costUsd: 0.42, budgetUsd: 2, cacheHitRate: 0.61, tokens: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 } });
-  if (p === '/api/settings') return json({ maskPii: 'on', maskFields: 'Salary__c', maxAiCalls: '', maxToolCalls: '', maxTokens: '', retentionDays: '30', sfClientId: '3MVG9demo', sfLoginUrl: 'https://login.salesforce.com', sfClientSecret: { set: false }, anthropicKey: { set: true }, aiReady: true, actAsPerson: 'on', dailyBudgetUsd: '2', anthropicWorkspaceId: '', aiCacheHours: '24', callbackUrl: 'https://app.crmagents.example/oauth/callback' });
+  if (p === '/api/usage') return json({ runs: 23, costUsd: 0.42, budgetUsd: 2, cacheHitRate: 0.61, tokens: { input: 0, cacheRead: 0, cacheWrite: 0, output: 0 }, last30: { costUsd: 9.84, onLowCostUsd: 0.41 } });
+  if (p === '/api/settings') return json({ maskPii: 'on', maskFields: 'Salary__c', maxAiCalls: '', maxToolCalls: '', maxTokens: '', retentionDays: '30', sfClientId: '3MVG9demo', sfLoginUrl: 'https://login.salesforce.com', sfClientSecret: { set: false }, anthropicKey: { set: true }, aiReady: true, actAsPerson: 'on', dailyBudgetUsd: '2', anthropicWorkspaceId: '', aiCacheHours: '24', aiRouting: 'smart', businessProfile: DEMO_PROFILE, callbackUrl: 'https://app.crmagents.example/oauth/callback' });
   if (p === '/t/insights/ask') return json({ error: 'Asking questions needs a connected org (this is demo data).' }, 400);
   if (p === '/t/dashboards' && method === 'GET') return json(fx.dashboards);
   if (p === '/t/dashboards/run') return json(body.tiles.map((t: any) => ({ ...fx.dashboard.tiles.find((x: any) => x.title === t.title), ...t })));
@@ -475,3 +477,25 @@ const DEMO_ADMIN = (() => {
     ],
   };
 })();
+
+const DEMO_PROFILE = `What we do
+- Demo Company sells and supports business networking equipment (routers, switches, Wi-Fi) for offices of 20 to 500 people.
+
+Our customers
+- Mostly mid-size companies in healthcare, education and retail. Enterprise accounts (over 200 seats) have a named account manager.
+
+Words we use
+- "Outage" means a whole site is down; "Degraded" means slow or partly working.
+- A "Partner" account resells our products; never contact their end customers directly.
+
+How we handle cases and deals
+- Outages are always High priority and go to the Network team within 15 minutes.
+- Refunds over $500 need a manager's approval.
+
+Rules and tone for agents
+- Friendly and short. Never promise delivery dates; say "our team will confirm".`;
+
+const DEMO_LESSONS = [
+  { id: 'l1', approved: false, proposal: 'Update Case 00001042: Priority = High (printer offline on floor 3)', note: 'Printer problems are never High priority unless the whole office is affected', decidedBy: 'maria@demo-company.com', createdAt: new Date(Date.now() - 2 * 864e5).toISOString() },
+  { id: 'l2', approved: true, proposal: 'Create Task "Call the customer back" on Case 00001039 about a refund', note: 'Yes: refunds always need a phone call first', decidedBy: 'owner@demo-company.com', createdAt: new Date(Date.now() - 5 * 864e5).toISOString() },
+];

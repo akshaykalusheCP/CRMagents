@@ -18,7 +18,7 @@ import { accountOf } from '../tenants.js';
 import { emptyUsage } from '../agent/pricing.js';
 import { dbResultCache } from '../agent/resultCache.js';
 import { execute, newState, type RunState } from './executor.js';
-import { examplesFor } from './learn.js';
+import { addLesson, examplesFor, lessonsFor } from './learn.js';
 import { makeGuard } from '../smart/policies.js';
 import { runTrust } from '../trust/policy.js';
 import { notifySalesforce } from '../salesforce/notify.js';
@@ -55,13 +55,13 @@ async function makeEnv(tenantId: string, workflowId?: string, st?: RunState) {
   if (workflowId) runCtx.author = (await pool.query('select name from workflows where id=$1', [workflowId])).rows[0]?.name ?? 'Agent';
   const memory = async (question: string, recordId?: string) => (await memoryPrompt(accountId, tenantId, '', question, recordId)).text;
   // Masking and limits: the placeholder map and the counters live on the run so they survive pauses.
-  const { masker, limits, routing } = await runTrust(accountId, st ? (st.masks ??= {}) : undefined);
+  const { masker, limits, routing, profile } = await runTrust(accountId, st ? (st.masks ??= {}) : undefined);
   const counters = st ? (st.counters ??= { aiCalls: 0, toolCalls: 0, tokens: 0 }) : undefined;
   let real: Llm | undefined;
   const llm = async (): Promise<Llm> => {
     if (real) return real;
     const client = await aiClient(accountId, { tenantId, purpose: workflowId ? undefined : 'Preview' });
-    return (real = createLlm('', sf, spendGuard(accountId), client, await dbResultCache(accountId), { masker, limits, counters, routing,
+    return (real = createLlm('', sf, spendGuard(accountId), client, await dbResultCache(accountId), { masker, limits, counters, routing, profile,
       // Notes on records, written by AI steps (not in previews: nothing is saved there).
       exec: (name, input) => {
         if (name !== 'remember_about_record') return undefined;
@@ -91,7 +91,7 @@ async function makeEnv(tenantId: string, workflowId?: string, st?: RunState) {
   const allGuards = userGuard || guard
     ? async (ctx: Parameters<NonNullable<typeof guard>>[0]) => { await userGuard?.(ctx); await guard?.(ctx); }
     : undefined;
-  return { sf, llm: lazy, guard: allGuards, unmask, memory, runCtx, ...(workflowId ? { examples: examplesFor(workflowId) } : {}) };
+  return { sf, llm: lazy, guard: allGuards, unmask, memory, runCtx, ...(workflowId ? { examples: examplesFor(workflowId), lessons: lessonsFor(workflowId) } : {}) };
 }
 
 /**
@@ -323,7 +323,7 @@ export async function getRun(tenantId: string, runId: string): Promise<RunSnapsh
 
 /** Approve or reject a waiting run. `background`: return once the decision is checked and recorded (the agent carries on). */
 export async function decideRun(tenantId: string, runId: string, approve: boolean, note?: string, who?: string, role?: string, o: { background?: boolean; where?: string } = {}) {
-  const { rows } = await pool.query('select status, state, workflow_id, started_by, assigned_to from runs where id=$1 and tenant_id=$2', [runId, tenantId]);
+  const { rows } = await pool.query('select status, state, steps, workflow_id, started_by, assigned_to from runs where id=$1 and tenant_id=$2', [runId, tenantId]);
   if (!rows[0]) throw Object.assign(new Error('run not found'), { statusCode: 404 });
   if (who) {
     const me = who.toLowerCase();
@@ -340,6 +340,11 @@ export async function decideRun(tenantId: string, runId: string, approve: boolea
   // Only one decision counts, even if two people click at the same moment (app, Salesforce, Slack).
   const { rowCount } = await pool.query("update runs set status='running', decision_note=$2, decided_at=now(), decided_by=$3, heartbeat_at=now() where id=$1 and status='waiting'", [runId, note?.trim().slice(0, 500) || null, who ?? null]);
   if (!rowCount) throw Object.assign(new Error('Someone else already decided this one.'), { statusCode: 409 });
+  // A note on the decision becomes a lesson the agent reads next time it proposes something similar.
+  if (note?.trim() && rows[0].workflow_id) {
+    const waiting = ((rows[0].steps ?? []) as { status: string; output?: { message?: string } }[]).find((s) => s.status === 'waiting');
+    void addLesson(tenantId, rows[0].workflow_id, runId, approve, String(waiting?.output?.message ?? ''), note, who).catch(() => undefined);
+  }
   // The Slack message (if any) shows who decided, wherever they did.
   void import('../channels/chatApprovals.js').then((m) => m.closeApproval(runId, approve, who ?? 'someone', o.where ?? 'in Nimbus')).catch(() => undefined);
   if (o.background) {

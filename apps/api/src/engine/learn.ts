@@ -50,3 +50,46 @@ export async function exampleCount(workflowId: string): Promise<number> {
   const { rows } = await pool.query('select count(*)::int as n from ai_examples where workflow_id=$1', [workflowId]);
   return rows[0].n;
 }
+
+// ---- Lessons from approvals ----
+// A person's note on an approval ("wrong team: billing questions go to Finance") is kept with what the agent proposed.
+// The agent's AI steps see the few closest lessons next time, so it stops repeating a rejected idea.
+
+export interface Lesson { id: string; approved: boolean; proposal: string; note: string; decidedBy: string | null; createdAt: string }
+
+export async function addLesson(tenantId: string, workflowId: string, runId: string, approved: boolean, proposal: string, note: string, decidedBy?: string) {
+  const n = note.trim();
+  if (!n) return;
+  await pool.query(
+    'insert into agent_lessons (tenant_id, workflow_id, run_id, approved, proposal, note, decided_by) values ($1,$2,$3,$4,$5,$6,$7)',
+    [tenantId, workflowId, runId, approved, proposal.trim().slice(0, 1500) || '(no summary)', n.slice(0, 500), decidedBy ?? null],
+  );
+}
+
+/** The lessons for an agent as a prompt section, closest to `text` first ('' when there are none). Pure; tested. */
+export function lessonPrompt(text: string, lessons: Pick<Lesson, 'approved' | 'proposal' | 'note'>[], k = 4): string {
+  const ranked = rankExamples(text, lessons.map((l) => ({ input: l.proposal, label: JSON.stringify(l) })), k).map((e) => JSON.parse(e.label) as Lesson);
+  // Nothing close: the latest few still say how this team decides.
+  const shown = ranked.length ? ranked : lessons.slice(0, Math.min(2, k));
+  if (!shown.length) return '';
+  return `How your team decided on this agent's earlier proposals (follow their judgement):\n${shown.map((l) =>
+    `- ${l.approved ? 'Approved' : 'Rejected'}: "${l.proposal.replace(/\s+/g, ' ').slice(0, 240)}". Their note: "${l.note.replace(/\s+/g, ' ').slice(0, 300)}"`).join('\n')}`;
+}
+
+export function lessonsFor(workflowId: string) {
+  return async (text: string): Promise<string> => {
+    const { rows } = await pool.query('select approved, proposal, note from agent_lessons where workflow_id=$1 order by created_at desc limit 200', [workflowId]);
+    return lessonPrompt(text, rows);
+  };
+}
+
+export async function listLessons(tenantId: string, workflowId: string): Promise<Lesson[]> {
+  const { rows } = await pool.query(
+    `select id::text, approved, proposal, note, decided_by as "decidedBy", created_at as "createdAt" from agent_lessons
+     where tenant_id=$1 and workflow_id=$2 order by created_at desc limit 100`, [tenantId, workflowId]);
+  return rows;
+}
+
+export async function deleteLesson(tenantId: string, workflowId: string, id: string) {
+  await pool.query('delete from agent_lessons where tenant_id=$1 and workflow_id=$2 and id=$3', [tenantId, workflowId, id]);
+}

@@ -17,7 +17,7 @@ import { TOOLS } from './agent/tools.js';
 import { validateWorkflow, type Workflow } from '@crmagents/shared';
 import { runAgent } from './agent/runner.js';
 import { cancelRun, resumeRun, decideRun, previewWorkflow, startRun } from './engine/service.js';
-import { addExample, exampleCount } from './engine/learn.js';
+import { addExample, deleteLesson, exampleCount, listLessons } from './engine/learn.js';
 import { deployWorkflow, undeployWorkflow } from './salesforce/deploy.js';
 import { setLive, setRealtime, startWatcher } from './engine/watcher.js';
 import { ask, runSoql, safeSoql, summarize } from './insights/ai.js';
@@ -32,6 +32,7 @@ import { agentHealth, removeApproval } from './smart/trust.js';
 import { applyFix, diagnoseRun } from './smart/repair.js';
 import { orgAutomation } from './smart/orgAutomation.js';
 import { compileRule, listRules } from './smart/policies.js';
+import { draftProfile } from './smart/profile.js';
 import { regression } from './smart/regress.js';
 import { builderChat } from './builder/chat.js';
 import { listOrgActions } from './salesforce/actions.js';
@@ -197,6 +198,7 @@ const settingsBody = z.object({
   anthropicWorkspaceId: z.string().regex(/^(wrkspc_[A-Za-z0-9]+)?$/, 'Workspace ID looks like wrkspc_…').optional(),
   aiCacheHours: z.string().regex(/^(\d+(\.\d+)?)?$/, 'Hours must be a number (0 turns reuse off)').optional(),
   aiRouting: z.enum(['smart', 'best', '']).optional(),
+  businessProfile: z.string().max(12_000, 'Keep the business profile under 12,000 characters (about 3 pages)').optional(),
   dailyBudgetUsd: z.string().regex(/^(none|\d+(\.\d+)?)?$/i, 'Budget must be a number of dollars, or "none"').optional(),
   maskPii: z.enum(['on', 'off', '']).optional(),
   maskFields: z.string().max(2000).regex(/^[\w\s,.]*$/, 'Field names are API names separated by commas').optional(),
@@ -458,6 +460,22 @@ app.get('/api/tenants/:tenantId/org-automation', async (req) => {
   const { tenantId } = req.params as { tenantId: string };
   const a = await orgAutomation(tenantId, await SalesforceClient.forTenant(tenantId), (req.query as { refresh?: string }).refresh === '1');
   return { flows: a.flows.length, triggers: a.triggers.length, rules: a.rules.length, flowList: a.flows.slice(0, 100) };
+});
+
+// The business profile's first draft, from what the org says about the business (saved only when the admin saves it).
+app.post('/api/tenants/:tenantId/business-profile/draft', async (req) => {
+  return { text: await draftProfile((req.params as { tenantId: string }).tenantId) };
+});
+
+// What people said when deciding on an agent's proposals: the lessons it reads next time.
+app.get('/api/tenants/:tenantId/workflows/:id/lessons', async (req) => {
+  const { tenantId, id } = req.params as { tenantId: string; id: string };
+  return listLessons(tenantId, id);
+});
+app.delete('/api/tenants/:tenantId/workflows/:id/lessons/:lessonId', async (req) => {
+  const { tenantId, id, lessonId } = req.params as { tenantId: string; id: string; lessonId: string };
+  await deleteLesson(tenantId, id, lessonId);
+  return { ok: true };
 });
 
 // Workspace rules in plain English, enforced by code before every write.

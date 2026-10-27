@@ -1,3 +1,4 @@
+import { getSetting } from '../settings.js';
 import { aiClient } from '../agent/provider.js';
 import { asList, asText, createLlm, parseJsonLoose, type Llm } from '../agent/llm.js';
 import type { Usage } from '../agent/pricing.js';
@@ -17,7 +18,7 @@ export async function setup(tenantId: string, person?: SalesforceClient): Promis
   const accountId = await accountOf(tenantId);
   const client = await aiClient(accountId, { tenantId, purpose: 'Insights and tools' });
   const sf = person ?? await SalesforceClient.forTenant(tenantId);
-  const llm = createLlm('', sf, spendGuard(accountId), client, await dbResultCache(accountId));
+  const llm = createLlm('', sf, spendGuard(accountId), client, await dbResultCache(accountId), { profile: await getSetting(accountId, 'businessProfile') });
   return { llm, sf };
 }
 

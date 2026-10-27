@@ -1,3 +1,4 @@
+import { getSetting } from '../settings.js';
 import { aiClient } from '../agent/provider.js';
 import { listDocuments } from '../knowledge/store.js';
 import type { Workflow } from '@crmagents/shared';
@@ -48,7 +49,7 @@ export async function draftWorkflow(tenantId: string, request: string, current?:
   const accountId = await accountOf(tenantId);
   const client = await aiClient(accountId, { tenantId, purpose: 'Agent builder' });
   const sf = await SalesforceClient.forTenant(tenantId);
-  const llm = createLlm('', sf, spendGuard(accountId), client, await dbResultCache(accountId));
+  const llm = createLlm('', sf, spendGuard(accountId), client, await dbResultCache(accountId), { profile: await getSetting(accountId, 'businessProfile') });
 
   // ---- code: which objects and fields are we talking about ($0, cached) ----
   const all = await listObjects(tenantId, sf);

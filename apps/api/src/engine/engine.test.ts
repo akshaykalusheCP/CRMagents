@@ -251,3 +251,17 @@ test('classify learns: the closest confirmed examples go into the prompt', async
   assert.match(prompt, /"Generator does not start after electrical failure" → Equipment Complexity/);
   assert.equal(r.output.examplesUsed, 2);
 });
+
+test('lessons from approvals: closest first, the latest when nothing is close, nothing when there are none', async () => {
+  const { lessonPrompt } = await import('./learn.js');
+  const lessons = [
+    { approved: false, proposal: 'Update Case 001: Priority = High (printer offline)', note: 'Printer issues are never high priority' },
+    { approved: true, proposal: 'Create Task "Call back" on Case 002 about a refund', note: 'Good, refunds always need a call' },
+  ];
+  const p = lessonPrompt('Printer on floor 3 is offline, set priority', lessons, 1);
+  assert.match(p, /Rejected: "Update Case 001/);
+  assert.match(p, /never high priority/);
+  assert.doesNotMatch(p, /refund/);
+  assert.match(lessonPrompt('zzz qqq', lessons), /Rejected/); // nothing close: the latest still show
+  assert.equal(lessonPrompt('anything', []), '');
+});

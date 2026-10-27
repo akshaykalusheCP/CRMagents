@@ -9,7 +9,7 @@ import type { WFRFNode } from '../components/WorkflowNode';
 import { Empty, Facts, Meter, Panel, Status, Table, toast, useConfirm, type Column } from '../components/ui';
 import { runLabel, runTone } from './Home';
 import { RunsPage } from './Runs';
-import { BackfillPanel, MovePanel, StartMode, VersionsPanel, WebhookPanel } from '../components/AgentAdmin';
+import { BackfillPanel, LessonsPanel, MovePanel, StartMode, VersionsPanel, WebhookPanel } from '../components/AgentAdmin';
 
 // One agent's page: what it does in plain English, how it has been doing, its runs and its settings.
 // Editing the steps opens the editor; everything else happens here.
@@ -215,6 +215,7 @@ export function AgentPage({ tenant, row, onBack, onEdit, onChanged, onDeleted }:
               ]} />
             </Panel>
             <CostPanel tenant={tenant} workflowId={row.id} />
+            <LessonsPanel tenant={tenant} row={row} />
             {canRun && (
               <Panel title="Replay last 30 days">
                 <p className="muted small" style={{ margin: '0 0 12px' }}>See what it would have done last month, on a sample of real records. Nothing is written.</p>

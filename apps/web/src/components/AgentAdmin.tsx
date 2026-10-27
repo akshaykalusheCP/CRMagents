@@ -1,7 +1,7 @@
-import { Copy, Download, Loader2, RefreshCw, RotateCcw, Send, Zap } from 'lucide-react';
+import { Copy, Download, Loader2, RefreshCw, RotateCcw, Send, X, Zap } from 'lucide-react';
 import { useEffect, useState } from 'react';
-import { api, type Tenant, type WorkflowRow } from '../api';
-import { Panel, toast, useConfirm } from './ui';
+import { api, type Lesson, type Tenant, type WorkflowRow } from '../api';
+import { Panel, Status, toast, useConfirm } from './ui';
 
 // Agent settings that aren't about its steps: how it starts, its web address, running on existing records,
 // earlier versions, and moving it to another org.
@@ -169,6 +169,37 @@ export function MovePanel({ tenant, row }: { tenant: Tenant; row: WorkflowRow })
       {missing && (missing.length
         ? <div className="card warn" style={{ marginTop: 12 }}>The other org is missing: {missing.join(', ')}. Add them there, or edit the copy, before turning it on.</div>
         : <p className="muted small" style={{ marginTop: 10 }}>Everything it needs exists in the other org.</p>)}
+    </Panel>
+  );
+}
+
+/** Notes people left when approving or rejecting this agent's proposals: it reads the closest ones next time. */
+export function LessonsPanel({ tenant, row }: { tenant: Tenant; row: WorkflowRow }) {
+  const [list, setList] = useState<Lesson[] | null>(null);
+  const load = () => api.lessons(tenant.id, row.id).then(setList).catch(() => setList([]));
+  useEffect(() => { void load(); }, [tenant.id, row.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const remove = async (l: Lesson) => {
+    try { await api.deleteLesson(tenant.id, row.id, l.id); setList((x) => (x ?? []).filter((y) => y.id !== l.id)); toast('Forgotten'); }
+    catch (e) { toast((e as Error).message, 'bad'); }
+  };
+  return (
+    <Panel title="Learned from your team">
+      {!list ? <Loader2 size={16} className="spin" /> : !list.length ? (
+        <p className="muted small" style={{ margin: 0 }}>When someone approves or rejects a change with a note ("billing questions go to Finance"), the agent reads it the next time it proposes something similar.</p>
+      ) : (
+        <ul className="lessons">
+          {list.slice(0, 8).map((l) => (
+            <li key={l.id}>
+              <div>
+                <Status tone={l.approved ? 'ok' : 'bad'}>{l.approved ? 'Approved' : 'Rejected'}</Status>
+                <p className="lesson-note">"{l.note}"</p>
+                <p className="muted small">{l.proposal}{l.decidedBy ? ` · ${l.decidedBy}` : ''}</p>
+              </div>
+              <button className="ghost icon" aria-label="Forget this lesson" title="Forget this lesson" onClick={() => void remove(l)}><X size={14} /></button>
+            </li>
+          ))}
+        </ul>
+      )}
     </Panel>
   );
 }

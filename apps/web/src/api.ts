@@ -138,7 +138,7 @@ export interface Settings {
   callbackUrl: string; sfClientId: string; sfLoginUrl: string;
   sfClientSecret: { set: boolean }; anthropicKey: { set: boolean }; dailyBudgetUsd: string; anthropicWorkspaceId: string; aiCacheHours: string;
   maskPii?: string; maskFields?: string; maxAiCalls?: string; maxToolCalls?: string; maxTokens?: string; retentionDays?: string;
-  actAsPerson?: string; memoryEnabled?: string; aiReady?: boolean; aiRouting?: string;
+  actAsPerson?: string; memoryEnabled?: string; aiReady?: boolean; aiRouting?: string; businessProfile?: string;
   aiProvider?: string; providerKey?: { set: boolean }; aiBaseUrl?: string; aiModel?: string; aiFastModel?: string; aiPriceIn?: string; aiPriceOut?: string;
   auditInSalesforce?: string; alertEmails?: string; autoPauseAfter?: string;
   twilioSid?: string; twilioToken?: { set: boolean }; twilioSms?: string; twilioWhatsapp?: string;
@@ -253,6 +253,9 @@ export interface RecordNote { id: number; tenantId: string; recordId: string; no
 export interface Team { me: string; canManage: boolean; users: TeamUser[]; invites: TeamInvite[] }
 export interface Alert { id: string; kind: string; title: string; body: string; tenantId: string | null; workflowId: string | null; readAt: string | null; createdAt: string }
 
+/** What a person said when approving or rejecting an agent's proposal: the agent reads it next time. */
+export interface Lesson { id: string; approved: boolean; proposal: string; note: string; decidedBy: string | null; createdAt: string }
+
 export interface UsageSummary {
   runs: number; costUsd: number; budgetUsd: number | null; cacheHitRate: number | null;
   tokens: { input: number; cacheRead: number; cacheWrite: number; output: number };
@@ -361,6 +364,9 @@ export const api = {
   rotateWebhook: (t: string, id: string) => req<{ url: string; secret: string }>('POST', `/api/tenants/${t}/workflows/${id}/webhook/rotate`, {}),
   backfill: (t: string, id: string, days: number, limit: number) => req<{ queued: number; objects: { object: string; found: number }[] }>('POST', `/api/tenants/${t}/workflows/${id}/backfill`, { days, limit }),
   versions: (t: string, id: string) => req<{ id: number; name: string; savedBy: string | null; createdAt: string; steps: number }[]>('GET', `/api/tenants/${t}/workflows/${id}/versions`),
+  lessons: (t: string, id: string) => req<Lesson[]>('GET', `/api/tenants/${t}/workflows/${id}/lessons`),
+  deleteLesson: (t: string, id: string, lessonId: string) => req<{ ok: true }>('DELETE', `/api/tenants/${t}/workflows/${id}/lessons/${lessonId}`),
+  draftBusinessProfile: (t: string) => req<{ text: string }>('POST', `/api/tenants/${t}/business-profile/draft`, {}),
   restoreVersion: (t: string, id: string, vid: number) => req<{ name: string; graph: Workflow }>('POST', `/api/tenants/${t}/workflows/${id}/versions/${vid}/restore`, {}),
   exportAgent: (t: string, id: string) => req<{ format: string; name: string; graph: Workflow }>('GET', `/api/tenants/${t}/workflows/${id}/export`),
   importAgent: (t: string, b: { name: string; graph: Workflow }) => req<{ id: string; missing: string[] }>('POST', `/api/tenants/${t}/workflows/import`, b),

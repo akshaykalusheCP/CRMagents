@@ -7,10 +7,12 @@ import { PageHeader } from '../components/ui';
 import { ConnectionsPage } from './Connections';
 import { SettingsPage } from './Settings';
 import { ChatApprovalsPage } from './ChatApprovals';
+import { BusinessProfilePage } from './BusinessProfile';
 
 // Settings with a section menu on the left; each section keeps its own page.
 const SECTIONS = [
   { id: 'orgs', label: 'Salesforce orgs', desc: 'Connect orgs and check their status.' },
+  { id: 'business', label: 'Business profile', desc: 'What every agent and assistant should know about your company: what you sell, your customers, your words and rules.' },
   { id: 'ai', label: 'AI & spending', desc: 'AI keys with a primary and backups, a daily budget and answer reuse.' },
   { id: 'plan', label: 'Plan', desc: 'What your workspace includes, what it uses, and upgrades.' },
   { id: 'team', label: 'Team', desc: 'Who can sign in, and what each person may do. Invite people by email.' },
@@ -18,7 +20,7 @@ const SECTIONS = [
   { id: 'rules', label: 'Rules', desc: 'Limits for every agent: things they must never do, or must ask a person about first. Checked by code before every change.' },
 ] as const;
 
-export type SettingsSection = 'orgs' | 'ai' | 'plan' | 'team' | 'approvals' | 'rules';
+export type SettingsSection = 'orgs' | 'business' | 'ai' | 'plan' | 'team' | 'approvals' | 'rules';
 export const SETTINGS_SECTIONS = SECTIONS.map((s) => s.id) as readonly SettingsSection[];
 
 export function SettingsHub({ tenants, onChange, tenant, section, focusConnect, me, openAdmin }: { tenants: Tenant[]; onChange: () => void; tenant?: Tenant; section?: SettingsSection; focusConnect?: boolean; me: Me; openAdmin?: () => void }) {
@@ -33,7 +35,7 @@ export function SettingsHub({ tenants, onChange, tenant, section, focusConnect, 
         </nav>
         <div>
           <div className="set-head"><h2>{cur.label}</h2><p>{cur.desc}</p></div>
-          {tab === 'orgs' ? <ConnectionsPage tenants={tenants} onChange={onChange} goSettings={() => setTab('ai')} focusConnect={focusConnect} /> : tab === 'ai' ? <SettingsPage me={me} /> : tab === 'team' ? <TeamPage me={me} tenant={tenant} /> : tab === 'plan' ? <PlanPage me={me} openAdmin={openAdmin} /> : tab === 'approvals' ? <ChatApprovalsPage me={me} /> : <RulesPage tenant={tenant} />}
+          {tab === 'orgs' ? <ConnectionsPage tenants={tenants} onChange={onChange} goSettings={() => setTab('ai')} focusConnect={focusConnect} /> : tab === 'ai' ? <SettingsPage me={me} /> : tab === 'business' ? <BusinessProfilePage me={me} tenant={tenant} /> : tab === 'team' ? <TeamPage me={me} tenant={tenant} /> : tab === 'plan' ? <PlanPage me={me} openAdmin={openAdmin} /> : tab === 'approvals' ? <ChatApprovalsPage me={me} /> : <RulesPage tenant={tenant} />}
         </div>
       </div>
     </div>
