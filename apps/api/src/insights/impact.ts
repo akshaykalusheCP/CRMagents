@@ -75,7 +75,7 @@ async function window(tenantId: string, from: Date, to: Date, a: Assumptions) {
     `select kind, status from suggestions where tenant_id=$1 and created_at >= $2 and created_at < $3`, [tenantId, from, to])).rows as { kind: string; status: string }[];
 
   const m = a.minutes;
-  const t = { runs: 0, ok: 0, failed: 0, waiting: 0, changes: 0, aiSteps: 0, repliesSent: 0, answers: 0, approved: 0, rejected: 0, agentCost: 0, otherCost: 0, minutes: 0 };
+  const t = { runs: 0, ok: 0, failed: 0, waiting: 0, changes: 0, aiSteps: 0, repliesSent: 0, answers: 0, approved: 0, rejected: 0, agentCost: 0, otherCost: 0, minutes: 0, runMinutes: 0 };
   const sessions = new Map<string, boolean>(); // website conversation -> handed to a person
   const agents = new Map<string, { id: string; name: string; kind: 'agent' | 'assistant'; runs: number; ok: number; changes: number; minutes: number; cost: number }>();
   const daily = new Map<string, { runs: number; minutes: number }>();
@@ -99,7 +99,7 @@ async function window(tenantId: string, from: Date, to: Date, a: Assumptions) {
       const key = r.sid ?? r.id;
       sessions.set(key, (sessions.get(key) ?? false) || handed);
     }
-    t.minutes += minutes;
+    t.minutes += minutes; t.runMinutes += minutes;
     const d = daily.get(day(r.created_at)) ?? { runs: 0, minutes: 0 };
     d.runs++; d.minutes += minutes;
     daily.set(day(r.created_at), d);
@@ -133,6 +133,13 @@ async function window(tenantId: string, from: Date, to: Date, a: Assumptions) {
   };
 }
 
+/** AI cost and by-hand cost of one task, and how many times cheaper the AI is. Pure; tested. */
+export function perTask(runs: number, aiCostUsd: number, byHandUsd: number) {
+  if (!runs) return null;
+  const ai = aiCostUsd / runs, hand = byHandUsd / runs;
+  return { aiUsd: ai, byHandUsd: hand, times: ai > 0 && hand > 0 ? hand / ai : null };
+}
+
 export async function impact(tenantId: string, accountId: string, days: number) {
   const a = await getAssumptions(accountId);
   const to = new Date();
@@ -155,6 +162,8 @@ export async function impact(tenantId: string, accountId: string, days: number) 
     runs: { total: cur.totals.runs, ok: cur.totals.ok, failed: cur.totals.failed, waiting: cur.totals.waiting },
     work: { changes: cur.totals.changes, aiSteps: cur.totals.aiSteps, repliesSent: cur.totals.repliesSent, answers: cur.totals.answers },
     cost: { agents: cur.totals.agentCost, other: cur.totals.otherCost, perRun: cur.totals.runs ? cur.totals.agentCost / cur.totals.runs : 0 },
+    // One run of an agent or assistant: what the AI cost against what the same work costs a person (the minutes above).
+    perTask: perTask(cur.totals.runs, cur.totals.agentCost, value(cur.totals.runMinutes)),
     website: cur.website, suggestions: cur.suggestions, approvals: cur.approvals,
     agents: cur.agents.slice(0, 25).map((g) => ({ ...g, hours: g.minutes / 60, value: value(g.minutes) })),
     series,

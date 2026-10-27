@@ -1398,3 +1398,9 @@ select.sm { height: 30px; padding: 0 28px 0 8px; font-size: 13px; width: auto; }
 /* Business profile */
 :root .profile-text { width: 100%; min-height: 320px; font: inherit; font-size: 14px; line-height: 1.55; padding: 12px 14px; resize: vertical; }
 :root .tips { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; font-size: 14px; color: var(--text-2); }
+
+/* Impact: one task by AI vs by hand */
+:root .imp-band { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; padding: 14px 18px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); font-size: 15px; color: var(--text-2); }
+:root .imp-band b { color: var(--text); font-variant-numeric: tabular-nums; }
+:root .imp-times { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; color: var(--accent-text, var(--accent)); white-space: nowrap; }
+:root .imp-pertask { font-variant-numeric: tabular-nums; white-space: nowrap; }

@@ -305,6 +305,7 @@ function demoImpact(days: number) {
     runs: { total: Math.round(1432 * k), ok: Math.round(1391 * k), failed: Math.round(29 * k), waiting: 12 },
     work: { changes: Math.round(812 * k), aiSteps: Math.round(1105 * k), repliesSent: Math.round(46 * k), answers: Math.round(214 * k) },
     cost: { agents: 15.9 * k, other: 2.5 * k, perRun: 0.011 },
+    perTask: { aiUsd: 0.011, byHandUsd: 1.62, times: 147 },
     website: { conversations: Math.round(388 * k), handedOff: Math.round(71 * k), resolvedRate: 0.82 },
     suggestions: { total: Math.round(402 * k), used: Math.round(287 * k), helpful: Math.round(161 * k), notHelpful: Math.round(23 * k), repliesSuggested: Math.round(158 * k), repliesSentByPeople: Math.round(126 * k) },
     approvals: { approved: Math.round(94 * k), rejected: Math.round(6 * k), medianMinutes: 18 },

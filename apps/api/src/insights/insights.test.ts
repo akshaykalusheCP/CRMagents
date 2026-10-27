@@ -45,3 +45,13 @@ test('dashboard date filter is injected safely into any query shape', async () =
   assert.throws(() => applyDateFilter('SELECT Id FROM Case', 'CreatedDate; DROP', 'THIS_YEAR'), /Invalid date field/);
   assert.throws(() => applyDateFilter('SELECT Id FROM Case', 'CreatedDate', 'TODAY OR Id != null'), /Invalid date range/);
 });
+
+test('impact per task: AI cost against the same work by a person', async () => {
+  const { perTask } = await import('./impact.js');
+  assert.equal(perTask(0, 1, 1), null);
+  const p = perTask(100, 0.2, 150)!;
+  assert.equal(p.aiUsd, 0.002);
+  assert.equal(p.byHandUsd, 1.5);
+  assert.ok(Math.abs((p.times ?? 0) - 750) < 1e-6);
+  assert.equal(perTask(10, 0, 5)!.times, null); // free (all reused): no ratio
+});

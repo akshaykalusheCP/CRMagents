@@ -51,6 +51,8 @@ export interface Impact {
   runs: { total: number; ok: number; failed: number; waiting: number };
   work: { changes: number; aiSteps: number; repliesSent: number; answers: number };
   cost: { agents: number; other: number; perRun: number };
+  /** One agent or assistant run: AI cost vs the same work by a person. */
+  perTask?: { aiUsd: number; byHandUsd: number; times: number | null } | null;
   website: { conversations: number; handedOff: number; resolvedRate: number | null };
   suggestions: { total: number; used: number; helpful: number; notHelpful: number; repliesSuggested: number; repliesSentByPeople: number };
   approvals: { approved: number; rejected: number; medianMinutes: number | null };

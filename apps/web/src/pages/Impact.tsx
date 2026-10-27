@@ -49,6 +49,7 @@ export function ImpactPage({ tenant }: { tenant?: Tenant }) {
     { key: 'h', header: 'Time saved', align: 'right', render: (a) => hrs(a.hours) },
     { key: 'v', header: 'Value', align: 'right', hideSm: true, render: (a) => usd(a.value) },
     { key: 'k', header: 'AI cost', align: 'right', render: (a) => usd(a.cost) },
+    { key: 'p', header: 'Per run: AI vs by hand', align: 'right', hideSm: true, render: (a) => a.runs ? <span className="imp-pertask"><b>{usd(a.cost / a.runs)}</b> <span className="muted">vs {usd(a.value / a.runs)}</span></span> : '—' },
   ];
   const dirty = draft && d && JSON.stringify(draft) !== JSON.stringify(d.assumptions);
 
@@ -83,6 +84,13 @@ export function ImpactPage({ tenant }: { tenant?: Tenant }) {
             <span className="imp-delta muted">value for every $1 of AI</span>
           </div>
         </div>
+
+        {d.perTask && d.perTask.byHandUsd > 0 && (
+          <div className="imp-band" role="note">
+            <span>One task by an agent costs <b>{usd(d.perTask.aiUsd)}</b> in AI. The same task by a person: about <b>{usd(d.perTask.byHandUsd)}</b> of their time.</span>
+            {d.perTask.times != null && d.perTask.times >= 2 && <span className="imp-times">{d.perTask.times >= 100 ? Math.round(d.perTask.times).toLocaleString() : d.perTask.times.toFixed(0)}× cheaper</span>}
+          </div>
+        )}
 
         <Panel title="Time saved per day" action={<span className="kb-meta">{d.runs.total.toLocaleString()} runs in {days} days</span>}>
           {d.series.some((s) => s.hours > 0)
