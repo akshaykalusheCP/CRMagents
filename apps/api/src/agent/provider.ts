@@ -63,8 +63,19 @@ export interface CompatOptions {
 
 type Block = { type: string; [k: string]: any };
 
+/**
+ * How hard the model thinks before answering, where the endpoint understands it. Gemini 3 always thinks and its default
+ * level is slow (a one-word test took over a minute), so Gemini gets 'low' unless asked otherwise. OpenAI reasoning
+ * models keep their default unless asked; other models and services never get the field (it would be rejected). Pure; tested.
+ */
+export function reasoningEffort(baseUrl: string | undefined, model: string, wanted?: string): string | undefined {
+  if (/generativelanguage\.googleapis\.com/.test(baseUrl ?? '')) return wanted ?? 'low';
+  if (/api\.openai\.com/.test(baseUrl ?? '') && /^(gpt-5|o\d)/.test(model)) return wanted;
+  return undefined;
+}
+
 /** Messages API request -> Chat Completions request. Pure; tested. */
-export function toChat(req: any, o: Pick<CompatOptions, 'model' | 'fastModel'>) {
+export function toChat(req: any, o: Pick<CompatOptions, 'model' | 'fastModel'> & { baseUrl?: string }) {
   const text = (c: unknown): string => (typeof c === 'string' ? c : (c as Block[]).filter((b) => b.type === 'text').map((b) => b.text).join('\n'));
   const messages: any[] = [];
   const system = req.system ? text(req.system) : '';
@@ -91,10 +102,13 @@ export function toChat(req: any, o: Pick<CompatOptions, 'model' | 'fastModel'>) 
   }
   const fast = /haiku/i.test(String(req.model ?? ''));
   const schema = req.output_config?.format?.schema;
+  const model = fast ? o.fastModel : o.model;
+  const effort = reasoningEffort(o.baseUrl, model, req.reasoning_effort);
   return {
-    model: fast ? o.fastModel : o.model,
+    model,
     messages,
     max_completion_tokens: req.max_tokens,
+    ...(effort ? { reasoning_effort: effort } : {}),
     // Claude's own server tools (web search) have no equivalent here and are left out.
     ...(req.tools?.some((t: any) => t.input_schema) ? { tools: req.tools.filter((t: any) => t.input_schema).map((t: any) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.input_schema } })) } : {}),
     ...(schema ? { response_format: { type: 'json_schema', json_schema: { name: 'answer', schema, strict: false } } } : {}),
@@ -115,7 +129,8 @@ export function fromChat(r: any, o: Pick<CompatOptions, 'priceIn' | 'priceOut'>)
   }
   const cached = r.usage?.prompt_tokens_details?.cached_tokens ?? 0;
   const input = Math.max(0, (r.usage?.prompt_tokens ?? 0) - cached);
-  const output = r.usage?.completion_tokens ?? 0;
+  // Thinking is billed as output; some providers leave it out of completion_tokens but count it in total_tokens.
+  const output = Math.max(r.usage?.completion_tokens ?? 0, (r.usage?.total_tokens ?? 0) - (r.usage?.prompt_tokens ?? 0));
   return {
     id: r.id, type: 'message', role: 'assistant', model: r.model, content,
     stop_reason: msg.tool_calls?.length ? 'tool_use' : (STOP[r.choices?.[0]?.finish_reason] ?? 'end_turn'),

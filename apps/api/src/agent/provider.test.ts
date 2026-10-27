@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createLlm } from './llm.js';
-import { fromChat, openAiCompatible, toChat } from './provider.js';
+import { fromChat, openAiCompatible, reasoningEffort, toChat } from './provider.js';
 
 test('requests translate to the OpenAI shape: system, tools, tool results, structured output, low-cost model', () => {
   const r = toChat({
@@ -46,4 +46,19 @@ test('a whole tool-using answer works through another provider', async () => {
   assert.equal(bodies[1].messages.at(-1).role, 'tool');
   assert.match(bodies[1].messages.at(-1).content, /2 row\(s\)/);
   assert.ok(Math.abs(r.usage.costUsd - ((50 + 80) * 1 + (10 + 8) * 2) / 1_000_000) < 1e-12);
+});
+
+test('thinking effort is sent only where the endpoint understands it', () => {
+  const gem = 'https://generativelanguage.googleapis.com/v1beta/openai';
+  assert.equal(reasoningEffort(gem, 'gemini-3.8-flash'), 'low');
+  assert.equal(reasoningEffort(gem, 'gemini-3.8-flash', 'minimal'), 'minimal');
+  assert.equal(reasoningEffort('https://api.openai.com/v1', 'gpt-5', 'minimal'), 'minimal');
+  assert.equal(reasoningEffort('https://api.openai.com/v1', 'gpt-4o', 'minimal'), undefined);
+  assert.equal(reasoningEffort('https://api.mistral.ai/v1', 'mistral-large-latest', 'minimal'), undefined);
+  assert.equal(toChat({ model: 'x', max_tokens: 9, messages: [{ role: 'user', content: 'hi' }] }, { model: 'gemini-3.8-flash', fastModel: 'gemini-3.8-flash', baseUrl: gem }).reasoning_effort, 'low');
+});
+
+test('thinking tokens left out of completion_tokens still count as output', () => {
+  const r = fromChat({ choices: [{ message: { content: 'OK' }, finish_reason: 'stop' }], usage: { prompt_tokens: 10, completion_tokens: 1, total_tokens: 311 } }, { priceIn: 1, priceOut: 10 });
+  assert.equal(r.usage.output_tokens, 301);
 });

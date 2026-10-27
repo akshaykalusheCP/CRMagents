@@ -80,7 +80,8 @@ export async function testKey(accountId: string, c: KeyConfig) {
   const t0 = Date.now();
   try {
     const client = withAiLog(clientFor(c), accountId, c.provider, { purpose: 'Testing an AI key' });
-    const res: any = await client.messages.create({ model, max_tokens: 8, messages: [{ role: 'user', content: 'Reply with the single word OK.' }] } as never);
+    // Thinking models spend output tokens before replying: room for that, and as little thinking as the model allows.
+    const res: any = await client.messages.create({ model, max_tokens: c.provider === 'anthropic' ? 8 : 512, ...(c.provider === 'anthropic' ? {} : { reasoning_effort: 'minimal' }), messages: [{ role: 'user', content: 'Reply with the single word OK.' }] } as never);
     const text = (res.content ?? []).filter((b: any) => b.type === 'text').map((b: any) => b.text).join('').trim();
     return { ok: true as const, ms: Date.now() - t0, model: res.model ?? model, reply: text.slice(0, 40) };
   } catch (e) {
