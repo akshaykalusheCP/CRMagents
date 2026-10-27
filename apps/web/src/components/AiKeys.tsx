@@ -163,8 +163,9 @@ function KeyDrawer({ k, first, onClose, onSaved }: { k: AiKey | null; first: boo
   const test = async () => {
     setBusy('test'); setErr('');
     try {
-      // A new key (or a newly typed one) is tested as typed; otherwise the saved key is tested.
-      setResult(f.key.trim() ? await api.testNewAiKey(body()) : k ? await api.testAiKey(k.id) : { ok: false, ms: 0, model: '', error: 'Paste the key first.' });
+      // A new key (or a newly typed one) is tested as typed; otherwise the saved key, with the model and URL as they are in the form now.
+      const b = body();
+      setResult(f.key.trim() ? await api.testNewAiKey(b) : k ? await api.testAiKey(k.id, { model: b.model, baseUrl: b.baseUrl || undefined, workspaceId: b.workspaceId }) : { ok: false, ms: 0, model: '', error: 'Paste the key first.' });
     } catch (e) { setErr((e as Error).message); }
     setBusy('');
   };

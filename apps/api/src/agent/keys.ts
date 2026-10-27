@@ -257,10 +257,16 @@ export function registerAiKeys(app: FastifyInstance) {
     return { ok: true };
   });
 
+  // The saved key, optionally with settings changed in the form but not saved yet (model, base URL, workspace).
   app.post('/api/ai-keys/:id/test', async (req) => {
     const u = req.user!;
     const r = await one(u.accountId, (req.params as { id: string }).id);
-    const t = await testKey(u.accountId, configOf(r));
+    const o = z.object({ model: z.string().trim().max(200).optional(), baseUrl: z.string().trim().max(500).optional(), workspaceId: z.string().trim().max(200).optional() }).parse(req.body ?? {});
+    const saved = configOf(r);
+    const c = { ...saved, model: o.model || saved.model, baseUrl: o.baseUrl || saved.baseUrl, workspaceId: o.workspaceId || saved.workspaceId };
+    const draft = c.model !== saved.model || c.baseUrl !== saved.baseUrl || c.workspaceId !== saved.workspaceId;
+    const t = await testKey(u.accountId, c);
+    if (draft) return t; // not what's saved: the key's status stays as it was
     await pool.query('update ai_keys set last_test_at=now(), last_test_ok=$2, last_test_ms=$3, last_test_model=$4, last_error=case when $2 then last_error else $5 end, last_error_at=case when $2 then last_error_at else now() end where id=$1',
       [r.id, t.ok, t.ms, t.model, t.ok ? null : t.error]);
     return t;
