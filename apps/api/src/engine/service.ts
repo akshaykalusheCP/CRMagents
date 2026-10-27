@@ -1,4 +1,5 @@
 import { graphFeatures } from '@crmagents/shared';
+import { config } from '../config.js';
 import { requireActiveForTenant, requireFeatureForTenant } from '../plans.js';
 import { afterRunFailed } from '../alerts.js';
 import { journalFor } from '../trust/undo.js';
@@ -54,13 +55,13 @@ async function makeEnv(tenantId: string, workflowId?: string, st?: RunState) {
   if (workflowId) runCtx.author = (await pool.query('select name from workflows where id=$1', [workflowId])).rows[0]?.name ?? 'Agent';
   const memory = async (question: string, recordId?: string) => (await memoryPrompt(accountId, tenantId, '', question, recordId)).text;
   // Masking and limits: the placeholder map and the counters live on the run so they survive pauses.
-  const { masker, limits } = await runTrust(accountId, st ? (st.masks ??= {}) : undefined);
+  const { masker, limits, routing } = await runTrust(accountId, st ? (st.masks ??= {}) : undefined);
   const counters = st ? (st.counters ??= { aiCalls: 0, toolCalls: 0, tokens: 0 }) : undefined;
   let real: Llm | undefined;
   const llm = async (): Promise<Llm> => {
     if (real) return real;
     const client = await aiClient(accountId, { tenantId, purpose: workflowId ? undefined : 'Preview' });
-    return (real = createLlm('', sf, spendGuard(accountId), client, await dbResultCache(accountId), { masker, limits, counters,
+    return (real = createLlm('', sf, spendGuard(accountId), client, await dbResultCache(accountId), { masker, limits, counters, routing,
       // Notes on records, written by AI steps (not in previews: nothing is saved there).
       exec: (name, input) => {
         if (name !== 'remember_about_record') return undefined;
@@ -70,6 +71,8 @@ async function makeEnv(tenantId: string, workflowId?: string, st?: RunState) {
       } }));
   };
   const lazy: Llm = {
+    routing,
+    strongModel: config.model,
     agent: async (o) => (await llm()).agent(o),
     complete: async (o) => (await llm()).complete(o),
   };

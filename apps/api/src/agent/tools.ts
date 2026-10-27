@@ -233,8 +233,9 @@ export const TOOLS: Record<string, Tool> = {
   web_search: {
     write: false,
     server: true,
-    // Anthropic's web search: Claude searches, reads the results and cites them. $10 per 1,000 searches.
-    def: { type: 'web_search_20260209', name: 'web_search', max_uses: 5 } as Anthropic.ToolUnion,
+    // Anthropic's web search: Claude searches, reads the results and cites them. $10 per 1,000 searches, and every
+    // search adds its results (often 10k+ tokens) to the input: three is enough for a question.
+    def: { type: 'web_search_20260209', name: 'web_search', max_uses: 3 } as Anthropic.ToolUnion,
     async run() {
       throw new Error('web_search runs on the AI provider');
     },

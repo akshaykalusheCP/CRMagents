@@ -6,7 +6,7 @@ import { Meter, Panel, Status, toast } from '../components/ui';
 
 // AI & spending: the AI keys (components/AiKeys), the daily budget and answer reuse. Secrets are write-only; a save bar appears on change.
 
-const EMPTY = { sfClientId: '', sfClientSecret: '', sfLoginUrl: '', anthropicKey: '', dailyBudgetUsd: '', anthropicWorkspaceId: '', aiCacheHours: '', maskPii: '', maskFields: '', maxAiCalls: '', maxToolCalls: '', maxTokens: '', retentionDays: '', aiProvider: '', providerKey: '', aiBaseUrl: '', aiModel: '', aiFastModel: '', aiPriceIn: '', aiPriceOut: '', auditInSalesforce: '', alertEmails: '', autoPauseAfter: '', twilioSid: '', twilioToken: '', twilioSms: '', twilioWhatsapp: '' };
+const EMPTY = { sfClientId: '', sfClientSecret: '', sfLoginUrl: '', anthropicKey: '', dailyBudgetUsd: '', anthropicWorkspaceId: '', aiCacheHours: '', maskPii: '', maskFields: '', maxAiCalls: '', maxToolCalls: '', maxTokens: '', retentionDays: '', aiProvider: '', providerKey: '', aiBaseUrl: '', aiModel: '', aiFastModel: '', aiPriceIn: '', aiPriceOut: '', auditInSalesforce: '', alertEmails: '', autoPauseAfter: '', twilioSid: '', twilioToken: '', twilioSms: '', twilioWhatsapp: '', aiRouting: '' };
 
 export function SettingsPage({ me }: { me?: Me }) {
   const [s, setS] = useState<Settings>();
@@ -20,7 +20,7 @@ export function SettingsPage({ me }: { me?: Me }) {
     setS(x);
     const f = { ...EMPTY, sfClientId: x.sfClientId, sfLoginUrl: x.sfLoginUrl, dailyBudgetUsd: x.dailyBudgetUsd ?? '', anthropicWorkspaceId: x.anthropicWorkspaceId ?? '', aiCacheHours: x.aiCacheHours ?? '',
       maskPii: x.maskPii ?? '', maskFields: x.maskFields ?? '', maxAiCalls: x.maxAiCalls ?? '', maxToolCalls: x.maxToolCalls ?? '', maxTokens: x.maxTokens ?? '', retentionDays: x.retentionDays ?? '',
-      aiProvider: x.aiProvider ?? '', providerKey: '', aiBaseUrl: x.aiBaseUrl ?? '', aiModel: x.aiModel ?? '', aiFastModel: x.aiFastModel ?? '', aiPriceIn: x.aiPriceIn ?? '', aiPriceOut: x.aiPriceOut ?? '', auditInSalesforce: x.auditInSalesforce ?? '', alertEmails: x.alertEmails ?? '', autoPauseAfter: x.autoPauseAfter ?? '', twilioSid: x.twilioSid ?? '', twilioToken: '', twilioSms: x.twilioSms ?? '', twilioWhatsapp: x.twilioWhatsapp ?? '' };
+      aiProvider: x.aiProvider ?? '', providerKey: '', aiBaseUrl: x.aiBaseUrl ?? '', aiModel: x.aiModel ?? '', aiFastModel: x.aiFastModel ?? '', aiPriceIn: x.aiPriceIn ?? '', aiPriceOut: x.aiPriceOut ?? '', auditInSalesforce: x.auditInSalesforce ?? '', alertEmails: x.alertEmails ?? '', autoPauseAfter: x.autoPauseAfter ?? '', twilioSid: x.twilioSid ?? '', twilioToken: '', twilioSms: x.twilioSms ?? '', twilioWhatsapp: x.twilioWhatsapp ?? '', aiRouting: x.aiRouting ?? '' };
     setForm(f); setBase(f);
   });
   useEffect(() => { load().catch((e) => setMsg(e.message)); api.usage().then(setUsage).catch(() => {}); }, []);
@@ -33,7 +33,7 @@ export function SettingsPage({ me }: { me?: Me }) {
       const body: Record<string, string> = { sfClientId: form.sfClientId, sfLoginUrl: form.sfLoginUrl, dailyBudgetUsd: form.dailyBudgetUsd.trim(), anthropicWorkspaceId: form.anthropicWorkspaceId.trim(), aiCacheHours: form.aiCacheHours.trim(),
         maskPii: form.maskPii, maskFields: form.maskFields.trim(), maxAiCalls: form.maxAiCalls.trim(), maxToolCalls: form.maxToolCalls.trim(), maxTokens: form.maxTokens.trim(), retentionDays: form.retentionDays.trim(),
         aiProvider: form.aiProvider, aiBaseUrl: form.aiBaseUrl.trim(), aiModel: form.aiModel.trim(), aiFastModel: form.aiFastModel.trim(), aiPriceIn: form.aiPriceIn.trim(), aiPriceOut: form.aiPriceOut.trim(), auditInSalesforce: form.auditInSalesforce, alertEmails: form.alertEmails, autoPauseAfter: form.autoPauseAfter.trim(),
-        twilioSid: form.twilioSid.trim(), twilioSms: form.twilioSms.replace(/[\s()-]/g, ''), twilioWhatsapp: form.twilioWhatsapp.replace(/[\s()-]/g, '') };
+        twilioSid: form.twilioSid.trim(), twilioSms: form.twilioSms.replace(/[\s()-]/g, ''), twilioWhatsapp: form.twilioWhatsapp.replace(/[\s()-]/g, ''), aiRouting: form.aiRouting };
       if (form.twilioToken) body.twilioToken = form.twilioToken.trim();
       if (form.providerKey) body.providerKey = form.providerKey;
       if (form.sfClientSecret) body.sfClientSecret = form.sfClientSecret;
@@ -54,6 +54,20 @@ export function SettingsPage({ me }: { me?: Me }) {
 
       <Panel title="Spending">
         <div className="form">
+          <div className="frow">
+            <div className="flabel"><b>Which model does the work</b><span>Most agent work (sorting, pulling out details, short answers) is done just as well by the low-cost model. Nimbus moves a step to the strongest model when the low-cost one is unsure, gets stuck or fails, and never redoes work that already changed data. Steps set to a specific model keep it.</span></div>
+            <div className="ffield">
+              <div className="seg" role="radiogroup" aria-label="Which model does the work">
+                {([['smart', 'Low-cost first (recommended)'], ['best', 'Strongest every time']] as const).map(([v, label]) => (
+                  <button key={v} type="button" role="radio" aria-checked={(form.aiRouting === 'best' ? 'best' : 'smart') === v} className={(form.aiRouting === 'best' ? 'best' : 'smart') === v ? 'on' : ''}
+                    onClick={() => { setMsg(''); setForm({ ...form, aiRouting: v }); }}>{label}</button>
+                ))}
+              </div>
+              {usage?.last30 && usage.last30.costUsd > 0.01 && usage.last30.onLowCostUsd < usage.last30.costUsd * 0.8 && (
+                <span className="muted small">Last 30 days: ${usage.last30.costUsd.toFixed(2)} on Claude. The same work on the low-cost model would have been about ${usage.last30.onLowCostUsd.toFixed(2)}, before the few steps that need the strongest model.</span>
+              )}
+            </div>
+          </div>
           <div className="frow">
             <div className="flabel"><b>Daily budget</b><span>AI steps pause once the workspace spends this much in 24 hours. Type "none" for no limit.</span></div>
             <div className="ffield">

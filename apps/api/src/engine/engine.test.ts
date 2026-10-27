@@ -212,6 +212,15 @@ test('classify escalates to the default model only when the cheap model is unsur
   assert.equal(unsure.output.escalated, true);
   assert.equal(unsure.usage!.costUsd, 0.002);
 
+  // A block on the default model escalates on its own when the workspace routes to the low-cost model first.
+  calls.length = 0;
+  const routed = envFor('low') as any;
+  routed.llm.routing = 'smart'; routed.llm.strongModel = 'claude-opus-5-5';
+  const auto = await EXECUTORS['ai.classify']({ ...node, config: { text: 't', categories: 'A\nB' } } as any, {}, routed);
+  assert.equal(calls.length, 2);
+  assert.equal(calls[1].model, 'claude-opus-5-5');
+  assert.equal(auto.output.escalated, true);
+
   calls.length = 0;
   await EXECUTORS['ai.classify']({ ...node, config: { ...node.config, escalate: 'never' } } as any, {}, envFor('low'));
   assert.equal(calls.length, 1);

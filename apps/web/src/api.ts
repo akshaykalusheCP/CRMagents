@@ -138,7 +138,7 @@ export interface Settings {
   callbackUrl: string; sfClientId: string; sfLoginUrl: string;
   sfClientSecret: { set: boolean }; anthropicKey: { set: boolean }; dailyBudgetUsd: string; anthropicWorkspaceId: string; aiCacheHours: string;
   maskPii?: string; maskFields?: string; maxAiCalls?: string; maxToolCalls?: string; maxTokens?: string; retentionDays?: string;
-  actAsPerson?: string; memoryEnabled?: string; aiReady?: boolean;
+  actAsPerson?: string; memoryEnabled?: string; aiReady?: boolean; aiRouting?: string;
   aiProvider?: string; providerKey?: { set: boolean }; aiBaseUrl?: string; aiModel?: string; aiFastModel?: string; aiPriceIn?: string; aiPriceOut?: string;
   auditInSalesforce?: string; alertEmails?: string; autoPauseAfter?: string;
   twilioSid?: string; twilioToken?: { set: boolean }; twilioSms?: string; twilioWhatsapp?: string;
@@ -256,6 +256,8 @@ export interface Alert { id: string; kind: string; title: string; body: string; 
 export interface UsageSummary {
   runs: number; costUsd: number; budgetUsd: number | null; cacheHitRate: number | null;
   tokens: { input: number; cacheRead: number; cacheWrite: number; output: number };
+  /** Claude spend in the last 30 days, and the same tokens priced on the low-cost model. */
+  last30?: { costUsd: number; onLowCostUsd: number };
 }
 
 export const api = {

@@ -53,4 +53,20 @@ export function usageFrom(model: string, u: {
   return { input, cacheWrite, cacheRead, output, costUsd };
 }
 
+/**
+ * What Claude calls would have cost on another model, from the tokens they used: an estimate for choosing the
+ * low-cost model first (cache reads are counted as plain input, so it errs high). Pure; tested.
+ */
+export function costOn(model: string, calls: { model: string; input: number; output: number; costUsd: number }[]) {
+  let actual = 0, other = 0;
+  for (const c of calls) {
+    if (!/^claude-/.test(c.model)) continue; // other providers price their own models
+    actual += c.costUsd;
+    // Tokens summed over many calls: standard per-token rates (one huge "prompt" would wrongly hit long-prompt pricing).
+    const r = RATES[model] ?? FALLBACK;
+    other += c.model === model ? c.costUsd : (c.input * r.input + c.output * r.output) / 1_000_000;
+  }
+  return { actualUsd: actual, onModelUsd: other };
+}
+
 export const totalTokens = (u: Usage) => u.input + u.cacheWrite + u.cacheRead + u.output;

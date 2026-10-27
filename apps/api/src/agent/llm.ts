@@ -16,8 +16,39 @@ const MAX_TOOL_RESULT_CHARS = 24_000;
 
 export type Effort = 'low' | 'medium' | 'high';
 
+/**
+ * Which model does the work when a step doesn't name one.
+ * smart: the low-cost model first (about 40x cheaper), the strongest only when the low-cost one struggles.
+ * best: the strongest model every time.
+ */
+export type Routing = 'smart' | 'best';
+export const LIGHT_MODEL = 'claude-haiku-5-5';
+
+/** Why a low-cost attempt should be redone on the strongest model, or null when it went fine. Pure; tested. */
+export function needsStrongerModel(r: { text: string; trace: ToolTrace[]; maxTurns?: boolean }): string | null {
+  const wrote = r.trace.some((t) => t.ok && changesData(t.tool));
+  if (wrote) return null; // never redo work that already changed data
+  if (r.maxTurns) return 'ran out of turns';
+  if (!r.text.trim()) return 'empty answer';
+  if (r.trace.filter((t) => !t.ok).length >= 2) return 'repeated tool errors';
+  return null;
+}
+/** Worth one try on the strongest model: a refusal, or the provider rejecting the request (not the key, budget or limits). Pure; tested. */
+export function retryable(e: unknown): boolean {
+  if (e instanceof LimitError) return false;
+  if (e instanceof Error && e.message === 'The AI model declined this request.') return true;
+  const s = (e as { status?: number })?.status;
+  return s === 400 || s === 422;
+}
+/** Tools that change data (as flagged in TOOLS): work that must never be done twice. */
+const changesData = (tool: string) => !!TOOLS[tool]?.write;
+
 export interface ToolTrace { tool: string; input: unknown; ok: boolean; error?: string }
-export interface LlmResult { text: string; usage: Usage; trace: ToolTrace[]; /** answer reused from an identical earlier request */ reused?: boolean }
+export interface LlmResult {
+  text: string; usage: Usage; trace: ToolTrace[];
+  /** answer reused from an identical earlier request */ reused?: boolean;
+  /** model that gave the answer, and why the low-cost model's attempt was redone (if it was) */ model?: string; escalated?: string;
+}
 
 export interface CallOptions {
   /** Model id; omit for the platform default. */
@@ -29,6 +60,8 @@ export interface CallOptions {
 }
 
 export interface Llm {
+  /** How this instance picks models, and the model it escalates to (absent on test doubles). */
+  routing?: Routing; strongModel?: string;
   /** Tool-using agent loop. */
   agent(o: { system: string; prompt: string; tools: string[]; history?: { role: 'user' | 'assistant'; text: string }[] } & CallOptions): Promise<LlmResult>;
   /** Single completion, no tools. With `schema`, the reply is guaranteed JSON matching it. */
@@ -61,8 +94,13 @@ export function createLlm(
     masker?: Masker; limits?: RunLimits; counters?: { aiCalls: number; toolCalls: number; tokens: number };
     /** Runs a tool somewhere else (inside Salesforce, as the person asking); undefined = run it here. */
     exec?: (name: string, input: unknown) => Promise<unknown> | undefined;
+    routing?: Routing;
   } = {},
 ): Llm {
+  const routing: Routing = trust.routing ?? 'smart';
+  const strong = config.model;
+  /** The model for a call that didn't name one. */
+  const pick = (o: CallOptions) => o.model || (routing === 'smart' ? LIGHT_MODEL : strong);
   let spent = 0; // across every call made through this instance (one workflow run)
   const { masker, limits } = trust;
   // Counters live on the run when given, so limits hold across an approval pause.
@@ -84,7 +122,7 @@ export function createLlm(
 
   /** One request, no tools: the answer depends only on the request, so identical requests reuse it. */
   async function single(o: { system: string; prompt: string; schema?: Record<string, unknown> } & CallOptions): Promise<LlmResult> {
-    const model = o.model || config.model;
+    const model = pick(o);
     const system = `${mask(o.system)}\n\n${GUARDRAILS}`;
     const prompt = mask(o.prompt);
     const imgs = o.images ?? [];
@@ -110,16 +148,35 @@ export function createLlm(
     if (res.stop_reason === 'max_tokens') throw new Error('The AI response was cut off (max tokens reached).');
     const text = res.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
     if (reuse) await reuse.set(key, text);
-    return { text, usage, trace: [] };
+    return { text, usage, trace: [], model };
   }
 
   async function agent(o: { system: string; prompt: string; tools: string[]; history?: { role: 'user' | 'assistant'; text: string }[] } & CallOptions): Promise<LlmResult> {
-    const model = o.model || config.model;
     const defs = o.tools.map((n) => TOOLS[n]).filter(Boolean);
     // Without tools there is no live data involved: treat it as a single, reusable request.
+    if (defs.length === 0 && !o.history?.length) return single({ system: o.system, prompt: o.prompt, model: o.model, effort: o.effort, images: o.images });
+    const model = pick(o);
+    const state = { wrote: false };
+    let first: LlmResult & { maxTurns?: boolean };
+    try {
+      first = await loop(o, model, state);
+    } catch (e) {
+      // A refusal or a request the low-cost model can't handle: the strongest gets one try, unless data was already
+      // changed. Budgets, rate limits and run limits stop as they are.
+      if (model === strong || o.model || state.wrote || !retryable(e)) throw e;
+      const again = await loop(o, strong, state);
+      return { ...again, escalated: 'the low-cost model failed' };
+    }
+    const why = model !== strong && !o.model ? needsStrongerModel(first) : null;
+    if (!why) return first;
+    const again = await loop(o, strong, state);
+    return { ...again, usage: addUsage(first.usage, again.usage), escalated: why };
+  }
+
+  async function loop(o: { system: string; prompt: string; tools: string[]; history?: { role: 'user' | 'assistant'; text: string }[] } & CallOptions, model: string, state: { wrote: boolean }): Promise<LlmResult & { maxTurns?: boolean }> {
+    const defs = o.tools.map((n) => TOOLS[n]).filter(Boolean);
     // Earlier turns of a conversation, as plain text (masked like everything else).
     const past = (o.history ?? []).map((h) => ({ role: h.role, content: mask(h.text) }) as Anthropic.MessageParam);
-    if (defs.length === 0 && !past.length) return single({ system: o.system, prompt: o.prompt, model: o.model, effort: o.effort, images: o.images });
     // With tools the conversation is re-sent every turn, so prompt caching pays: an explicit breakpoint on the
     // static prefix (tools + system) plus automatic caching for the growing tail.
     const systemText = `${mask(o.system)}\n\n${GUARDRAILS}`;
@@ -168,7 +225,7 @@ export function createLlm(
       if (res.stop_reason === 'pause_turn') continue;
       const uses = res.content.filter((b): b is Anthropic.ToolUseBlock => b.type === 'tool_use');
       if (res.stop_reason !== 'tool_use' || uses.length === 0) {
-        return { text: finalText(), usage, trace };
+        return { text: finalText(), usage, trace, model };
       }
       answer = []; // text before tool calls is narration, not the answer
       const results: Anthropic.ToolResultBlockParam[] = [];
@@ -182,6 +239,7 @@ export function createLlm(
           const input = masker ? masker.unmaskValue(use.input) : use.input;
           const out = await (trust.exec?.(use.name, input) ?? tool.run(sf, input));
           trace.push({ tool: use.name, input: use.input, ok: true });
+          if (changesData(use.name)) state.wrote = true;
           if (isImageResult(out)) {
             // An image the assistant opened: it sees the picture itself (images can't be masked).
             results.push({ type: 'tool_result', tool_use_id: use.id, content: [{ type: 'text', text: `Image ${out.__image.name ?? ''}` }, ...imageBlocks([out.__image])] });
@@ -195,12 +253,14 @@ export function createLlm(
       }
       messages.push({ role: 'user', content: results });
     }
-    return { text: '(stopped: reached max turns)', usage, trace };
+    return { text: '(stopped: reached max turns)', usage, trace, model, maxTurns: true };
   }
 
   return {
     agent,
     complete: single,
+    routing,
+    strongModel: strong,
   };
 }
 

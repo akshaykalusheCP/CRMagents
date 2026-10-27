@@ -7,6 +7,8 @@ import { z } from 'zod';
 import { loadUser, registerAuth } from './auth.js';
 import { provisionOrg, registerSfBridge } from './sfbridge.js';
 import { dailyBudgetUsd } from './spend.js';
+import { costOn } from './agent/pricing.js';
+import { LIGHT_MODEL } from './agent/llm.js';
 import { grantAccessToAll, setupOrg } from './salesforce/setup.js';
 import { loadSample, removeSample, sampleStatus } from './salesforce/sample.js';
 import { registerChatApprovals } from './channels/chatApprovals.js';
@@ -194,6 +196,7 @@ const settingsBody = z.object({
   anthropicKey: z.string().optional(),
   anthropicWorkspaceId: z.string().regex(/^(wrkspc_[A-Za-z0-9]+)?$/, 'Workspace ID looks like wrkspc_…').optional(),
   aiCacheHours: z.string().regex(/^(\d+(\.\d+)?)?$/, 'Hours must be a number (0 turns reuse off)').optional(),
+  aiRouting: z.enum(['smart', 'best', '']).optional(),
   dailyBudgetUsd: z.string().regex(/^(none|\d+(\.\d+)?)?$/i, 'Budget must be a number of dollars, or "none"').optional(),
   maskPii: z.enum(['on', 'off', '']).optional(),
   maskFields: z.string().max(2000).regex(/^[\w\s,.]*$/, 'Field names are API names separated by commas').optional(),
@@ -542,7 +545,13 @@ app.get('/api/usage', async (req) => {
   );
   const u = rows[0];
   const promptTokens = Number(u.input) + Number(u.cache_read) + Number(u.cache_write);
+  // Last 30 days of Claude calls, priced again on the low-cost model: what "low-cost model first" saves at most.
+  const { rows: calls } = await pool.query(
+    `select model, sum(input_tokens)::float as input, sum(output_tokens)::float as output, sum(cost_usd)::float as "costUsd"
+     from ai_calls where account_id=$1 and error is null and created_at > now() - interval '30 days' group by model`, [accountId]);
+  const est = costOn(LIGHT_MODEL, calls);
   return {
+    last30: { costUsd: est.actualUsd, onLowCostUsd: est.onModelUsd },
     runs: u.runs,
     costUsd: u.cost_usd,
     budgetUsd: await dailyBudgetUsd(accountId),

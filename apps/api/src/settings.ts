@@ -38,13 +38,14 @@ export const SETTING_KEYS = {
   twilioWhatsapp: 'TWILIO_WHATSAPP_FROM',
   memoryEnabled: 'MEMORY_ENABLED',
   actAsPerson: 'ACT_AS_PERSON',
+  aiRouting: 'AI_ROUTING',
   // Platform only (staff console); not in the customer settings form.
   resendKey: 'RESEND_API_KEY',
   mailFrom: 'MAIL_FROM',
 } as const;
 
 /** Settings shown as plain values in the UI (not secrets). */
-export const PLAIN_SETTINGS: SettingName[] = ['sfClientId', 'sfLoginUrl', 'dailyBudgetUsd', 'anthropicWorkspaceId', 'aiCacheHours', 'maskPii', 'maskFields', 'maxAiCalls', 'maxToolCalls', 'maxTokens', 'retentionDays', 'aiProvider', 'aiBaseUrl', 'aiModel', 'aiFastModel', 'aiPriceIn', 'aiPriceOut', 'auditInSalesforce', 'impactHourlyRate', 'impactMinutes', 'alertEmails', 'autoPauseAfter', 'twilioSid', 'twilioSms', 'twilioWhatsapp', 'memoryEnabled', 'actAsPerson'];
+export const PLAIN_SETTINGS: SettingName[] = ['sfClientId', 'sfLoginUrl', 'dailyBudgetUsd', 'anthropicWorkspaceId', 'aiCacheHours', 'maskPii', 'maskFields', 'maxAiCalls', 'maxToolCalls', 'maxTokens', 'retentionDays', 'aiProvider', 'aiBaseUrl', 'aiModel', 'aiFastModel', 'aiPriceIn', 'aiPriceOut', 'auditInSalesforce', 'impactHourlyRate', 'impactMinutes', 'alertEmails', 'autoPauseAfter', 'twilioSid', 'twilioSms', 'twilioWhatsapp', 'memoryEnabled', 'actAsPerson', 'aiRouting'];
 export type SettingName = keyof typeof SETTING_KEYS;
 
 export async function getSetting(accountId: string, name: SettingName): Promise<string | undefined> {

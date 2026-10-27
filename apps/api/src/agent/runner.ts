@@ -51,9 +51,9 @@ export async function runAgent(
   if (!meetings) agent = { ...agent, tools: agent.tools.filter((t) => !['find_meeting_times', 'book_meeting', 'meeting_times', 'book_meeting_slot'].includes(t)) };
   const client = await aiClient(accountId, { tenantId });
   const sf = opts.asPerson ? await SalesforceClient.forPerson(tenantId, opts.asPerson) : await SalesforceClient.forTenant(tenantId);
-  const { masker, limits } = await runTrust(accountId);
+  const { masker, limits, routing } = await runTrust(accountId);
   const remote: { exec?: (name: string, input: unknown) => Promise<unknown> | undefined } = {};
-  const llm = createLlm('', sf, spendGuard(accountId), client, await dbResultCache(accountId), { masker, limits, exec: (n, i) => remote.exec?.(n, i) });
+  const llm = createLlm('', sf, spendGuard(accountId), client, await dbResultCache(accountId), { masker, limits, routing, exec: (n, i) => remote.exec?.(n, i) });
 
   // Memory: the saved conversation (its history when the caller has none), what this person and the team asked to
   // be remembered, and the notes agents kept on the record.

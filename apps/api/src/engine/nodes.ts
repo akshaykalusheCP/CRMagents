@@ -136,9 +136,11 @@ export const EXECUTORS: Record<string, Executor> = {
     let j = parseJsonLoose(r.text);
     let usage = r.usage;
     let escalated = false;
-    // Cheap model first; only uncertain answers go to the platform's default (strongest) model.
-    if (opts.model && node.config.escalate === 'when unsure' && j.confidence !== 'high') {
-      const strong = await env.llm.complete({ ...request, effort: opts.effort });
+    // Cheap model first; only uncertain answers go to the strongest model. A block set to a cheap model escalates when
+    // told to; a block on the default does so whenever the workspace routes to the low-cost model first.
+    const cheapFirst = opts.model ? node.config.escalate === 'when unsure' : env.llm.routing === 'smart';
+    if (cheapFirst && j.confidence !== 'high' && !(r.model && r.model === env.llm.strongModel)) {
+      const strong = await env.llm.complete({ ...request, model: env.llm.strongModel, effort: opts.effort });
       j = parseJsonLoose(strong.text);
       usage = addUsage(usage, strong.usage);
       r = strong;

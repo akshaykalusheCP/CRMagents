@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { compactRecord } from '../salesforce/client.js';
-import { createLlm } from './llm.js';
-import { usageFrom } from './pricing.js';
+import { createLlm, LIGHT_MODEL, needsStrongerModel, retryable } from './llm.js';
+import { costOn, usageFrom } from './pricing.js';
 import { TOOLS } from './tools.js';
+import { config } from '../config.js';
+import { LimitError } from '../trust/policy.js';
 
 /** Fake Claude client: records every request and replays scripted responses. */
 function fakeClient(responses: any[]) {
@@ -154,4 +156,66 @@ test('SOQL tool returns a CSV table and text results are not JSON-escaped', asyn
   const { client, calls } = fakeClient([toolTurn, text('ok')]);
   await createLlm('k', sf, undefined, client).agent({ system: 'S', prompt: 'P', tools: ['soql_query'] });
   assert.equal(calls[1].messages[2].content[0].content, '3 row(s), showing 2 (CSV):\nId,Name\n1,A\n2,B');
+});
+
+test('smart routing: the low-cost model answers by default; "best" and a named model keep theirs', async () => {
+  const sf: any = {};
+  const a = fakeClient([text('hi')]);
+  const llm = createLlm('k', sf, undefined, a.client);
+  assert.equal(llm.routing, 'smart');
+  await llm.complete({ system: 'S', prompt: 'P' });
+  assert.equal(a.calls[0].model, LIGHT_MODEL);
+
+  const b = fakeClient([text('hi')]);
+  await createLlm('k', sf, undefined, b.client, undefined, { routing: 'best' }).complete({ system: 'S', prompt: 'P' });
+  assert.equal(b.calls[0].model, config.model);
+
+  const c = fakeClient([text('hi')]);
+  await createLlm('k', sf, undefined, c.client).complete({ system: 'S', prompt: 'P', model: 'claude-sonnet-5-5' });
+  assert.equal(c.calls[0].model, 'claude-sonnet-5-5');
+});
+
+test('smart routing: a struggling low-cost run is redone on the strongest model, with both costs counted', async () => {
+  const sf: any = { query: async () => { throw new Error('bad query'); } };
+  const bad = (id: string) => ({ stop_reason: 'tool_use', content: [{ type: 'tool_use', id, name: 'soql_query', input: { soql: 'SELECT x' } }], usage });
+  const { client, calls } = fakeClient([bad('t1'), bad('t2'), text('gave up'), text('strong answer')]);
+  const r = await createLlm('k', sf, undefined, client).agent({ system: 'S', prompt: 'P', tools: ['soql_query'] });
+  assert.equal(r.text, 'strong answer');
+  assert.equal(r.escalated, 'repeated tool errors');
+  assert.equal(calls[0].model, LIGHT_MODEL);
+  assert.equal(calls[3].model, config.model);
+  assert.equal(r.usage.input, 400); // four requests, all counted
+});
+
+test('smart routing never redoes work that already changed data', async () => {
+  const sf: any = { updateRecord: async () => undefined, query: async () => { throw new Error('bad query'); } };
+  const write = { stop_reason: 'tool_use', content: [{ type: 'tool_use', id: 'w', name: 'update_record', input: { sobject: 'Case', id: '500', fields: { Status: 'Closed' } } }], usage };
+  const bad = (id: string) => ({ stop_reason: 'tool_use', content: [{ type: 'tool_use', id, name: 'soql_query', input: { soql: 'SELECT x' } }], usage });
+  const { client, calls } = fakeClient([write, bad('t1'), bad('t2'), text('')]);
+  const r = await createLlm('k', sf, undefined, client).agent({ system: 'S', prompt: 'P', tools: ['update_record', 'soql_query'] });
+  assert.equal(r.escalated, undefined);
+  assert.equal(calls.length, 4);
+  assert.ok(calls.every((c) => c.model === LIGHT_MODEL));
+});
+
+test('escalation rules', () => {
+  assert.equal(needsStrongerModel({ text: 'fine', trace: [] }), null);
+  assert.equal(needsStrongerModel({ text: '', trace: [] }), 'empty answer');
+  assert.equal(needsStrongerModel({ text: 'x', trace: [], maxTurns: true }), 'ran out of turns');
+  assert.equal(needsStrongerModel({ text: '', trace: [{ tool: 'create_record', input: {}, ok: true }] }), null);
+  assert.equal(retryable(new Error('The AI model declined this request.')), true);
+  assert.equal(retryable(Object.assign(new Error('bad'), { status: 400 })), true);
+  assert.equal(retryable(Object.assign(new Error('slow down'), { status: 429 })), false);
+  assert.equal(retryable(new Error('Daily AI budget of $2.00 reached')), false);
+  assert.equal(retryable(new LimitError('Run limit reached')), false);
+});
+
+test('the low-cost estimate reprices Claude calls and leaves other providers out', () => {
+  const opus = usageFrom('claude-opus-5-5', { input_tokens: 1_000_000, output_tokens: 100_000 }).costUsd; // 4 + 2
+  const e = costOn(LIGHT_MODEL, [
+    { model: 'claude-opus-5-5', input: 1_000_000, output: 100_000, costUsd: opus },
+    { model: 'gpt-5', input: 1_000_000, output: 0, costUsd: 1.25 },
+  ]);
+  assert.equal(e.actualUsd, 6);
+  assert.ok(Math.abs(e.onModelUsd - 0.15) < 1e-9); // 0.10 + 0.05
 });
